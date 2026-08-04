@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "material-ingest-output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["material_records", "information_items", "processing_summary", "failed_materials"],
+  "properties": {
+    "material_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source_id", "topic", "processing_status", "missing_metadata"],
+        "properties": {
+          "source_id": {"type": "string"},
+          "topic": {"type": "string"},
+          "processing_status": {"enum": ["PROCESSED", "PARTIAL", "FAILED"]},
+          "missing_metadata": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "information_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item_id", "content", "information_type", "maturity", "source_refs", "evidence", "target_layer", "confidence", "requires_confirmation"],
+        "properties": {
+          "item_id": {"type": "string"},
+          "content": {"type": "string"},
+          "information_type": {"enum": ["USER_FEEDBACK", "OBSERVATION", "FACT", "DATA", "OPINION", "PROPOSAL", "CONFIRMED_DECISION", "OPEN_QUESTION", "DEPRECATED_CONTENT"]},
+          "maturity": {"enum": ["RAW", "UNCONFIRMED", "CONFIRMED", "SUPERSEDED", "ARCHIVED"]},
+          "source_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["source_id", "location", "quote"],
+              "properties": {
+                "source_id": {"type": "string"},
+                "location": {"type": "string"},
+                "quote": {"type": "string"}
+              }
+            }
+          },
+          "target_layer": {"enum": ["DRAFTS", "WORKSPACE", "CONTEXT"]},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "requires_confirmation": {"type": "boolean"}
+        }
+      }
+    },
+    "processing_summary": {
+      "type": "object",
+      "required": ["material_count", "processed_count", "failed_count", "information_item_count"],
+      "properties": {
+        "material_count": {"type": "integer", "minimum": 0},
+        "processed_count": {"type": "integer", "minimum": 0},
+        "failed_count": {"type": "integer", "minimum": 0},
+        "information_item_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "failed_materials": {"type": "array"}
+  }
+}

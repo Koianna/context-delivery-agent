@@ -11,7 +11,11 @@ import {
   uid,
   idempotencyKey,
   nowISO,
+  getConfirmationTypeForState,
+  PROJECT_ROOT,
 } from "./lib/config.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type {
   ConfirmationRecord,
   ConfirmationType,
@@ -24,8 +28,8 @@ function usage(): never {
   console.error(
     [
       "用法:",
-      "  npx tsx scripts/manage-confirmation.ts create  --task-id <id> --type <TYPE> --state <STATE> --title <text> --actions <json> [--source <state>] [--return <state>]",
-      "  npx tsx scripts/manage-confirmation.ts resolve --task-id <id> --confirmation-id <id> --resolution <RESOLUTION> [--operator USER|AGENT|SYSTEM]",
+      "  npx tsx scripts/manage-confirmation.ts create  --task-id <id> --type <TYPE> --state <STATE> --title <text> --actions <json> [--items <json>|--items-file <path>] [--source <state>] [--return <state>]",
+      "  npx tsx scripts/manage-confirmation.ts resolve --task-id <id> --confirmation-id <id> --resolution <RESOLUTION> [--selected <json-array>] [--operator USER|AGENT|SYSTEM]",
       "  npx tsx scripts/manage-confirmation.ts list    --task-id <id>",
     ].join("\n")
   );
@@ -68,6 +72,8 @@ function cmdCreate(args: string[]) {
     process.exit(1);
   }
 
+  const rawItems = readItems(args);
+
   if (!taskId || !type || !state || !title) {
     console.error("缺少必填参数: --task-id, --type, --state, --title");
     process.exit(1);
@@ -77,6 +83,23 @@ function cmdCreate(args: string[]) {
   const taskState = readTaskState();
   if (!taskState || taskState.task_id !== taskId) {
     console.error(`任务 ${taskId} 不存在`);
+    process.exit(1);
+  }
+
+
+  const expectedType = getConfirmationTypeForState(state);
+  if (!expectedType || expectedType !== type) {
+    console.error(
+      `状态 ${state} 要求的确认类型是 ${expectedType ?? "NONE"}，不能创建 ${type}`
+    );
+    process.exit(1);
+  }
+
+  const items = type === "CONTEXT_UPDATE"
+    ? rawItems.filter((item) => item.requires_confirmation === true)
+    : rawItems;
+  if (type === "CONTEXT_UPDATE" && items.length === 0) {
+    console.error("CONTEXT_UPDATE 确认至少需要一个 requires_confirmation=true 的 proposal");
     process.exit(1);
   }
 
@@ -105,7 +128,7 @@ function cmdCreate(args: string[]) {
     source_state: source ?? null,
     return_state: returnState ?? null,
     title,
-    items: [],
+    items: items.map((item) => ({ ...item, approval_status: "PENDING" })),
     allowed_actions: actions,
     status: "PENDING",
     resolved_by: null,
@@ -125,6 +148,7 @@ function cmdResolve(args: string[]) {
   const confirmationId = argVal(args, "--confirmation-id");
   const resolution = argVal(args, "--resolution");
   const operator: Operator = (argVal(args, "--operator") as Operator) ?? "USER";
+  const selectedIds = parseStringArray(argVal(args, "--selected"), "--selected");
 
   if (!taskId || !confirmationId || !resolution) {
     console.error("缺少必填参数: --task-id, --confirmation-id, --resolution");
@@ -157,6 +181,23 @@ function cmdResolve(args: string[]) {
     process.exit(1);
   }
 
+
+  if (resolution === "APPROVE_SELECTED" && selectedIds.length === 0) {
+    console.error("APPROVE_SELECTED 必须通过 --selected 指定 proposal_id");
+    process.exit(1);
+  }
+
+  const knownProposalIds = new Set(
+    record.items
+      .map((item) => item.proposal_id)
+      .filter((id): id is string => typeof id === "string")
+  );
+  const unknownIds = selectedIds.filter((id) => !knownProposalIds.has(id));
+  if (unknownIds.length > 0) {
+    console.error(`--selected 包含确认记录中不存在的 proposal_id: ${unknownIds.join(", ")}`);
+    process.exit(1);
+  }
+
   // 映射 resolution 到状态
   let newStatus: ConfirmationStatus;
   switch (resolution) {
@@ -178,12 +219,17 @@ function cmdResolve(args: string[]) {
       newStatus = "CANCELLED";
       break;
     default:
-      newStatus = "APPROVED"; // 其他按批准处理
+      console.error(`不支持的确认动作: ${resolution}`);
+      process.exit(1);
   }
 
   // 更新记录
   pc.records[idx] = {
     ...record,
+    items: record.items.map((item) => ({
+      ...item,
+      approval_status: itemDecision(resolution, item.proposal_id, selectedIds),
+    })),
     status: newStatus,
     resolved_by: operator,
     resolved_at: nowISO(),
@@ -212,12 +258,87 @@ function cmdResolve(args: string[]) {
       confirmation_type: record.confirmation_type,
       status: newStatus,
       resolution,
+      selected_proposal_ids: selectedIds,
     },
   });
 
   console.log(
     JSON.stringify({ status: "resolved", confirmation: pc.records[idx] }, null, 2)
   );
+}
+
+function readItems(args: string[]): Array<Record<string, unknown>> {
+  const inline = argVal(args, "--items");
+  const fileArg = argVal(args, "--items-file");
+  if (inline && fileArg) {
+    console.error("--items 与 --items-file 只能使用一个");
+    process.exit(1);
+  }
+  if (!inline && !fileArg) return [];
+
+  let raw = inline;
+  if (fileArg) {
+    const filePath = path.isAbsolute(fileArg)
+      ? fileArg
+      : path.join(PROJECT_ROOT, fileArg);
+    if (!fs.existsSync(filePath)) {
+      console.error(`确认项文件不存在: ${fileArg}`);
+      process.exit(1);
+    }
+    raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as { update_proposals?: unknown }).update_proposals)
+    ) {
+      return (parsed as { update_proposals: Array<Record<string, unknown>> }).update_proposals;
+    }
+    console.error("--items-file 必须是数组或包含 update_proposals 数组的 JSON");
+    process.exit(1);
+  }
+
+  try {
+    const parsed = JSON.parse(raw ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) throw new Error();
+    return parsed as Array<Record<string, unknown>>;
+  } catch {
+    console.error("--items 必须是有效 JSON 数组");
+    process.exit(1);
+  }
+}
+
+function parseStringArray(raw: string | undefined, flag: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
+      throw new Error();
+    }
+    return parsed;
+  } catch {
+    console.error(`${flag} 必须是字符串 JSON 数组`);
+    process.exit(1);
+  }
+}
+
+function itemDecision(
+  resolution: string,
+  proposalId: string | undefined,
+  selectedIds: string[]
+): "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED" {
+  if (resolution === "APPROVE_ALL" || resolution === "APPROVE" || resolution === "CONFIRM") {
+    return "APPROVED";
+  }
+  if (resolution === "APPROVE_SELECTED") {
+    return proposalId && selectedIds.includes(proposalId) ? "APPROVED" : "DEFERRED";
+  }
+  if (resolution === "DEFER" || resolution === "DEFER_ALL") return "DEFERRED";
+  if (resolution === "REJECT" || resolution === "REJECT_ALL" || resolution === "CANCEL") {
+    return "REJECTED";
+  }
+  return "PENDING";
 }
 
 // ---- list ----

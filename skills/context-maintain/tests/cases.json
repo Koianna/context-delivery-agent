@@ -1,0 +1,12 @@
+[
+  {
+    "case_id": "CM-01",
+    "material_output_ref": "repo://case-data/help-center-search/expected-outputs/material-ingest.output.json",
+    "analysis_output_ref": "repo://case-data/help-center-search/expected-outputs/context-maintain.analysis.json",
+    "assertions": ["solution_conflict_detected", "boundary_conflict_detected", "unconfirmed_items_not_promoted", "stable_actions_require_cp_c01"]
+  },
+  {
+    "case_id": "CM-02",
+    "assertions": ["write_denied_without_confirmation", "write_denied_on_base_conflict", "approved_write_succeeds", "retry_is_idempotent", "index_is_consistent"]
+  }
+]

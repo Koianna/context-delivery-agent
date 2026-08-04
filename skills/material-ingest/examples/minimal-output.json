@@ -1,0 +1,16 @@
+{
+  "material_records": [{"source_id": "src_001", "topic": "帮助中心搜索", "processing_status": "PROCESSED", "missing_metadata": []}],
+  "information_items": [{
+    "item_id": "info_001",
+    "content": "帮助中心当前按标题和标签匹配",
+    "information_type": "FACT",
+    "maturity": "CONFIRMED",
+    "source_refs": ["src_001"],
+    "evidence": [{"source_id": "src_001", "location": "现状", "quote": "当前搜索范围为文章标题和标签"}],
+    "target_layer": "CONTEXT",
+    "confidence": 0.99,
+    "requires_confirmation": true
+  }],
+  "processing_summary": {"material_count": 1, "processed_count": 1, "failed_count": 0, "information_item_count": 1},
+  "failed_materials": []
+}

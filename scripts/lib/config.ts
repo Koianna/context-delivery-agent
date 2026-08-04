@@ -147,6 +147,22 @@ export function getActiveConfirmation(
   );
 }
 
+export function getLatestConfirmation(
+  taskId: string,
+  stateId: StateId,
+  type?: ConfirmationType
+): ConfirmationRecord | undefined {
+  const pc = readPendingConfirmations();
+  if (!pc || pc.task_id !== taskId) return undefined;
+  return [...pc.records]
+    .reverse()
+    .find(
+      (record) =>
+        record.current_state === stateId &&
+        (!type || record.confirmation_type === type)
+    );
+}
+
 export function hasPendingConfirmationForState(
   taskId: string,
   stateId: StateId

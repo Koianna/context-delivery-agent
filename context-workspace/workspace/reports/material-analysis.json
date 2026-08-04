@@ -1,0 +1,171 @@
+{
+  "material_records": [
+    {"source_id": "src_product_20260728", "topic": "帮助中心搜索体验优化", "processing_status": "PROCESSED", "missing_metadata": []},
+    {"source_id": "src_feedback_202607", "topic": "帮助中心搜索体验优化", "processing_status": "PARTIAL", "missing_metadata": ["source_owner"]},
+    {"source_id": "src_meeting_20260801", "topic": "帮助中心搜索体验优化", "processing_status": "PROCESSED", "missing_metadata": []},
+    {"source_id": "src_history_20251015", "topic": "帮助中心搜索体验优化", "processing_status": "PROCESSED", "missing_metadata": []}
+  ],
+  "information_items": [
+    {
+      "item_id": "info_001",
+      "content": "帮助中心当前只匹配文章标题和后台标签",
+      "information_type": "FACT",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_product_20260728"],
+      "evidence": [{"source_id": "src_product_20260728", "location": "检索规则", "quote": "帮助中心当前只匹配文章标题和后台配置的标签"}],
+      "target_layer": "CONTEXT",
+      "confidence": 0.99,
+      "requires_confirmation": true
+    },
+    {
+      "item_id": "info_002",
+      "content": "当前检索服务不理解句子含义，也不会自动映射口语词",
+      "information_type": "FACT",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_product_20260728"],
+      "evidence": [{"source_id": "src_product_20260728", "location": "检索规则", "quote": "检索服务不理解句子含义，也不会把口语词自动映射到正式产品术语"}],
+      "target_layer": "CONTEXT",
+      "confidence": 0.99,
+      "requires_confirmation": true
+    },
+    {
+      "item_id": "info_003",
+      "content": "当前没有查询词日志，不能直接统计无结果率",
+      "information_type": "FACT",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_product_20260728"],
+      "evidence": [{"source_id": "src_product_20260728", "location": "数据条件", "quote": "当前检索服务尚未接入查询词日志，无法直接统计无结果率"}],
+      "target_layer": "CONTEXT",
+      "confidence": 0.98,
+      "requires_confirmation": true
+    },
+    {
+      "item_id": "info_004",
+      "content": "7 月 37 条搜索反馈中有 16 条明确提到搜不到或结果不相关",
+      "information_type": "DATA",
+      "maturity": "UNCONFIRMED",
+      "source_refs": ["src_feedback_202607"],
+      "evidence": [{"source_id": "src_feedback_202607", "location": "汇总口径", "quote": "7 月人工归集了 37 条与帮助中心搜索有关的客服反馈，其中 16 条明确提到“搜不到”或“结果不相关”"}],
+      "target_layer": "DRAFTS",
+      "confidence": 0.85,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_005",
+      "content": "用户使用开发票、改手机号、退钱等口语词时可能无法命中正式标题",
+      "information_type": "USER_FEEDBACK",
+      "maturity": "UNCONFIRMED",
+      "source_refs": ["src_feedback_202607"],
+      "evidence": [{"source_id": "src_feedback_202607", "location": "典型原话 1-3", "quote": "想找‘改手机号’，文章名字是‘换绑安全手机’，普通人哪里知道这个词"}],
+      "target_layer": "DRAFTS",
+      "confidence": 0.94,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_006",
+      "content": "搜索问题可能集中在口语词与文章正式标题不一致",
+      "information_type": "OBSERVATION",
+      "maturity": "UNCONFIRMED",
+      "source_refs": ["src_feedback_202607"],
+      "evidence": [{"source_id": "src_feedback_202607", "location": "初步归纳", "quote": "反馈较多集中在口语词与文章正式标题不一致"}],
+      "target_layer": "DRAFTS",
+      "confidence": 0.82,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_007",
+      "content": "客服建议继续强化无结果页热门问题推荐",
+      "information_type": "PROPOSAL",
+      "maturity": "UNCONFIRMED",
+      "source_refs": ["src_meeting_20260801"],
+      "evidence": [{"source_id": "src_meeting_20260801", "location": "方案讨论", "quote": "客服建议继续强化无结果页的热门问题推荐，实施成本较低"}],
+      "target_layer": "WORKSPACE",
+      "confidence": 0.99,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_008",
+      "content": "运营建议增加关键词别名配置",
+      "information_type": "PROPOSAL",
+      "maturity": "UNCONFIRMED",
+      "source_refs": ["src_meeting_20260801"],
+      "evidence": [{"source_id": "src_meeting_20260801", "location": "方案讨论", "quote": "运营建议增加“关键词别名”配置"}],
+      "target_layer": "WORKSPACE",
+      "confidence": 0.99,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_009",
+      "content": "本期采用关键词别名配置作为搜索优化方案",
+      "information_type": "CONFIRMED_DECISION",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_meeting_20260801"],
+      "evidence": [{"source_id": "src_meeting_20260801", "location": "会议结论", "quote": "帮助中心负责人确认：本期采用关键词别名配置作为搜索优化方案"}],
+      "target_layer": "CONTEXT",
+      "confidence": 0.99,
+      "requires_confirmation": true
+    },
+    {
+      "item_id": "info_010",
+      "content": "本期不做语义检索和智能问答",
+      "information_type": "CONFIRMED_DECISION",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_meeting_20260801"],
+      "evidence": [{"source_id": "src_meeting_20260801", "location": "会议结论", "quote": "本期不做语义检索和智能问答"}],
+      "target_layer": "CONTEXT",
+      "confidence": 0.99,
+      "requires_confirmation": true
+    },
+    {
+      "item_id": "info_011",
+      "content": "关键词别名由产品还是运营维护尚未决定",
+      "information_type": "OPEN_QUESTION",
+      "maturity": "UNCONFIRMED",
+      "source_refs": ["src_meeting_20260801"],
+      "evidence": [{"source_id": "src_meeting_20260801", "location": "待确认事项", "quote": "关键词别名由产品维护还是运营维护尚未决定"}],
+      "target_layer": "WORKSPACE",
+      "confidence": 0.99,
+      "requires_confirmation": true
+    },
+    {
+      "item_id": "info_012",
+      "content": "2025 年无结果页方案采用固定热门问题推荐",
+      "information_type": "CONFIRMED_DECISION",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_history_20251015"],
+      "evidence": [{"source_id": "src_history_20251015", "location": "当期方案", "quote": "当搜索没有命中文章时，展示固定热门问题推荐，不建设关键词映射能力"}],
+      "target_layer": "WORKSPACE",
+      "confidence": 0.99,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_013",
+      "content": "2025 年热门问题列表由运营每月维护",
+      "information_type": "CONFIRMED_DECISION",
+      "maturity": "CONFIRMED",
+      "source_refs": ["src_history_20251015"],
+      "evidence": [{"source_id": "src_history_20251015", "location": "维护规则", "quote": "热门问题列表由运营每月维护一次"}],
+      "target_layer": "WORKSPACE",
+      "confidence": 0.99,
+      "requires_confirmation": false
+    },
+    {
+      "item_id": "info_014",
+      "content": "历史热门问题推荐方案不进入本期范围",
+      "information_type": "DEPRECATED_CONTENT",
+      "maturity": "SUPERSEDED",
+      "source_refs": ["src_meeting_20260801"],
+      "evidence": [{"source_id": "src_meeting_20260801", "location": "会议结论", "quote": "历史的热门问题推荐方案不进入本期范围"}],
+      "target_layer": "CONTEXT",
+      "confidence": 0.99,
+      "requires_confirmation": true
+    }
+  ],
+  "processing_summary": {
+    "material_count": 4,
+    "processed_count": 4,
+    "failed_count": 0,
+    "information_item_count": 14
+  },
+  "failed_materials": []
+}

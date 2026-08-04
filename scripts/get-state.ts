@@ -14,7 +14,7 @@ import type { TaskState, StateId } from "./lib/types.js";
 
 function usage(): never {
   console.error(
-    "用法: npx tsx scripts/get-state.ts --task-id <id> [--init] [--project-id <id>]"
+    "用法: npx tsx scripts/get-state.ts --task-id <id> [--init] [--project-id <id>] [--mode CONTEXT|PRD|CHANGE] [--goal <text>]"
   );
   process.exit(1);
 }
@@ -27,6 +27,13 @@ function main() {
 
   const init = args.includes("--init");
   const projectId = argVal(args, "--project-id") ?? "help-center-search";
+  const mode = argVal(args, "--mode") as TaskState["task_mode"] | undefined;
+  const goal = argVal(args, "--goal") ?? "";
+
+  if (mode && !["CONTEXT", "PRD", "CHANGE"].includes(mode)) {
+    console.error(`非法任务模式: ${mode}`);
+    process.exit(1);
+  }
 
   // 初始化模式
   if (init) {
@@ -40,11 +47,11 @@ function main() {
       task_id: taskId,
       project_id: projectId,
       session_id: `session_${Date.now()}`,
-      task_mode: null,
+      task_mode: mode ?? null,
       current_state: "INITIALIZING" as StateId,
       previous_state: null,
       return_state: null,
-      task_goal: "",
+      task_goal: goal,
       completed_steps: [],
       pending_confirmation: null,
       material_version: "0.1.0",

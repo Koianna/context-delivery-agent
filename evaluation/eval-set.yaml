@@ -3,14 +3,25 @@
 # 说明：POC 阶段执行 10-12 个测试用例
 
 config:
-  eval_set_version: "0.1.0"
+  eval_set_version: "0.2.0"
   model: "configured-model-id"
   project: "help-center-search"
 
 test_groups:
   - group: contextual
     label: "Context 分支"
-    cases: []
+    cases:
+      - CTX-01
+      - CTX-02
+      - CTX-03
+      - CTX-04
+      - CTX-05
+      - CTX-06
+      - CTX-07
+      - CTX-08
+      - CTX-09
+      - CTX-10
+      - CTX-11
   - group: prd
     label: "PRD 分支"
     cases: []

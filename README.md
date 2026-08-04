@@ -19,6 +19,20 @@ npx tsx scripts/get-state.ts --init --task-id demo-task-01
 npx tsx scripts/get-state.ts --task-id demo-task-01
 ```
 
+## 阶段 3：Context 分支
+
+帮助中心搜索案例包含产品现状、用户反馈、当前讨论结论和历史需求边界四类材料。可用以下命令验证材料登记、两个 Skill 的结构化结果和 Context 控制规则：
+
+```bash
+npm run context:register
+npm run skills:validate
+npm run context:validate-material
+npm run context:validate-analysis
+npm run eval:context
+```
+
+`npm run eval:context` 在临时目录内验证 11 个断言，不修改稳定 Context。完整演示产物位于 `context-workspace/`：原始材料保存在 drafts，分析与未决问题保存在 workspace，只有经过 CP-C01 逐项批准的内容进入 context。
+
 ## 目录结构
 
 | 目录 | 用途 |

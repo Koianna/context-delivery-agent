@@ -17,6 +17,7 @@ import {
   uid,
   idempotencyKey,
   nowISO,
+  getLatestConfirmation,
 } from "./lib/config.js";
 import type {
   StateId,
@@ -153,6 +154,23 @@ function main() {
         artifact_ref: null,
         details: { error: result.error, requested: toStateRaw },
       });
+      process.exit(1);
+    }
+  }
+
+  // ---- 守卫 2.1: 离开 CP-C01 进入 APPLY 前必须有已批准记录 ----
+  if (fromState === "WAITING_CONTEXT_CONFIRM" && toState === "CONTEXT_MAINTAINING") {
+    const confirmation = getLatestConfirmation(
+      taskId,
+      "WAITING_CONTEXT_CONFIRM",
+      "CONTEXT_UPDATE"
+    );
+    if (!confirmation || confirmation.status !== "APPROVED") {
+      console.error("CP-C01 尚未批准，不能进入 CONTEXT_MAINTAINING");
+      process.exit(1);
+    }
+    if (!confirmation.items.some((item) => item.approval_status === "APPROVED")) {
+      console.error("CP-C01 没有逐项批准的 proposal，不能执行稳定 Context 写入");
       process.exit(1);
     }
   }

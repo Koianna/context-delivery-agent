@@ -12,6 +12,6 @@
     "declaration": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["scripts/**/*.ts", "schemas/**/*.json"],
+  "include": ["scripts/**/*.ts", "evaluation/**/*.ts", "schemas/**/*.json"],
   "exclude": ["node_modules", "dist", "runtime"]
 }

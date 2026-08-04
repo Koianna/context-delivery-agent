@@ -1,0 +1,29 @@
+{
+  "execution_id": "demo-context-001",
+  "case": "help-center-search",
+  "task_goal": "整理帮助中心搜索体验优化材料，不生成 PRD",
+  "state_path": [
+    "INITIALIZING",
+    "INTENT_ROUTING",
+    "CONTEXT_ANALYZING",
+    "WAITING_CONTEXT_CONFIRM",
+    "CONTEXT_MAINTAINING",
+    "CONTEXT_TASK_COMPLETED"
+  ],
+  "material_count": 4,
+  "information_item_count": 14,
+  "conflict_count": 2,
+  "approved_proposal_ids": [
+    "proposal_search_solution",
+    "proposal_search_boundary"
+  ],
+  "remaining_question_ids": [
+    "question_alias_owner"
+  ],
+  "written_context": [
+    {"ref": "repo://context-workspace/context/product/search-solution.md", "version": "1.0.1"},
+    {"ref": "repo://context-workspace/context/business-rules/search-boundaries.md", "version": "1.0.1"}
+  ],
+  "index_version": "0.1.1",
+  "terminal_state": "CONTEXT_TASK_COMPLETED"
+}

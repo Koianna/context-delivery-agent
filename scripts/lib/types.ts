@@ -54,6 +54,12 @@ export type ConfirmationType =
 
 export type ConfirmationStatus = "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED" | "CANCELLED";
 
+export interface ConfirmationItem {
+  proposal_id?: string;
+  approval_status?: "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED";
+  [key: string]: unknown;
+}
+
 /** 任务状态快照 (runtime/task-state.json) */
 export interface TaskState {
   task_id: string;
@@ -91,7 +97,7 @@ export interface ConfirmationRecord {
   source_state: StateId | null;
   return_state: StateId | null;
   title: string;
-  items: unknown[];
+  items: ConfirmationItem[];
   allowed_actions: string[];
   status: ConfirmationStatus;
   resolved_by: Operator | null;

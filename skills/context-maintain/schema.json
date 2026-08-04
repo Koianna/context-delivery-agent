@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "context-maintain-output",
+  "oneOf": [
+    {
+      "title": "ANALYZE output",
+      "type": "object",
+      "required": ["action", "update_proposals", "conflicts", "stale_items", "index_issues", "auto_actions", "remaining_questions"],
+      "properties": {
+        "action": {"const": "ANALYZE"},
+        "update_proposals": {"type": "array", "items": {"$ref": "#/$defs/proposal"}},
+        "conflicts": {"type": "array"},
+        "stale_items": {"type": "array"},
+        "index_issues": {"type": "array"},
+        "auto_actions": {"type": "array"},
+        "remaining_questions": {"type": "array"}
+      }
+    },
+    {
+      "title": "APPLY output",
+      "type": "object",
+      "required": ["action", "executed_actions", "skipped_actions", "failed_actions", "new_context_version", "new_index_version", "change_log_ref", "health_check"],
+      "properties": {
+        "action": {"const": "APPLY"},
+        "executed_actions": {"type": "array", "items": {"type": "string"}},
+        "skipped_actions": {"type": "array"},
+        "failed_actions": {"type": "array"},
+        "new_context_version": {"type": "string"},
+        "new_index_version": {"type": "string"},
+        "change_log_ref": {"type": "string"},
+        "health_check": {"type": "object"}
+      }
+    }
+  ],
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "required": ["proposal_id", "action", "target_ref", "item_id", "current_value", "proposed_value", "source_refs", "relationship", "risk_level", "requires_confirmation", "impact_if_applied", "impact_if_ignored"],
+      "properties": {
+        "proposal_id": {"type": "string"},
+        "action": {"enum": ["WRITE_DRAFT", "WRITE_WORKSPACE", "PROMOTE_TO_CONTEXT", "UPDATE_CONTEXT", "MARK_SUPERSEDED", "ARCHIVE", "UPDATE_INDEX", "FIX_REFERENCE", "NO_ACTION"]},
+        "target_ref": {"type": ["string", "null"]},
+        "item_id": {"type": "string"},
+        "current_value": {},
+        "proposed_value": {},
+        "source_refs": {"type": "array", "items": {"type": "string"}},
+        "relationship": {"enum": ["NEW", "DUPLICATE", "CONFLICT", "SUPERSEDES", "SUPPORTS"]},
+        "risk_level": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+        "requires_confirmation": {"type": "boolean"},
+        "impact_if_applied": {"type": "string"},
+        "impact_if_ignored": {"type": "string"},
+        "base_version": {"type": ["string", "null"]},
+        "content_ref": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

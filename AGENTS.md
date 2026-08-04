@@ -50,6 +50,13 @@
 7. 通过 `log-event.ts` 追加事件
 8. 向用户展示结果、当前状态和下一步
 
+### Context 分支确定性校验
+
+- 材料进入分析前通过 `register-materials.ts` 登记到 drafts，并保留哈希和元数据缺失项。
+- `material-ingest` 和 `context-maintain/ANALYZE` 的 JSON 结果通过 `validate-skill-output.ts` 校验。
+- CP-C01 只包含 `requires_confirmation: true` 的稳定 Context proposal，批准结果精确记录到 `proposal_id`。
+- `context-maintain/APPLY` 依次通过 `validate-context-write.ts`、`create-version.ts` 和 `update-index.ts`；基线冲突时停止，已落地的相同内容按幂等重试处理。
+
 ## 确认点
 
 | 编号 | 确认点 | 触发条件 |

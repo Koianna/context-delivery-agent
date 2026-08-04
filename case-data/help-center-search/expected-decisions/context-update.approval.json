@@ -1,0 +1,12 @@
+{
+  "confirmation_type": "CONTEXT_UPDATE",
+  "resolution": "APPROVE_SELECTED",
+  "selected_proposal_ids": [
+    "proposal_search_solution",
+    "proposal_search_boundary"
+  ],
+  "deferred_proposal_ids": [
+    "proposal_alias_owner_question"
+  ],
+  "reason": "只批准已有明确会议结论的稳定 Context 更新；维护角色继续保留为待确认问题"
+}

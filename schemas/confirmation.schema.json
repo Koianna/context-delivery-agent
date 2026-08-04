@@ -40,7 +40,16 @@
       "type": "string"
     },
     "items": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {"type": "string"},
+          "approval_status": {
+            "enum": ["PENDING", "APPROVED", "REJECTED", "DEFERRED"]
+          }
+        }
+      }
     },
     "allowed_actions": {
       "type": "array",
