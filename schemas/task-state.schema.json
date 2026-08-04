@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-state",
+  "title": "任务状态快照",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "task_mode": {
+      "enum": [
+        "CONTEXT",
+        "PRD",
+        "CHANGE",
+        null
+      ]
+    },
+    "current_state": {
+      "type": "string"
+    },
+    "previous_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "return_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_goal": {
+      "type": "string"
+    },
+    "completed_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "pending_confirmation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "material_version": {
+      "type": "string"
+    },
+    "context_version": {
+      "type": "string"
+    },
+    "decision_ledger_version": {
+      "type": "string"
+    },
+    "prd_version": {
+      "type": "string"
+    },
+    "plan_version": {
+      "type": "string"
+    },
+    "latest_output_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retry_count": {
+      "type": "integer",
+      "default": 0
+    },
+    "replan_count": {
+      "type": "integer",
+      "default": 0
+    },
+    "error_info": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "git_commit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt_versions": {
+      "type": "object"
+    },
+    "skill_versions": {
+      "type": "object"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "task_id",
+    "project_id",
+    "current_state"
+  ]
+}

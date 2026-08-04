@@ -1,0 +1,22 @@
+# 评测集定义
+# 版本：0.1.0
+# 说明：POC 阶段执行 10-12 个测试用例
+
+config:
+  eval_set_version: "0.1.0"
+  model: "configured-model-id"
+  project: "help-center-search"
+
+test_groups:
+  - group: contextual
+    label: "Context 分支"
+    cases: []
+  - group: prd
+    label: "PRD 分支"
+    cases: []
+  - group: change
+    label: "修改与重规划"
+    cases: []
+  - group: harness
+    label: "Harness 控制"
+    cases: []

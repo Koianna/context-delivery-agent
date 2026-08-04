@@ -1,0 +1,112 @@
+[
+  {
+    "id": "INITIALIZING",
+    "name": "初始化",
+    "type": "entry"
+  },
+  {
+    "id": "WAITING_RESUME_CHOICE",
+    "name": "等待恢复选择",
+    "type": "waiting"
+  },
+  {
+    "id": "INTENT_ROUTING",
+    "name": "意图识别与任务路由",
+    "type": "execution"
+  },
+  {
+    "id": "WAITING_INTENT_CLARIFICATION",
+    "name": "等待任务意图澄清",
+    "type": "waiting"
+  },
+  {
+    "id": "CONTEXT_ANALYZING",
+    "name": "Context 分析中",
+    "type": "execution"
+  },
+  {
+    "id": "WAITING_CONTEXT_CONFIRM",
+    "name": "等待 Context 更新确认",
+    "type": "waiting"
+  },
+  {
+    "id": "CONTEXT_MAINTAINING",
+    "name": "Context 维护中",
+    "type": "execution"
+  },
+  {
+    "id": "CONTEXT_TASK_COMPLETED",
+    "name": "Context 整理任务已完成",
+    "type": "terminal"
+  },
+  {
+    "id": "PRD_THINKING",
+    "name": "PRD 写前对齐中",
+    "type": "execution"
+  },
+  {
+    "id": "WAITING_DECISION_CONFIRM",
+    "name": "等待关键决策确认",
+    "type": "waiting"
+  },
+  {
+    "id": "PRD_DRAFTING_CORE",
+    "name": "PRD 主体生成中",
+    "type": "execution"
+  },
+  {
+    "id": "WAITING_SCOPE_CONFIRM",
+    "name": "等待范围与核心流程确认",
+    "type": "waiting"
+  },
+  {
+    "id": "PRD_DRAFTING_DETAILS",
+    "name": "PRD 细节补充中",
+    "type": "execution"
+  },
+  {
+    "id": "PRD_REVIEWING",
+    "name": "PRD 独立审核中",
+    "type": "execution"
+  },
+  {
+    "id": "WAITING_REVIEW_DECISION",
+    "name": "等待审核处理决定",
+    "type": "waiting"
+  },
+  {
+    "id": "DELIVERED",
+    "name": "需求交付已完成",
+    "type": "terminal"
+  },
+  {
+    "id": "CHANGE_ANALYZING",
+    "name": "变更影响分析中",
+    "type": "execution"
+  },
+  {
+    "id": "REPLANNING",
+    "name": "重新规划中",
+    "type": "execution"
+  },
+  {
+    "id": "WAITING_REPLAN_CONFIRM",
+    "name": "等待重规划方案确认",
+    "type": "waiting"
+  },
+  {
+    "id": "TASK_PAUSED",
+    "name": "任务已暂停",
+    "type": "control"
+  },
+  {
+    "id": "EXECUTION_BLOCKED",
+    "name": "执行遇到阻塞",
+    "type": "control"
+  },
+  {
+    "id": "TASK_CANCELLED",
+    "name": "任务已取消",
+    "type": "terminal"
+  }
+]

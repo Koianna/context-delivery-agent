@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "confirmation",
+  "title": "人工确认记录",
+  "type": "object",
+  "properties": {
+    "confirmation_id": {
+      "type": "string"
+    },
+    "confirmation_type": {
+      "enum": [
+        "RESUME_CHOICE",
+        "INTENT_CLARIFICATION",
+        "CONTEXT_UPDATE",
+        "DECISION_AND_WRITABLE_STATUS",
+        "SCOPE_AND_CORE_FLOW",
+        "REVIEW_DISPOSITION",
+        "REPLAN_APPROVAL"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "current_state": {
+      "type": "string"
+    },
+    "source_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "return_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array"
+    },
+    "allowed_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "DEFERRED",
+        "CANCELLED"
+      ]
+    },
+    "resolved_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "resolved_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "resolution": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "confirmation_id",
+    "confirmation_type",
+    "task_id",
+    "current_state"
+  ]
+}

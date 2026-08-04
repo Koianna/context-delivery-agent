@@ -1,0 +1,322 @@
+[
+  {
+    "from": "INITIALIZING",
+    "to": "WAITING_RESUME_CHOICE",
+    "guard": "HAS_UNFINISHED_TASK"
+  },
+  {
+    "from": "INITIALIZING",
+    "to": "INTENT_ROUTING",
+    "guard": "NO_UNFINISHED_TASK"
+  },
+  {
+    "from": "WAITING_RESUME_CHOICE",
+    "to": "INTENT_ROUTING",
+    "guard": "USER_CHOSE_NEW"
+  },
+  {
+    "from": "WAITING_RESUME_CHOICE",
+    "to": "CHANGE_ANALYZING",
+    "guard": "USER_CHOSE_ADJUST"
+  },
+  {
+    "from": "WAITING_RESUME_CHOICE",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CHOSE_DISCARD"
+  },
+  {
+    "from": "INTENT_ROUTING",
+    "to": "WAITING_INTENT_CLARIFICATION",
+    "guard": "INTENT_UNCLEAR"
+  },
+  {
+    "from": "INTENT_ROUTING",
+    "to": "CONTEXT_ANALYZING",
+    "guard": "CONTEXT_MODE"
+  },
+  {
+    "from": "INTENT_ROUTING",
+    "to": "PRD_THINKING",
+    "guard": "PRD_MODE_MATERIALS_READY"
+  },
+  {
+    "from": "INTENT_ROUTING",
+    "to": "CHANGE_ANALYZING",
+    "guard": "CHANGE_MODE"
+  },
+  {
+    "from": "WAITING_INTENT_CLARIFICATION",
+    "to": "INTENT_ROUTING",
+    "guard": "USER_CLARIFIED"
+  },
+  {
+    "from": "WAITING_INTENT_CLARIFICATION",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "WAITING_INTENT_CLARIFICATION",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "CONTEXT_ANALYZING",
+    "to": "WAITING_CONTEXT_CONFIRM",
+    "guard": "STABLE_CONTEXT_CHANGE"
+  },
+  {
+    "from": "CONTEXT_ANALYZING",
+    "to": "CONTEXT_MAINTAINING",
+    "guard": "ONLY_REVERSIBLE"
+  },
+  {
+    "from": "WAITING_CONTEXT_CONFIRM",
+    "to": "CONTEXT_MAINTAINING",
+    "guard": "USER_APPROVED_ACTIONS"
+  },
+  {
+    "from": "WAITING_CONTEXT_CONFIRM",
+    "to": "CONTEXT_ANALYZING",
+    "guard": "USER_MODIFIED_SUGGESTIONS"
+  },
+  {
+    "from": "WAITING_CONTEXT_CONFIRM",
+    "to": "DELIVERED",
+    "guard": "SOURCE_IS_REVIEW_AND_REJECTED_DEFERRED"
+  },
+  {
+    "from": "CONTEXT_MAINTAINING",
+    "to": "CONTEXT_TASK_COMPLETED",
+    "guard": "USER_ONLY_CONTEXT"
+  },
+  {
+    "from": "CONTEXT_MAINTAINING",
+    "to": "PRD_THINKING",
+    "guard": "USER_CONTINUE_PRD"
+  },
+  {
+    "from": "CONTEXT_MAINTAINING",
+    "to": "DELIVERED",
+    "guard": "SOURCE_IS_REVIEW_AND_WRITE_OK"
+  },
+  {
+    "from": "CONTEXT_TASK_COMPLETED",
+    "to": "PRD_THINKING",
+    "guard": "USER_WANTS_PRD"
+  },
+  {
+    "from": "CONTEXT_TASK_COMPLETED",
+    "to": "INTENT_ROUTING",
+    "guard": "USER_NEW_TASK"
+  },
+  {
+    "from": "PRD_THINKING",
+    "to": "WAITING_DECISION_CONFIRM",
+    "guard": "DECISION_LEDGER_READY"
+  },
+  {
+    "from": "PRD_THINKING",
+    "to": "CONTEXT_ANALYZING",
+    "guard": "MATERIAL_INSUFFICIENT"
+  },
+  {
+    "from": "PRD_THINKING",
+    "to": "CHANGE_ANALYZING",
+    "guard": "SUBSTANTIVE_CHANGE"
+  },
+  {
+    "from": "WAITING_DECISION_CONFIRM",
+    "to": "PRD_DRAFTING_CORE",
+    "guard": "WRITABLE_STATUS_TRUE"
+  },
+  {
+    "from": "WAITING_DECISION_CONFIRM",
+    "to": "PRD_THINKING",
+    "guard": "USER_MODIFIED_DECISION"
+  },
+  {
+    "from": "WAITING_DECISION_CONFIRM",
+    "to": "CONTEXT_ANALYZING",
+    "guard": "USER_ADDED_MATERIAL"
+  },
+  {
+    "from": "WAITING_DECISION_CONFIRM",
+    "to": "CHANGE_ANALYZING",
+    "guard": "SUBSTANTIVE_CHANGE"
+  },
+  {
+    "from": "WAITING_DECISION_CONFIRM",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "WAITING_DECISION_CONFIRM",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "PRD_DRAFTING_CORE",
+    "to": "WAITING_SCOPE_CONFIRM",
+    "guard": "CORE_DRAFTED"
+  },
+  {
+    "from": "WAITING_SCOPE_CONFIRM",
+    "to": "PRD_DRAFTING_DETAILS",
+    "guard": "USER_APPROVED"
+  },
+  {
+    "from": "WAITING_SCOPE_CONFIRM",
+    "to": "PRD_DRAFTING_CORE",
+    "guard": "USER_LOCAL_MODIFY"
+  },
+  {
+    "from": "WAITING_SCOPE_CONFIRM",
+    "to": "CHANGE_ANALYZING",
+    "guard": "SUBSTANTIVE_CHANGE"
+  },
+  {
+    "from": "WAITING_SCOPE_CONFIRM",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "WAITING_SCOPE_CONFIRM",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "PRD_DRAFTING_DETAILS",
+    "to": "PRD_REVIEWING",
+    "guard": "DETAILS_DONE"
+  },
+  {
+    "from": "PRD_REVIEWING",
+    "to": "WAITING_REVIEW_DECISION",
+    "guard": "REVIEW_COMPLETE"
+  },
+  {
+    "from": "WAITING_REVIEW_DECISION",
+    "to": "PRD_REVIEWING",
+    "guard": "USER_ADOPT_MODIFY"
+  },
+  {
+    "from": "WAITING_REVIEW_DECISION",
+    "to": "CHANGE_ANALYZING",
+    "guard": "USER_DIRECTION_CHANGE"
+  },
+  {
+    "from": "WAITING_REVIEW_DECISION",
+    "to": "DELIVERED",
+    "guard": "USER_CONFIRM_DELIVER_NO_CONTEXT_BACKFILL"
+  },
+  {
+    "from": "WAITING_REVIEW_DECISION",
+    "to": "WAITING_CONTEXT_CONFIRM",
+    "guard": "USER_CONFIRM_DELIVER_HAS_CONTEXT_BACKFILL"
+  },
+  {
+    "from": "WAITING_REVIEW_DECISION",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "WAITING_REVIEW_DECISION",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "DELIVERED",
+    "to": "INTENT_ROUTING",
+    "guard": "USER_NEW_TASK"
+  },
+  {
+    "from": "DELIVERED",
+    "to": "INITIALIZING",
+    "guard": "FRESH_SESSION"
+  },
+  {
+    "from": "CHANGE_ANALYZING",
+    "to": "REPLANNING",
+    "guard": "IMPACT_ANALYZED"
+  },
+  {
+    "from": "CHANGE_ANALYZING",
+    "to": "WAITING_INTENT_CLARIFICATION",
+    "guard": "INTENT_UNCLEAR"
+  },
+  {
+    "from": "REPLANNING",
+    "to": "WAITING_REPLAN_CONFIRM",
+    "guard": "PLAN_GENERATED"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
+    "to": "CONTEXT_ANALYZING",
+    "guard": "RETURN_CONTEXT"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
+    "to": "PRD_THINKING",
+    "guard": "RETURN_THINKING"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
+    "to": "PRD_DRAFTING_CORE",
+    "guard": "RETURN_CORE"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
+    "to": "PRD_DRAFTING_DETAILS",
+    "guard": "RETURN_DETAILS"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "TASK_PAUSED",
+    "to": "PREVIOUS_STATE",
+    "guard": "USER_RESUME"
+  },
+  {
+    "from": "TASK_PAUSED",
+    "to": "CHANGE_ANALYZING",
+    "guard": "USER_ADJUST"
+  },
+  {
+    "from": "TASK_PAUSED",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "EXECUTION_BLOCKED",
+    "to": "PREVIOUS_VALID_STATE",
+    "guard": "RECOVERABLE"
+  },
+  {
+    "from": "EXECUTION_BLOCKED",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "EXECUTION_BLOCKED",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "TASK_CANCELLED",
+    "to": "INITIALIZING",
+    "guard": "USER_NEW_TASK"
+  },
+  {
+    "from": "TASK_CANCELLED",
+    "to": "INTENT_ROUTING",
+    "guard": "USER_NEW_TASK"
+  }
+]

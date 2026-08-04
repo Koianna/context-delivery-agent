@@ -1,0 +1,21 @@
+{
+  "name": "context-delivery-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Context 工程与需求交付协作 Agent - 个人 POC",
+  "scripts": {
+    "state:get": "npx tsx scripts/get-state.ts",
+    "state:transition": "npx tsx scripts/transition-state.ts",
+    "runtime:init": "npx tsx scripts/get-state.ts --init",
+    "eval:run": "npx tsx evaluation/run.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.11.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

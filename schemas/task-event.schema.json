@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-event",
+  "title": "任务事件（JSONL 行）",
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "enum": [
+        "STATE_TRANSITION",
+        "SKILL_CALL",
+        "SKILL_RESULT",
+        "USER_CONFIRMATION",
+        "ARTIFACT_CREATED",
+        "VERSION_CREATED",
+        "ERROR",
+        "TASK_PAUSED",
+        "TASK_RESUMED",
+        "TASK_CANCELLED"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "operator": {
+      "enum": [
+        "USER",
+        "AGENT",
+        "SYSTEM"
+      ]
+    },
+    "current_state": {
+      "type": "string"
+    },
+    "previous_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "skill_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "skill_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "artifact_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "task_id",
+    "timestamp"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common-envelope",
+  "title": "通用请求/响应信封",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "current_state": {
+      "type": "string"
+    },
+    "repository_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "triggered_by": {
+      "enum": [
+        "USER",
+        "AGENT",
+        "SYSTEM"
+      ]
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "current_state"
+  ]
+}

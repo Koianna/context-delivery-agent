@@ -1,0 +1,23 @@
+# Environment
+.env
+.env.local
+
+# Runtime state (not committed to Git)
+runtime/task-state.json
+runtime/pending-confirmations.json
+runtime/task-events.jsonl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/
+*.tsbuildinfo

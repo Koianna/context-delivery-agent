@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evaluation-result",
+  "title": "评测结果",
+  "type": "object",
+  "properties": {
+    "eval_id": {
+      "type": "string"
+    },
+    "test_case_id": {
+      "type": "string"
+    },
+    "git_commit": {
+      "type": "string"
+    },
+    "prompt_versions": {
+      "type": "object"
+    },
+    "skill_versions": {
+      "type": "object"
+    },
+    "schema_versions": {
+      "type": "object"
+    },
+    "model": {
+      "type": "string"
+    },
+    "eval_set_version": {
+      "type": "string"
+    },
+    "executed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "input": {
+      "type": "object"
+    },
+    "expected_output": {
+      "type": "object"
+    },
+    "actual_output": {
+      "type": "object"
+    },
+    "scores": {
+      "type": "object"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "failure_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "eval_id",
+    "test_case_id",
+    "git_commit",
+    "executed_at"
+  ]
+}
