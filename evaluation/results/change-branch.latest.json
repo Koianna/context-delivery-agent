@@ -1,0 +1,75 @@
+{
+  "evaluation_id": "change-branch-help-center-search",
+  "eval_set_version": "0.4.0",
+  "git_commit": "07926d17857e45632529fee3840c37e4352d4b32",
+  "skill_versions": {
+    "change-impact": "0.2.0"
+  },
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  },
+  "results": [
+    {
+      "case_id": "CHG-01",
+      "passed": true,
+      "detail": "输入和六个快照产物通过校验"
+    },
+    {
+      "case_id": "CHG-02",
+      "passed": true,
+      "detail": "相同基线重复创建快照保持幂等"
+    },
+    {
+      "case_id": "CHG-03",
+      "passed": true,
+      "detail": "规则级变化返回 DETAILS"
+    },
+    {
+      "case_id": "CHG-04",
+      "passed": true,
+      "detail": "影响范围覆盖规则、验收和失效审核报告"
+    },
+    {
+      "case_id": "CHG-05",
+      "passed": true,
+      "detail": "明确保留 PRD 主体和已确认决策"
+    },
+    {
+      "case_id": "CHG-06",
+      "passed": true,
+      "detail": "影响分析只写报告，未修改任何业务产物"
+    },
+    {
+      "case_id": "CHG-07",
+      "passed": true,
+      "detail": "重规划沿用分析 hash，只安排必要步骤和确认点"
+    },
+    {
+      "case_id": "CHG-08",
+      "passed": true,
+      "detail": "缺少 CP-R01、目标不一致、计划或影响报告漂移时阻止返回业务节点"
+    },
+    {
+      "case_id": "CHG-09",
+      "passed": true,
+      "detail": "CP-R01 授权 0.2.1 DETAILS 局部修订并保留 PRD 主体"
+    },
+    {
+      "case_id": "CHG-10",
+      "passed": true,
+      "detail": "超过三次重规划时阻断继续执行"
+    },
+    {
+      "case_id": "CHG-11",
+      "passed": true,
+      "detail": "无法判断的变化不自动选择返回节点"
+    },
+    {
+      "case_id": "CHG-12",
+      "passed": true,
+      "detail": "取消变更后全部业务产物恢复为快照原字节"
+    }
+  ]
+}
