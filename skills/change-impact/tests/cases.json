@@ -1,0 +1,14 @@
+[
+  {
+    "case_id": "CI-01",
+    "mode": "ANALYZE",
+    "input_ref": "repo://case-data/help-center-search/change/change-request.input.json",
+    "output_ref": "repo://case-data/help-center-search/change/expected-outputs/change-impact.analysis.json"
+  },
+  {
+    "case_id": "CI-02",
+    "mode": "REPLAN",
+    "input_ref": "repo://case-data/help-center-search/change/expected-outputs/change-impact.analysis.json",
+    "output_ref": "repo://case-data/help-center-search/change/expected-outputs/change-impact.replan.json"
+  }
+]

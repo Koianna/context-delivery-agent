@@ -3,7 +3,7 @@
 # 说明：POC 阶段执行 10-12 个测试用例
 
 config:
-  eval_set_version: "0.3.0"
+  eval_set_version: "0.4.0"
   model: "configured-model-id"
   project: "help-center-search"
 
@@ -39,7 +39,19 @@ test_groups:
       - PRD-12
   - group: change
     label: "修改与重规划"
-    cases: []
+    cases:
+      - CHG-01
+      - CHG-02
+      - CHG-03
+      - CHG-04
+      - CHG-05
+      - CHG-06
+      - CHG-07
+      - CHG-08
+      - CHG-09
+      - CHG-10
+      - CHG-11
+      - CHG-12
   - group: harness
     label: "Harness 控制"
     cases: []

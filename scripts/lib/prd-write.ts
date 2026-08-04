@@ -5,6 +5,7 @@ import {
   parseFrontmatter, renderFrontmatter, repoRefToPath, writeTextAtomic,
 } from "./repository.js";
 import { validateCoreConfirmation, validatePrdEntryConfirmation } from "./prd-guards.js";
+import { validatePrdRevisionScope, validateReplanApproval } from "./change-guards.js";
 
 export function latestConfirmation(
   confirmations: ConfirmationRecord[],
@@ -33,28 +34,36 @@ export function authorizePrdWrite(
 
   if (artifact.phase === "CORE") {
     const confirmation = latestConfirmation(confirmations, "DECISION_AND_WRITABLE_STATUS");
+    const replanConfirmation = latestConfirmation(confirmations, "REPLAN_APPROVAL");
     const payload = confirmation?.items[0];
     const confirmedIds = Array.isArray(payload?.confirmed_decision_ids)
       ? payload.confirmed_decision_ids as string[]
       : [];
-    errors.push(...validatePrdEntryConfirmation(confirmation, state.task_id));
-    if (artifact.decision_refs.some((id) => !confirmedIds.includes(id))) {
-      errors.push("PRD 引用了 CP-P01 未确认的决策");
-    }
-    if (artifact.previous_version !== null || artifact.version !== "0.1.0") {
-      errors.push("CORE 首版必须是 0.1.0 且 previous_version 为 null");
+    const entryErrors = validatePrdEntryConfirmation(confirmation, state.task_id);
+    const replanErrors = validateReplanApproval(replanConfirmation, state.task_id, "PRD_DRAFTING_CORE", root);
+    if (entryErrors.length === 0) {
+      if (artifact.decision_refs.some((id) => !confirmedIds.includes(id))) errors.push("PRD 引用了 CP-P01 未确认的决策");
+      if (artifact.previous_version !== null || artifact.version !== "0.1.0") errors.push("CORE 首版必须是 0.1.0 且 previous_version 为 null");
+    } else if (replanErrors.length === 0) {
+      if (artifact.previous_version !== replanConfirmation?.items[0].approved_prd_base_version) errors.push("CORE 修订基线与 CP-R01 不一致");
+    } else {
+      errors.push(...entryErrors, ...replanErrors);
     }
   }
 
   if (artifact.phase === "DETAILS") {
     const confirmation = latestConfirmation(confirmations, "SCOPE_AND_CORE_FLOW");
+    const replanConfirmation = latestConfirmation(confirmations, "REPLAN_APPROVAL");
     const payload = confirmation?.items[0];
-    errors.push(...validateCoreConfirmation(confirmation, state.task_id));
-    if (payload?.approved_core_version !== artifact.previous_version) {
-      errors.push("DETAILS 的 previous_version 与 CP-P02 批准版本不一致");
-    }
-    if (!Array.isArray(payload?.approved_scope) || !Array.isArray(payload?.approved_core_flow)) {
-      errors.push("CP-P02 缺少已确认范围或核心流程");
+    const coreErrors = validateCoreConfirmation(confirmation, state.task_id);
+    const replanErrors = validateReplanApproval(replanConfirmation, state.task_id, "PRD_DRAFTING_DETAILS", root);
+    if (coreErrors.length === 0) {
+      if (payload?.approved_core_version !== artifact.previous_version) errors.push("DETAILS 的 previous_version 与 CP-P02 批准版本不一致");
+      if (!Array.isArray(payload?.approved_scope) || !Array.isArray(payload?.approved_core_flow)) errors.push("CP-P02 缺少已确认范围或核心流程");
+    } else if (replanErrors.length === 0) {
+      if (artifact.previous_version !== replanConfirmation?.items[0].approved_prd_base_version) errors.push("DETAILS 修订基线与 CP-R01 不一致");
+    } else {
+      errors.push(...coreErrors, ...replanErrors);
     }
   }
 
@@ -67,7 +76,10 @@ export function authorizePrdWrite(
       const candidateBody = fs.existsSync(candidate)
         ? parseFrontmatter(fs.readFileSync(candidate, "utf-8")).body
         : "";
-      if (!(current.metadata.version === artifact.version && current.body.trim() === candidateBody.trim())) {
+      const alreadyApplied = current.metadata.version === artifact.version && current.body.trim() === candidateBody.trim();
+      const replanConfirmation = latestConfirmation(confirmations, "REPLAN_APPROVAL");
+      const replanApproved = validateReplanApproval(replanConfirmation, state.task_id, "PRD_DRAFTING_CORE", root).length === 0;
+      if (!alreadyApplied && !(replanApproved && current.metadata.version === artifact.previous_version)) {
         errors.push("CORE 目标已存在且不是同版本幂等内容");
       }
     }
@@ -84,6 +96,13 @@ export function authorizePrdWrite(
           errors.push(`PRD 基线版本冲突: 期望 ${artifact.previous_version}, 当前 ${current.metadata.version ?? "missing"}`);
         }
       }
+    }
+    const replanConfirmation = latestConfirmation(confirmations, "REPLAN_APPROVAL");
+    const replanTarget = artifact.phase === "CORE" ? "PRD_DRAFTING_CORE" : "PRD_DRAFTING_DETAILS";
+    if (fs.existsSync(target) && validateReplanApproval(replanConfirmation, state.task_id, replanTarget, root).length === 0) {
+      const currentBody = parseFrontmatter(fs.readFileSync(target, "utf-8")).body;
+      const candidateBody = fs.existsSync(candidate) ? parseFrontmatter(fs.readFileSync(candidate, "utf-8")).body : "";
+      errors.push(...validatePrdRevisionScope(replanConfirmation, artifact.markdown_ref, currentBody, candidateBody, root));
     }
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));

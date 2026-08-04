@@ -1,5 +1,7 @@
 # PRD 分阶段规则
 
+经 CP-R01 批准返回 `PRD_DRAFTING_CORE` 或 `PRD_DRAFTING_DETAILS` 时，允许基于快照中的 `approved_prd_base_version` 创建修订版本。只修改影响报告列出的章节，其他章节保持不变；CP-R01 不能替代修订后的独立审核和 CP-P03。
+
 ## CORE 必需章节
 
 - 背景与问题

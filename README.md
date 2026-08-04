@@ -54,6 +54,24 @@ npm run eval:prd
 - `context-workspace/workspace/reports/prd-review.json`：带 PRD 正文哈希的独立审核结果
 - `evaluation/execution-logs/prd-branch-demo.json`：状态路径、确认点和交付结果
 
+## 阶段 5：修改与重规划分支
+
+Change 分支处理已有 Context、决策或 PRD 的实质变化。Agent 先保存不可变快照，再区分受影响和保留内容，生成最小重跑计划；CP-R01 批准前不覆盖业务产物。
+
+```bash
+npm run skills:validate
+npm run change:validate-analysis
+npm run change:validate-replan
+npm run eval:change
+```
+
+`npm run eval:change` 在临时目录内执行 12 个断言，覆盖快照幂等、影响与保留范围、零改写分析、最小返回节点、CP-R01 门禁、重规划上限、`0.2.1` 局部修订和取消恢复。完整演示产物位于：
+
+- `context-workspace/workspace/snapshots/change-target-unavailable-001/`：六个业务产物的原始快照与 hash 清单
+- `context-workspace/workspace/reports/change-impact.json`：规则变更影响报告
+- `context-workspace/workspace/plans/help-center-search-replan.json`：CP-R01 批准的最小重跑计划
+- `evaluation/execution-logs/change-branch-demo.json`：状态路径、错误节点阻断和 PRD 完整性证据
+
 ## 目录结构
 
 | 目录 | 用途 |

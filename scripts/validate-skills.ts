@@ -6,7 +6,7 @@ import { parseFrontmatter } from "./lib/repository.js";
 
 const skillNames = process.argv.slice(2).length
   ? process.argv.slice(2)
-  : ["material-ingest", "context-maintain", "prd-thinking", "prd-write", "prd-review"];
+  : ["material-ingest", "context-maintain", "prd-thinking", "prd-write", "prd-review", "change-impact"];
 const errors: string[] = [];
 
 for (const skillName of skillNames) {

@@ -15,9 +15,13 @@
     "prd:validate-core": "node --import tsx scripts/validate-prd-output.ts --skill prd-write --output case-data/help-center-search/prd/expected-outputs/prd-write.core.output.json --decision-ledger case-data/help-center-search/prd/decision-ledger.confirmed.json",
     "prd:validate-details": "node --import tsx scripts/validate-prd-output.ts --skill prd-write --output case-data/help-center-search/prd/expected-outputs/prd-write.details.output.json --decision-ledger case-data/help-center-search/prd/decision-ledger.confirmed.json",
     "prd:validate-review": "node --import tsx scripts/validate-prd-output.ts --skill prd-review --output case-data/help-center-search/prd/expected-outputs/prd-review.output.json --prd-ref repo://context-workspace/workspace/prd/help-center-search.md",
+    "change:snapshot": "node --import tsx scripts/create-change-snapshot.ts --task-id demo-change-001 --input case-data/help-center-search/change/change-request.input.json",
+    "change:validate-analysis": "node --import tsx scripts/validate-change-output.ts --mode ANALYZE --input case-data/help-center-search/change/change-request.input.json --output case-data/help-center-search/change/expected-outputs/change-impact.analysis.json",
+    "change:validate-replan": "node --import tsx scripts/validate-change-output.ts --mode REPLAN --analysis context-workspace/workspace/reports/change-impact.json --output case-data/help-center-search/change/expected-outputs/change-impact.replan.json",
     "skills:validate": "node --import tsx scripts/validate-skills.ts",
     "eval:context": "node --import tsx evaluation/run-context-branch.ts",
     "eval:prd": "node --import tsx evaluation/run-prd-branch.ts",
+    "eval:change": "node --import tsx evaluation/run-change-branch.ts",
     "typecheck": "tsc --noEmit",
     "eval:run": "node --import tsx evaluation/run.ts"
   },

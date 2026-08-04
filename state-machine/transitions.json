@@ -271,6 +271,11 @@
   },
   {
     "from": "WAITING_REPLAN_CONFIRM",
+    "to": "REPLANNING",
+    "guard": "USER_REVISE_PLAN"
+  },
+  {
+    "from": "WAITING_REPLAN_CONFIRM",
     "to": "TASK_PAUSED",
     "guard": "USER_PAUSE"
   },

@@ -210,6 +210,8 @@ function cmdResolve(args: string[]) {
     case "ACCEPT_AND_DELIVER":
     case "DELIVER_WITH_NOTES":
     case "FIX_AND_REVIEW":
+    case "APPROVE_REPLAN":
+    case "REVISE_REPLAN":
       newStatus = "APPROVED";
       break;
     case "REJECT":
@@ -221,6 +223,7 @@ function cmdResolve(args: string[]) {
       newStatus = "DEFERRED";
       break;
     case "CANCEL":
+    case "CANCEL_CHANGE":
       newStatus = "CANCELLED";
       break;
     default:
@@ -338,7 +341,8 @@ function itemDecision(
 ): "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED" {
   if ([
     "APPROVE_ALL", "APPROVE", "CONFIRM", "CONFIRM_WRITABLE", "APPROVE_CORE",
-    "ACCEPT_AND_DELIVER", "DELIVER_WITH_NOTES", "FIX_AND_REVIEW"
+    "ACCEPT_AND_DELIVER", "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "APPROVE_REPLAN",
+    "REVISE_REPLAN"
   ].includes(resolution)) {
     return "APPROVED";
   }
@@ -346,7 +350,7 @@ function itemDecision(
     return proposalId && selectedIds.includes(proposalId) ? "APPROVED" : "DEFERRED";
   }
   if (resolution === "DEFER" || resolution === "DEFER_ALL") return "DEFERRED";
-  if (resolution === "REJECT" || resolution === "REJECT_ALL" || resolution === "CANCEL") {
+  if (resolution === "REJECT" || resolution === "REJECT_ALL" || resolution === "CANCEL" || resolution === "CANCEL_CHANGE") {
     return "REJECTED";
   }
   return "PENDING";

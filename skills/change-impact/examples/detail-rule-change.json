@@ -1,0 +1,12 @@
+{
+  "mode": "ANALYZE",
+  "change_id": "change-example-001",
+  "snapshot_ref": "repo://context-workspace/workspace/snapshots/change-example-001/manifest.json",
+  "change_classification": {"change_type": "DETAIL_RULE_CHANGE", "is_material_change": true, "confidence": 0.96},
+  "change_summary": {"old_value": "异常规则待补充", "new_value": "目标失效后自动停用别名", "source_refs": ["repo://context-workspace/workspace/reports/prd-review.json"]},
+  "affected_items": [{"item_id": "affected-rule", "artifact_ref": "repo://context-workspace/workspace/prd/help-center-search.md", "locations": ["边界与异常", "验收标准"], "impact_type": "REWRITE_REQUIRED", "reason": "新增可执行规则"}],
+  "unaffected_items": [{"item_id": "preserved-core", "artifact_ref": "repo://context-workspace/workspace/prd/help-center-search.md", "locations": ["产品目标", "本期范围与核心流程"], "reason": "目标和主流程未改变"}],
+  "recommended_return_state": "PRD_DRAFTING_DETAILS",
+  "risks": [],
+  "open_questions": []
+}

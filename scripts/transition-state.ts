@@ -18,6 +18,7 @@ import {
   idempotencyKey,
   nowISO,
   getLatestConfirmation,
+  PROJECT_ROOT,
 } from "./lib/config.js";
 import type {
   StateId,
@@ -30,6 +31,11 @@ import {
   validateDeliveryConfirmation,
   validatePrdEntryConfirmation,
 } from "./lib/prd-guards.js";
+import {
+  validateAppliedReplan,
+  validateChangeCancellation,
+  validateReplanRevision,
+} from "./lib/change-guards.js";
 
 function usage(): never {
   console.error(
@@ -68,8 +74,7 @@ function main() {
 
   // --list-legal: 列出当前状态的所有合法转移
   if (listLegal) {
-    const allTransitions = loadGuards();
-    const legal = getAllLegalTransitions(fromState);
+    const legal = getAllLegalTransitions(fromState, state);
     console.log(
       JSON.stringify(
         {
@@ -222,6 +227,30 @@ function main() {
     }
   }
 
+  // ---- 守卫 3.3: CP-R01 批准、修改或取消 ----
+  if (fromState === "WAITING_REPLAN_CONFIRM") {
+    const confirmation = getLatestConfirmation(
+      taskId,
+      "WAITING_REPLAN_CONFIRM",
+      "REPLAN_APPROVAL"
+    );
+    let errors: string[] = [];
+    if (confirmation?.resolution === "APPROVE_REPLAN") {
+      errors = validateAppliedReplan(confirmation, state, toState, loadGuards().max_replan, PROJECT_ROOT);
+    } else if (confirmation?.resolution === "REVISE_REPLAN" && toState === "REPLANNING") {
+      errors = validateReplanRevision(confirmation, taskId);
+    } else if (confirmation?.resolution === "CANCEL_CHANGE") {
+      errors = validateChangeCancellation(confirmation, taskId, toState, PROJECT_ROOT);
+      if (state.return_state !== toState) errors.push("任务返回节点与快照原状态不一致");
+    } else {
+      errors = ["CP-R01 没有与目标状态匹配的已完成决定"];
+    }
+    if (errors.length) {
+      console.error(`CP-R01 准入失败: ${errors.join("; ")}`);
+      process.exit(1);
+    }
+  }
+
   // ---- 守卫 4: TASK_CANCELLED 不可恢复 ----
   if (fromState === "TASK_CANCELLED" && toState !== "INITIALIZING" && toState !== "INTENT_ROUTING") {
     const result: TransitionResult = {
@@ -296,7 +325,7 @@ function main() {
   console.log(JSON.stringify(result, null, 2));
 }
 
-function getAllLegalTransitions(from: StateId): string[] {
+function getAllLegalTransitions(from: StateId, state: TaskState): string[] {
   const transitions = [
     ...require("./lib/config.js").loadTransitions()
       .filter((t: { from: string }) => t.from === from)
@@ -306,6 +335,7 @@ function getAllLegalTransitions(from: StateId): string[] {
   // 特殊转移
   if (from === "TASK_PAUSED") transitions.push("PREVIOUS_STATE");
   if (from === "EXECUTION_BLOCKED") transitions.push("PREVIOUS_VALID_STATE");
+  if (from === "WAITING_REPLAN_CONFIRM" && state.return_state) transitions.push(state.return_state);
 
   // 全局可进入的终态
   if (from !== "TASK_CANCELLED") transitions.push("TASK_PAUSED", "TASK_CANCELLED");
@@ -324,6 +354,9 @@ function checkSpecialTransition(
   }
   // EXECUTION_BLOCKED 可以恢复到最近有效状态
   if (from === "EXECUTION_BLOCKED" && state.previous_state === to) {
+    return true;
+  }
+  if (from === "WAITING_REPLAN_CONFIRM" && state.return_state === to) {
     return true;
   }
   return false;

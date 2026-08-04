@@ -1,0 +1,20 @@
+{
+  "confirmation_type": "REPLAN_APPROVAL",
+  "resolution": "APPROVE_REPLAN",
+  "change_id": "change-target-unavailable-001",
+  "approved_plan_version": "0.2.0",
+  "approved_plan_sha256": "db3e9183f381468cb877c964cc1761a80383d049b12dd53ccc82a3c7efe3e79a",
+  "approved_prd_base_version": "0.2.0",
+  "approved_return_state": "PRD_DRAFTING_DETAILS",
+  "snapshot_ref": "repo://context-workspace/workspace/snapshots/change-target-unavailable-001/manifest.json",
+  "analysis_ref": "repo://context-workspace/workspace/reports/change-impact.json",
+  "plan_ref": "repo://context-workspace/workspace/plans/help-center-search-replan.json",
+  "preserved_artifact_refs": [
+    "repo://context-workspace/workspace/decisions/decision-ledger.json",
+    "repo://context-workspace/context/product/search-current-state.md",
+    "repo://context-workspace/context/product/search-solution.md",
+    "repo://context-workspace/context/business-rules/search-boundaries.md"
+  ],
+  "deprecated_artifact_refs": ["repo://context-workspace/workspace/reports/prd-review.json"],
+  "reason": "目标、范围和核心流程不变，仅回到 DETAILS 修订规则、异常与验收后重新审核"
+}

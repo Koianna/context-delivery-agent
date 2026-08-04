@@ -1,0 +1,46 @@
+{
+  "execution_id": "demo-change-001",
+  "case": "help-center-search-target-unavailable",
+  "task_goal": "补充目标内容失效后的别名处理规则",
+  "source_artifact_state": "DELIVERED",
+  "state_path": [
+    "INITIALIZING",
+    "INTENT_ROUTING",
+    "CHANGE_ANALYZING",
+    "REPLANNING",
+    "WAITING_REPLAN_CONFIRM",
+    "PRD_DRAFTING_DETAILS"
+  ],
+  "snapshot": {
+    "ref": "repo://context-workspace/workspace/snapshots/change-target-unavailable-001/manifest.json",
+    "artifact_count": 6,
+    "prd_version": "0.2.0",
+    "plan_version": "0.1.0"
+  },
+  "impact": {
+    "change_type": "DETAIL_RULE_CHANGE",
+    "affected": ["PRD 规则、权限、异常、验收和待办", "原 PRD 审核报告"],
+    "preserved": ["PRD 背景、目标、范围和核心流程", "全部已确认决策", "稳定 Context"],
+    "recommended_return_state": "PRD_DRAFTING_DETAILS"
+  },
+  "rejected_transition": {
+    "target": "PRD_DRAFTING_CORE",
+    "reason": "与 CP-R01 批准的返回节点不一致"
+  },
+  "confirmation": {
+    "id": "CP-R01",
+    "type": "REPLAN_APPROVAL",
+    "resolution": "APPROVE_REPLAN",
+    "approved_plan_version": "0.2.0",
+    "approved_plan_sha256": "db3e9183f381468cb877c964cc1761a80383d049b12dd53ccc82a3c7efe3e79a",
+    "approved_prd_base_version": "0.2.0",
+    "approved_return_state": "PRD_DRAFTING_DETAILS"
+  },
+  "result": {
+    "plan_version": "0.2.0",
+    "replan_count": 1,
+    "branch_exit_state": "PRD_DRAFTING_DETAILS",
+    "prd_unchanged_before_return": true,
+    "prd_sha256": "46367b437225c4d6315c67fb8a1285b9a11cff26459ab3c3bedbcedb5dbcf38d"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "change-impact-output",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["mode", "change_id", "snapshot_ref", "change_classification", "change_summary", "affected_items", "unaffected_items", "recommended_return_state", "risks", "open_questions"],
+      "properties": {
+        "mode": {"const": "ANALYZE"},
+        "change_id": {"type": "string"},
+        "snapshot_ref": {"type": "string", "pattern": "^repo://context-workspace/workspace/snapshots/"},
+        "change_classification": {
+          "type": "object",
+          "required": ["change_type", "is_material_change", "confidence"],
+          "properties": {
+            "change_type": {"enum": ["SOURCE_CHANGE", "FACT_CHANGE", "GOAL_CHANGE", "SCOPE_CHANGE", "DECISION_CHANGE", "CORE_FLOW_CHANGE", "DETAIL_RULE_CHANGE", "WORDING_ONLY", "UNKNOWN"]},
+            "is_material_change": {"type": "boolean"},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "change_summary": {"type": "object", "required": ["old_value", "new_value", "source_refs"]},
+        "affected_items": {"type": "array"},
+        "unaffected_items": {"type": "array"},
+        "recommended_return_state": {"enum": ["CONTEXT_ANALYZING", "PRD_THINKING", "PRD_DRAFTING_CORE", "PRD_DRAFTING_DETAILS", null]},
+        "risks": {"type": "array"},
+        "open_questions": {"type": "array"}
+      }
+    },
+    {
+      "type": "object",
+      "required": ["mode", "change_id", "analysis_ref", "analysis_sha256", "snapshot_ref", "plan", "risks", "open_questions"],
+      "properties": {
+        "mode": {"const": "REPLAN"},
+        "change_id": {"type": "string"},
+        "analysis_ref": {"type": "string"},
+        "analysis_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "snapshot_ref": {"type": "string"},
+        "plan": {
+          "type": "object",
+          "required": ["plan_id", "version", "previous_version", "status", "recommended_return_state", "steps", "preserved_artifacts", "preserved_items", "deprecated_artifacts", "required_confirmations"]
+        },
+        "risks": {"type": "array"},
+        "open_questions": {"type": "array"}
+      }
+    }
+  ]
+}

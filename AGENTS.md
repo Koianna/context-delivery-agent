@@ -67,6 +67,16 @@
 - CP-P03 必须通过 `manage-confirmation.ts` 逐项记录审核处置。存在 P0/P1、P2 未完整处置或当前 PRD 正文与审核 hash 不一致时均阻止交付；全部校验通过后，才可用 `finalize-prd-delivery.ts` 标记交付并进入 `DELIVERED`。
 - 确定性复跑顺序：`prd:validate-thinking` → `prd:validate-core` → `prd:validate-details` → `prd:validate-review` → `eval:prd`。
 
+### 修改与重规划分支确定性校验
+
+- 进入 `CHANGE_ANALYZING` 后先用 `create-change-snapshot.ts` 保存业务产物原字节、SHA-256 和版本基线；相同基线重复执行必须返回 `UNCHANGED`。
+- `change-impact/ANALYZE` 通过 `validate-change-output.ts` 后由 `record-change-analysis.ts` 保存，只能列出影响项、保留项和推荐返回节点，不得修改原产物。
+- `change-impact/REPLAN` 必须引用已保存影响报告的路径与 hash，通过校验后由 `record-replan.ts` 保存 `DRAFT` 计划。
+- CP-R01 支持批准、修改和取消。批准后先由 `apply-replan.ts` 固化计划版本、返回节点并递增 `replan_count`；Harness 只允许进入批准的节点，且最多重规划三次。
+- 经 CP-R01 返回 PRD 节点时，`prd-write` 只允许基于 `approved_prd_base_version` 创建修订版本；未受影响章节必须保留，修订后仍需独立审核和 CP-P03。
+- 取消变更时必须用 `restore-change-snapshot.ts` 恢复快照；产物 hash 未恢复一致前，状态机不得返回变更前状态。
+- 确定性复跑顺序：`change:validate-analysis` → `change:validate-replan` → `eval:change`。
+
 ## 确认点
 
 | 编号 | 确认点 | 触发条件 |
