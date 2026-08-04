@@ -1,0 +1,9 @@
+{
+  "confirmation_type": "SCOPE_AND_CORE_FLOW",
+  "resolution": "APPROVE_CORE",
+  "approved_core_version": "0.1.0",
+  "approved_scope": ["关键词别名新增、启用、停用", "沿用现有标题和标签检索"],
+  "approved_out_of_scope": ["语义检索", "智能问答", "查询词日志建设"],
+  "approved_core_flow": ["用户搜索 → 别名映射或沿用原词 → 现有检索 → 返回结果或无结果页"],
+  "reason": "主体范围和核心流程与已确认方案一致，允许补充可验收细节"
+}

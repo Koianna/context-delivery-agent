@@ -1,0 +1,8 @@
+[
+  {
+    "case_id": "PR-01",
+    "input_ref": "repo://case-data/help-center-search/prd/prd-review.input.json",
+    "output_ref": "repo://case-data/help-center-search/prd/expected-outputs/prd-review.output.json",
+    "assertions": ["prd_hash_unchanged", "issue_counts_match", "issues_have_location_and_evidence", "no_p0_p1_for_delivery"]
+  }
+]

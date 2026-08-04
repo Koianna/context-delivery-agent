@@ -205,6 +205,11 @@ function cmdResolve(args: string[]) {
     case "APPROVE_SELECTED":
     case "CONFIRM":
     case "APPROVE":
+    case "CONFIRM_WRITABLE":
+    case "APPROVE_CORE":
+    case "ACCEPT_AND_DELIVER":
+    case "DELIVER_WITH_NOTES":
+    case "FIX_AND_REVIEW":
       newStatus = "APPROVED";
       break;
     case "REJECT":
@@ -295,7 +300,10 @@ function readItems(args: string[]): Array<Record<string, unknown>> {
     ) {
       return (parsed as { update_proposals: Array<Record<string, unknown>> }).update_proposals;
     }
-    console.error("--items-file 必须是数组或包含 update_proposals 数组的 JSON");
+    if (parsed && typeof parsed === "object") {
+      return [parsed as Record<string, unknown>];
+    }
+    console.error("--items-file 必须是 JSON 数组或对象");
     process.exit(1);
   }
 
@@ -328,7 +336,10 @@ function itemDecision(
   proposalId: string | undefined,
   selectedIds: string[]
 ): "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED" {
-  if (resolution === "APPROVE_ALL" || resolution === "APPROVE" || resolution === "CONFIRM") {
+  if ([
+    "APPROVE_ALL", "APPROVE", "CONFIRM", "CONFIRM_WRITABLE", "APPROVE_CORE",
+    "ACCEPT_AND_DELIVER", "DELIVER_WITH_NOTES", "FIX_AND_REVIEW"
+  ].includes(resolution)) {
     return "APPROVED";
   }
   if (resolution === "APPROVE_SELECTED") {

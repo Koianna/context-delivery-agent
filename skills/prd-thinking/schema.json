@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prd-thinking-output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["background_card", "decision_ledger", "writable_assessment"],
+  "properties": {
+    "background_card": {
+      "type": "object",
+      "required": ["materials_read", "current_state", "problem", "target_users", "user_scenarios", "upstream_dependencies", "downstream_impacts", "confirmed_scope", "confirmed_out_of_scope", "conflicts", "missing_information", "source_refs"]
+    },
+    "decision_ledger": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["decision_id", "question", "evidence", "recommended_option", "alternative_options", "impact_scope", "status", "is_blocking", "human_decision"],
+        "properties": {
+          "decision_id": {"type": "string"},
+          "question": {"type": "string"},
+          "evidence": {"type": "array"},
+          "recommended_option": {"type": "string"},
+          "alternative_options": {"type": "array", "items": {"type": "string"}},
+          "impact_scope": {"type": "array", "items": {"type": "string"}},
+          "status": {"enum": ["CONFIRMED", "PENDING", "BLOCKED", "SUPERSEDED"]},
+          "is_blocking": {"type": "boolean"},
+          "human_decision": {"type": ["string", "null"]},
+          "source_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "writable_assessment": {
+      "type": "object",
+      "required": ["status", "checks", "blockers", "priority_questions"],
+      "properties": {
+        "status": {"enum": ["READY", "NEEDS_CONFIRMATION", "BLOCKED"]},
+        "checks": {"type": "object"},
+        "blockers": {"type": "array"},
+        "priority_questions": {"type": "array", "maxItems": 3}
+      }
+    }
+  }
+}

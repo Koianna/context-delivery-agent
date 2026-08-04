@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prd-write-output",
+  "type": "object",
+  "required": ["prd_artifact", "coverage", "unresolved_items", "unsupported_claims", "change_summary"],
+  "properties": {
+    "prd_artifact": {
+      "type": "object",
+      "required": ["artifact_id", "version", "previous_version", "phase", "structured_sections", "markdown_ref", "content_ref", "source_refs", "decision_refs"],
+      "properties": {
+        "artifact_id": {"type": "string"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "previous_version": {"type": ["string", "null"]},
+        "phase": {"enum": ["CORE", "DETAILS", "REVISION"]},
+        "structured_sections": {"type": "array", "items": {"type": "string"}},
+        "markdown_ref": {"type": "string"},
+        "content_ref": {"type": "string"},
+        "source_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "decision_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["required_sections", "covered_sections", "missing_sections"]
+    },
+    "unresolved_items": {"type": "array"},
+    "unsupported_claims": {"type": "array"},
+    "change_summary": {"type": "string"}
+  }
+}

@@ -11,8 +11,13 @@
     "context:validate-material": "node --import tsx scripts/validate-skill-output.ts --skill material-ingest --input case-data/help-center-search/material-ingest.input.json --output case-data/help-center-search/expected-outputs/material-ingest.output.json",
     "context:validate-analysis": "node --import tsx scripts/validate-skill-output.ts --skill context-maintain --material-output case-data/help-center-search/expected-outputs/material-ingest.output.json --output case-data/help-center-search/expected-outputs/context-maintain.analysis.json",
     "context:index": "node --import tsx scripts/update-index.ts",
+    "prd:validate-thinking": "node --import tsx scripts/validate-prd-output.ts --skill prd-thinking --output case-data/help-center-search/prd/expected-outputs/prd-thinking.output.json",
+    "prd:validate-core": "node --import tsx scripts/validate-prd-output.ts --skill prd-write --output case-data/help-center-search/prd/expected-outputs/prd-write.core.output.json --decision-ledger case-data/help-center-search/prd/decision-ledger.confirmed.json",
+    "prd:validate-details": "node --import tsx scripts/validate-prd-output.ts --skill prd-write --output case-data/help-center-search/prd/expected-outputs/prd-write.details.output.json --decision-ledger case-data/help-center-search/prd/decision-ledger.confirmed.json",
+    "prd:validate-review": "node --import tsx scripts/validate-prd-output.ts --skill prd-review --output case-data/help-center-search/prd/expected-outputs/prd-review.output.json --prd-ref repo://context-workspace/workspace/prd/help-center-search.md",
     "skills:validate": "node --import tsx scripts/validate-skills.ts",
     "eval:context": "node --import tsx evaluation/run-context-branch.ts",
+    "eval:prd": "node --import tsx evaluation/run-prd-branch.ts",
     "typecheck": "tsc --noEmit",
     "eval:run": "node --import tsx evaluation/run.ts"
   },

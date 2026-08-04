@@ -1,0 +1,34 @@
+{
+  "background_card": {
+    "materials_read": ["repo://context-workspace/context/product/search-solution.md"],
+    "current_state": "帮助中心按标题和标签匹配",
+    "problem": "口语词无法命中正式标题",
+    "target_users": ["使用口语词搜索帮助文章的用户"],
+    "user_scenarios": ["用户输入开发票并寻找电子发票文章"],
+    "upstream_dependencies": [],
+    "downstream_impacts": ["搜索结果"],
+    "confirmed_scope": ["关键词别名"],
+    "confirmed_out_of_scope": ["智能问答"],
+    "conflicts": [],
+    "missing_information": ["别名维护责任"],
+    "source_refs": ["repo://context-workspace/context/product/search-solution.md"]
+  },
+  "decision_ledger": [{
+    "decision_id": "decision_owner",
+    "question": "谁维护关键词别名",
+    "evidence": [],
+    "recommended_option": "运营维护，产品定义规则",
+    "alternative_options": ["产品维护"],
+    "impact_scope": ["权限", "流程"],
+    "status": "PENDING",
+    "is_blocking": true,
+    "human_decision": null,
+    "source_refs": []
+  }],
+  "writable_assessment": {
+    "status": "NEEDS_CONFIRMATION",
+    "checks": {"background_aligned": true, "scope_confirmed": true, "critical_decisions_resolved": false},
+    "blockers": ["decision_owner"],
+    "priority_questions": [{"decision_id": "decision_owner", "impact": "影响后台权限和流程", "recommended_option": "运营维护，产品定义规则"}]
+  }
+}

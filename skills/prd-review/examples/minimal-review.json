@@ -1,0 +1,9 @@
+{
+  "review_id": "review-help-center-search",
+  "reviewed_prd_version": "0.2.0",
+  "prd_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "issues": [],
+  "summary": {"p0_count": 0, "p1_count": 0, "p2_count": 0, "recommendation": "PASS"},
+  "passed_dimensions": ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"],
+  "unverifiable_items": []
+}

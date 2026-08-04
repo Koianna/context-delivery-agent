@@ -1,0 +1,8 @@
+[
+  {
+    "case_id": "PT-01",
+    "input_ref": "repo://case-data/help-center-search/prd/prd-thinking.input.json",
+    "output_ref": "repo://case-data/help-center-search/prd/expected-outputs/prd-thinking.output.json",
+    "assertions": ["no_prd_body", "pending_decisions_block_ready", "priority_questions_max_three", "all_facts_have_sources"]
+  }
+]

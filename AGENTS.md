@@ -57,6 +57,16 @@
 - CP-C01 只包含 `requires_confirmation: true` 的稳定 Context proposal，批准结果精确记录到 `proposal_id`。
 - `context-maintain/APPLY` 依次通过 `validate-context-write.ts`、`create-version.ts` 和 `update-index.ts`；基线冲突时停止，已落地的相同内容按幂等重试处理。
 
+### PRD 分支确定性校验
+
+- `prd-thinking` 只输出背景卡、决策账本和可写性判断；先由 `validate-prd-output.ts` 校验，再用 `record-prd-thinking.ts` 保存分析结果，不得提前生成 PRD。
+- CP-P01 必须通过 `manage-confirmation.ts` 记录 `CONFIRM_WRITABLE`，并由 `record-confirmed-decisions.ts` 固化人工决策；仍有阻塞决策或 `writable_status` 不为 `true` 时，不得进入 `PRD_DRAFTING_CORE`。
+- `prd-write/CORE` 先通过 `validate-prd-output.ts` 和 `apply-prd-artifact.ts` 写入稳定 PRD 路径，再进入 CP-P02；没有 `APPROVE_CORE`，不得生成 DETAILS。
+- `prd-write/DETAILS` 沿用同一 PRD 路径并递增语义版本；重复执行相同内容必须返回 `UNCHANGED`，不得创建 v1、v2、final 等副本。
+- `prd-review` 对 PRD 只读，通过 `record-prd-review.ts` 保存带正文哈希的审核结果；审核前后不得修改 PRD 正文。
+- CP-P03 必须通过 `manage-confirmation.ts` 逐项记录审核处置。存在 P0/P1、P2 未完整处置或当前 PRD 正文与审核 hash 不一致时均阻止交付；全部校验通过后，才可用 `finalize-prd-delivery.ts` 标记交付并进入 `DELIVERED`。
+- 确定性复跑顺序：`prd:validate-thinking` → `prd:validate-core` → `prd:validate-details` → `prd:validate-review` → `eval:prd`。
+
 ## 确认点
 
 | 编号 | 确认点 | 触发条件 |

@@ -1,0 +1,140 @@
+#!/usr/bin/env npx tsx
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { PROJECT_ROOT } from "./lib/config.js";
+import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "./lib/prd-types.js";
+import { parseFrontmatter, readJson, repoRefToPath } from "./lib/repository.js";
+
+export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_ROOT): string[] {
+  const errors: string[] = [];
+  if ((output as unknown as Record<string, unknown>).prd_artifact) errors.push("prd-thinking 不得输出 PRD artifact");
+  if (output.writable_assessment.priority_questions.length > 3) errors.push("优先问题超过 3 个");
+  const pendingBlocking = output.decision_ledger.filter((item) => item.is_blocking && item.status !== "CONFIRMED");
+  if (pendingBlocking.length && output.writable_assessment.status === "READY") {
+    errors.push("存在未确认阻塞决策时不能标记 READY");
+  }
+  const ids = new Set<string>();
+  for (const decision of output.decision_ledger) {
+    if (ids.has(decision.decision_id)) errors.push(`重复 decision_id: ${decision.decision_id}`);
+    ids.add(decision.decision_id);
+    if (decision.status === "CONFIRMED" && !decision.human_decision) {
+      errors.push(`${decision.decision_id} 标记 CONFIRMED 但没有 human_decision`);
+    }
+  }
+  for (const ref of [...output.background_card.materials_read, ...output.background_card.source_refs]) {
+    validateRepoRef(ref, errors, root);
+  }
+  return errors;
+}
+
+export function validatePrdWrite(
+  output: PrdWriteOutput,
+  confirmedDecisionIds: string[],
+  root = PROJECT_ROOT
+): string[] {
+  const errors: string[] = [];
+  const artifact = output.prd_artifact;
+  if (!/^\d+\.\d+\.\d+$/.test(artifact.version)) errors.push("PRD version 必须是语义版本");
+  if (output.coverage.missing_sections.length) errors.push("PRD 存在缺失必需章节");
+  const covered = new Set(output.coverage.covered_sections);
+  for (const section of output.coverage.required_sections) {
+    if (!covered.has(section)) errors.push(`必需章节未覆盖: ${section}`);
+  }
+  if (artifact.decision_refs.some((id) => !confirmedDecisionIds.includes(id))) {
+    errors.push("PRD 引用了未确认决策");
+  }
+  if (output.unsupported_claims.length) errors.push("PRD 存在 unsupported_claims");
+  for (const ref of [...artifact.source_refs, artifact.content_ref]) validateRepoRef(ref, errors, root);
+  if (!artifact.markdown_ref.startsWith("repo://context-workspace/workspace/prd/")) errors.push("PRD markdown_ref 路径非法");
+
+  try {
+    const body = parseFrontmatter(fs.readFileSync(repoRefToPath(artifact.content_ref, root), "utf-8")).body;
+    if (artifact.phase === "CORE" && /## (8|9|10)\.|验收标准|角色与权限/.test(body)) {
+      errors.push("CORE 候选提前展开 DETAILS 内容");
+    }
+    if (artifact.phase === "DETAILS") {
+      for (const heading of ["功能规则", "角色与权限", "边界与异常", "验收标准"]) {
+        if (!body.includes(heading)) errors.push(`DETAILS 缺少章节: ${heading}`);
+      }
+    }
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+  return errors;
+}
+
+export function validatePrdReview(
+  output: PrdReviewOutput,
+  prdRef: string,
+  root = PROJECT_ROOT
+): string[] {
+  const errors: string[] = [];
+  const prd = parseFrontmatter(fs.readFileSync(repoRefToPath(prdRef, root), "utf-8"));
+  const hash = crypto.createHash("sha256").update(prd.body).digest("hex");
+  if (output.prd_sha256 !== hash) errors.push("审核记录的 PRD hash 与正文不一致");
+  if (output.reviewed_prd_version !== prd.metadata.version) errors.push("审核版本与 PRD frontmatter 不一致");
+  const counts = {
+    P0: output.issues.filter((item) => item.severity === "P0").length,
+    P1: output.issues.filter((item) => item.severity === "P1").length,
+    P2: output.issues.filter((item) => item.severity === "P2").length,
+  };
+  if (counts.P0 !== output.summary.p0_count || counts.P1 !== output.summary.p1_count || counts.P2 !== output.summary.p2_count) {
+    errors.push("审核问题计数与 summary 不一致");
+  }
+  for (const issue of output.issues) {
+    if (!issue.location || !issue.description || !issue.impact || !issue.recommended_fix) {
+      errors.push(`${issue.issue_id} 缺少定位、描述、影响或建议`);
+    }
+  }
+  if ((counts.P0 > 0 || counts.P1 > 0) && ["PASS", "PASS_WITH_NOTES"].includes(output.summary.recommendation)) {
+    errors.push("存在 P0/P1 时不能建议交付");
+  }
+  return errors;
+}
+
+function validateRepoRef(ref: string, errors: string[], root: string) {
+  try {
+    const file = repoRefToPath(ref, root);
+    if (!fs.existsSync(file)) errors.push(`引用不存在: ${ref}`);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const skill = argVal(args, "--skill");
+  const outputArg = argVal(args, "--output");
+  if (!skill || !outputArg) {
+    console.error("用法: validate-prd-output.ts --skill prd-thinking|prd-write|prd-review --output <json> [--decision-ledger <json>] [--prd-ref <repo-ref>]");
+    process.exit(1);
+  }
+  const outputPath = path.isAbsolute(outputArg) ? outputArg : path.join(PROJECT_ROOT, outputArg);
+  let errors: string[] = [];
+  if (skill === "prd-thinking") {
+    errors = validatePrdThinking(readJson<PrdThinkingOutput>(outputPath));
+  } else if (skill === "prd-write") {
+    const ledgerArg = argVal(args, "--decision-ledger");
+    if (!ledgerArg) throw new Error("prd-write 校验需要 --decision-ledger");
+    const ledgerPath = path.isAbsolute(ledgerArg) ? ledgerArg : path.join(PROJECT_ROOT, ledgerArg);
+    const ledger = readJson<{ decisions: Array<{ decision_id: string; status: string }> }>(ledgerPath);
+    const ids = ledger.decisions.filter((item) => item.status === "CONFIRMED").map((item) => item.decision_id);
+    errors = validatePrdWrite(readJson<PrdWriteOutput>(outputPath), ids);
+  } else if (skill === "prd-review") {
+    const prdRef = argVal(args, "--prd-ref");
+    if (!prdRef) throw new Error("prd-review 校验需要 --prd-ref");
+    errors = validatePrdReview(readJson<PrdReviewOutput>(outputPath), prdRef);
+  } else {
+    throw new Error(`未知 Skill: ${skill}`);
+  }
+  console.log(JSON.stringify({ status: errors.length ? "FAIL" : "PASS", errors }, null, 2));
+  if (errors.length) process.exit(1);
+}
+
+function argVal(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+if (require.main === module) main();

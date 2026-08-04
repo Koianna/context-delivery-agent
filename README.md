@@ -33,6 +33,27 @@ npm run eval:context
 
 `npm run eval:context` 在临时目录内验证 11 个断言，不修改稳定 Context。完整演示产物位于 `context-workspace/`：原始材料保存在 drafts，分析与未决问题保存在 workspace，只有经过 CP-C01 逐项批准的内容进入 context。
 
+## 阶段 4：PRD 分支
+
+PRD 分支基于已确认的 Context 工作，以“写前判断 → 主体 → 细节 → 独立审核”三段 Skill 协作完成交付，并在 CP-P01、CP-P02、CP-P03 保留人工决策权。可依次执行：
+
+```bash
+npm run skills:validate
+npm run prd:validate-thinking
+npm run prd:validate-core
+npm run prd:validate-details
+npm run prd:validate-review
+npm run eval:prd
+```
+
+`npm run eval:prd` 在临时目录内执行 12 个断言，覆盖写前阻塞、确认门禁、CORE/DETAILS 分阶段生成、稳定路径与连续版本、幂等写入、只读审核，以及审核后正文漂移等交付阻断。案例输入与预期结果位于 `case-data/help-center-search/prd/`，完整演示产物位于：
+
+- `context-workspace/workspace/reports/prd-thinking.json`：写前背景、决策和可写性分析
+- `context-workspace/workspace/decisions/decision-ledger.json`：经 CP-P01 确认的决策账本
+- `context-workspace/workspace/prd/help-center-search.md`：从 CORE `0.1.0` 演进到 DETAILS `0.2.0` 的稳定 PRD
+- `context-workspace/workspace/reports/prd-review.json`：带 PRD 正文哈希的独立审核结果
+- `evaluation/execution-logs/prd-branch-demo.json`：状态路径、确认点和交付结果
+
 ## 目录结构
 
 | 目录 | 用途 |

@@ -1,0 +1,56 @@
+{
+  "execution_id": "demo-prd-001",
+  "case": "help-center-search",
+  "task_goal": "基于已整理 Context 准备帮助中心搜索体验优化 PRD",
+  "state_path": [
+    "INITIALIZING",
+    "INTENT_ROUTING",
+    "PRD_THINKING",
+    "WAITING_DECISION_CONFIRM",
+    "PRD_DRAFTING_CORE",
+    "WAITING_SCOPE_CONFIRM",
+    "PRD_DRAFTING_DETAILS",
+    "PRD_REVIEWING",
+    "WAITING_REVIEW_DECISION",
+    "DELIVERED"
+  ],
+  "confirmation_points": [
+    {
+      "id": "CP-P01",
+      "type": "DECISION_AND_WRITABLE_STATUS",
+      "resolution": "CONFIRM_WRITABLE",
+      "result": "关键决策已确认，允许生成 PRD 主体"
+    },
+    {
+      "id": "CP-P02",
+      "type": "SCOPE_AND_CORE_FLOW",
+      "resolution": "APPROVE_CORE",
+      "result": "范围与核心流程已确认，允许补充细节"
+    },
+    {
+      "id": "CP-P03",
+      "type": "REVIEW_DISPOSITION",
+      "resolution": "ACCEPT_AND_DELIVER",
+      "result": "无 P0/P1，两个 P2 已接受为发布前待办"
+    }
+  ],
+  "prd": {
+    "ref": "repo://context-workspace/workspace/prd/help-center-search.md",
+    "core_version": "0.1.0",
+    "details_version": "0.2.0",
+    "delivered_version": "0.2.0",
+    "status": "delivered"
+  },
+  "review": {
+    "review_id": "review-help-center-search-001",
+    "p0_count": 0,
+    "p1_count": 0,
+    "p2_count": 2,
+    "recommendation": "PASS_WITH_NOTES",
+    "accepted_p2_issue_ids": [
+      "issue_target_unavailable",
+      "issue_query_set_owner"
+    ]
+  },
+  "terminal_state": "DELIVERED"
+}

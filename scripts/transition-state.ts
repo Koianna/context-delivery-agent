@@ -25,6 +25,11 @@ import type {
   Operator,
   TransitionResult,
 } from "./lib/types.js";
+import {
+  validateCoreConfirmation,
+  validateDeliveryConfirmation,
+  validatePrdEntryConfirmation,
+} from "./lib/prd-guards.js";
 
 function usage(): never {
   console.error(
@@ -175,10 +180,46 @@ function main() {
     }
   }
 
-  // ---- 守卫 3: PRD 准入 ----
+  // ---- 守卫 3: CP-P01 PRD 准入 ----
   if (fromState === "WAITING_DECISION_CONFIRM" && toState === "PRD_DRAFTING_CORE") {
-    // 简化校验：检查是否有 PENDING 确认记录被解析
-    // 完整实现需要检查 decision 内容
+    const confirmation = getLatestConfirmation(
+      taskId,
+      "WAITING_DECISION_CONFIRM",
+      "DECISION_AND_WRITABLE_STATUS"
+    );
+    const errors = validatePrdEntryConfirmation(confirmation, taskId);
+    if (errors.length) {
+      console.error(`CP-P01 准入失败: ${errors.join("; ")}`);
+      process.exit(1);
+    }
+  }
+
+  // ---- 守卫 3.1: CP-P02 范围与核心流程准入 ----
+  if (fromState === "WAITING_SCOPE_CONFIRM" && toState === "PRD_DRAFTING_DETAILS") {
+    const confirmation = getLatestConfirmation(
+      taskId,
+      "WAITING_SCOPE_CONFIRM",
+      "SCOPE_AND_CORE_FLOW"
+    );
+    const errors = validateCoreConfirmation(confirmation, taskId);
+    if (errors.length) {
+      console.error(`CP-P02 准入失败: ${errors.join("; ")}`);
+      process.exit(1);
+    }
+  }
+
+  // ---- 守卫 3.2: CP-P03 审核交付准入 ----
+  if (fromState === "WAITING_REVIEW_DECISION" && toState === "DELIVERED") {
+    const confirmation = getLatestConfirmation(
+      taskId,
+      "WAITING_REVIEW_DECISION",
+      "REVIEW_DISPOSITION"
+    );
+    const errors = validateDeliveryConfirmation(confirmation, taskId);
+    if (errors.length) {
+      console.error(`CP-P03 准入失败: ${errors.join("; ")}`);
+      process.exit(1);
+    }
   }
 
   // ---- 守卫 4: TASK_CANCELLED 不可恢复 ----

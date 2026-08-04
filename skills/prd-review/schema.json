@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prd-review-output",
+  "type": "object",
+  "required": ["review_id", "reviewed_prd_version", "prd_sha256", "issues", "summary", "passed_dimensions", "unverifiable_items"],
+  "properties": {
+    "review_id": {"type": "string"},
+    "reviewed_prd_version": {"type": "string"},
+    "prd_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue_id", "severity", "dimension", "location", "description", "evidence", "impact", "recommended_fix", "requires_replan"],
+        "properties": {
+          "severity": {"enum": ["P0", "P1", "P2"]},
+          "dimension": {"enum": ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"]},
+          "requires_replan": {"type": "boolean"}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["p0_count", "p1_count", "p2_count", "recommendation"],
+      "properties": {
+        "recommendation": {"enum": ["PASS", "PASS_WITH_NOTES", "FIX_BEFORE_DELIVERY", "REPLAN_REQUIRED"]}
+      }
+    },
+    "passed_dimensions": {"type": "array"},
+    "unverifiable_items": {"type": "array"}
+  }
+}
