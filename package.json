@@ -27,6 +27,7 @@
     "eval:change": "node --import tsx evaluation/run-change-branch.ts",
     "eval:agent": "node --import tsx evaluation/run-agent-interaction.ts",
     "eval:gateway": "node --import tsx evaluation/run-gateway.ts",
+    "eval:workspace": "node --import tsx evaluation/run-workspace-provider.ts",
     "typecheck": "tsc --noEmit",
     "eval:run": "node --import tsx evaluation/run.ts"
   },

@@ -6,7 +6,7 @@
 
 ## 阶段
 
-当前为个人 POC，验证 Agent 架构和产品方案是否成立。使用「帮助中心搜索体验优化」作为可复现案例。
+当前为个人 POC，验证 Agent 架构和产品方案是否成立。默认支持按项目接入日常材料；「帮助中心搜索体验优化」作为可复现的面试演示案例保留。
 
 ## 快速开始
 
@@ -25,6 +25,18 @@ npm run gateway
 ```
 
 Gateway 返回统一的 `agent_response`、Runtime 状态、产物、确认项和下一步。外部 Agent 只展示结果并将用户的确认原文再次发送，不能自行构造批准状态。
+
+### 日常项目使用
+
+默认 Provider 是通用项目工作区。把会议记录、用户反馈、历史 PRD、产品现状和业务约束放在任意目录，通过 `project_id` 和 `material_path` 传入：
+
+```json
+{"protocol_version":"0.1","request_id":"req_phone_001","task_id":"account-task-001","project_id":"account-settings","message":"请收集整理这些用户反馈，保留原话和不确定性，不要直接写 PRD","material_path":"/Users/koi/Documents/account-materials","client":{"id":"my-agent"}}
+```
+
+例如材料中有“用户原话：手机号不用了”，Runtime 会保留原话并分类为用户反馈，询问这可能是修改手机号、解绑手机号还是其他诉求；在产品经理确认前，不会把它写成“用户要修改手机号”，也不会提升为稳定 Context。
+
+通用工作区支持 Markdown、纯文本和 JSON 材料。每个 `project_id` 的材料、报告、PRD 和稳定 Context 会隔离保存到对应项目路径；通用项目的稳定 Context 位于 `context-workspace/projects/<project_id>/context/`。
 
 不接入外部宿主时，也可以使用参考 CLI 适配器，直接描述目标，不需要手动执行 Harness 脚本：
 
@@ -50,7 +62,15 @@ npm run agent -- \
 
 `npm run agent` 是参考 CLI 适配器，不是项目唯一入口，也不是业务编排中心。`state:*`、`context:*`、`prd:*`、`change:*` 命令仍作为后台 Harness 与回归工具保留，不要求日常用户直接操作。Gateway 协议定义见 [`schemas/external-agent-gateway.schema.json`](schemas/external-agent-gateway.schema.json)。
 
-当前 Runtime 使用“本地可复现 Provider”：它读取帮助中心搜索案例的已校验结构化输出，让演示不依赖 API Key；材料登记、状态转移、人工确认、版本校验和产物写入仍由 Runtime 与 Harness 执行。响应会明确展示 Provider 类型，不把固定案例输出表述为实时模型生成。
+当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。面试演示可显式使用“本地可复现 Provider”，读取帮助中心搜索案例的已校验结构化输出；两者都必须经过同一套 Runtime、状态机、确认点和 Harness。真实模型 Provider 后续可以替换结构化输出生成层，但不能绕过 Runtime。
+
+### 面试案例演示
+
+```bash
+AGENT_PROVIDER=case npm run gateway
+```
+
+不设置 `AGENT_PROVIDER=case` 时，默认使用通用项目工作区，不会自动读取帮助中心搜索固定案例。
 
 ## Runtime 业务编排中心
 
@@ -70,7 +90,7 @@ npm run agent -- \
 - **Change**：快照 → 影响分析 → 重规划 → CP-R01 → 返回最小修订节点
 - **任务控制**：暂停、继续、取消和模糊意图澄清
 
-POC 当前限制：单用户、单任务运行时；只内置帮助中心搜索案例 Provider；CP-R01 批准后返回修订节点，但不会在缺少新业务输入时自动覆盖已交付 PRD。接入真实模型时只需实现 `AgentProvider`，状态机和 Harness 不变。
+POC 当前限制：单用户、单项目、单活跃任务运行时；通用 Provider 当前以保守规则和结构化基线为主，复杂语义分析需要接入真实模型 Provider；CP-R01 批准后返回修订节点，但不会在缺少新业务输入时自动覆盖已交付 PRD。更换 Provider 时状态机和 Harness 不变。
 
 ## 后台验证
 
@@ -88,9 +108,16 @@ npx tsx scripts/get-state.ts --task-id demo-task-01
 `npm run eval:agent` 隔离验证 12 个断言，包括自然语言路由、五个核心确认点、确认前禁止写入、PRD 分阶段交付、Change 最小返回节点和产物可追溯性。
 `npm run eval:gateway` 验证两个不同宿主通过同一 `task_id` 交接任务、保留 Runtime 产物，以及非法协议输入不改变业务状态。
 
+```bash
+# 通用材料与项目隔离验证
+npm run eval:workspace
+```
+
+`npm run eval:workspace` 使用独立的用户反馈材料验证：默认使用通用 Provider、保留“手机号不用了”原话、将具体诉求作为待确认问题，并按项目隔离产物。
+
 ## 阶段 3：Context 分支
 
-帮助中心搜索案例包含产品现状、用户反馈、当前讨论结论和历史需求边界四类材料。可用以下命令验证材料登记、两个 Skill 的结构化结果和 Context 控制规则：
+帮助中心搜索案例包含产品现状、用户反馈、当前讨论结论和历史需求边界四类材料。面试演示时显式使用该案例，验证材料登记、两个 Skill 的结构化结果和 Context 控制规则：
 
 ```bash
 npm run context:register
@@ -100,7 +127,7 @@ npm run context:validate-analysis
 npm run eval:context
 ```
 
-`npm run eval:context` 在临时目录内验证 11 个断言，不修改稳定 Context。完整演示产物位于 `context-workspace/`：原始材料保存在 drafts，分析与未决问题保存在 workspace，只有经过 CP-C01 逐项批准的内容进入 context。
+`npm run eval:context` 在临时目录内验证 11 个断言，不修改稳定 Context。完整演示产物位于 `context-workspace/`：原始材料保存在 drafts，分析与未决问题保存在 workspace，只有经过 CP-C01 逐项批准的内容进入 context。案例数据位于 `case-data/help-center-search/`，不代表项目只能处理这一类业务。
 
 ## 阶段 4：PRD 分支
 
@@ -154,7 +181,7 @@ npm run eval:change
 | `state-machine/` | 22 个状态、合法转移表与守卫条件配置 |
 | `schemas/` | JSON Schema 定义 |
 | `scripts/` | TypeScript Harness：状态转移、确认管理、写入校验、版本与索引 |
-| `case-data/` | 帮助中心搜索体验优化完整案例 |
+| `case-data/` | 可复现演示案例；当前包含帮助中心搜索体验优化 |
 | `evaluation/` | 测试用例、评分标准、执行日志与 Bad Case |
 
 ## 三条演示路径

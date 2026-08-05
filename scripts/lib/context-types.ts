@@ -34,6 +34,8 @@ export interface MaterialInput {
 
 export interface MaterialIngestInput {
   task_goal: string;
+  project_id?: string;
+  workspace_slug?: string;
   analysis_scope: {
     topic: string;
     included_source_ids: string[];

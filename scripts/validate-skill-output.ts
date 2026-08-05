@@ -9,6 +9,7 @@ import type {
   MaterialIngestOutput,
 } from "./lib/context-types.js";
 import { readJson, repoRefToPath } from "./lib/repository.js";
+import { contextRootRef } from "./lib/project-paths.js";
 
 const INFORMATION_TYPES = new Set(["USER_FEEDBACK", "OBSERVATION", "FACT", "DATA", "OPINION", "PROPOSAL", "CONFIRMED_DECISION", "OPEN_QUESTION", "DEPRECATED_CONTENT"]);
 const MATURITIES = new Set(["RAW", "UNCONFIRMED", "CONFIRMED", "SUPERSEDED", "ARCHIVED"]);
@@ -94,7 +95,8 @@ function validateInformationItem(
 export function validateContextAnalysis(
   materialOutput: MaterialIngestOutput,
   output: ContextAnalysisOutput,
-  root = PROJECT_ROOT
+  root = PROJECT_ROOT,
+  projectId?: string
 ): string[] {
   const errors: string[] = [];
   if (output.action !== "ANALYZE") errors.push("context-maintain 分析输出 action 必须为 ANALYZE");
@@ -114,7 +116,7 @@ export function validateContextAnalysis(
       if (!item || !["CONFIRMED", "SUPERSEDED", "ARCHIVED"].includes(item.maturity)) {
         errors.push(`${proposal.proposal_id} 使用未确认信息修改稳定 Context`);
       }
-      if (!proposal.target_ref?.startsWith("repo://context-workspace/context/")) {
+      if (!proposal.target_ref?.startsWith(contextRootRef(projectId))) {
         errors.push(`${proposal.proposal_id} 稳定写入目标不在 context/`);
       }
       if (!proposal.base_version || !proposal.content_ref) {

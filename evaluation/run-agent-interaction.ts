@@ -3,6 +3,7 @@ import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
+import { LocalCaseProvider } from "../scripts/agent/local-case-provider.js";
 import { PROJECT_ROOT, readPendingConfirmations, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
 
@@ -10,7 +11,7 @@ interface CaseResult { case_id: string; passed: boolean; detail: string }
 const results: CaseResult[] = [];
 const transcript: Array<{ user: string; response: ReturnType<AgentOrchestrator["handleMessage"]> }> = [];
 const taskId = `agent-eval-${Date.now()}`;
-const agent = new AgentOrchestrator();
+const agent = new AgentOrchestrator(new LocalCaseProvider());
 
 clearRuntime();
 clearAgentArtifacts(taskId);

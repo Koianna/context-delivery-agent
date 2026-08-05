@@ -31,7 +31,7 @@ export function createTask(input: CreateTaskInput): TaskState {
   const now = new Date().toISOString();
   const state: TaskState = {
     task_id: input.taskId,
-    project_id: input.projectId ?? "help-center-search",
+    project_id: input.projectId ?? "default-project",
     session_id: input.sessionId ?? `session_${Date.now()}`,
     task_mode: input.mode ?? null,
     current_state: "INITIALIZING",

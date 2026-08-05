@@ -29,8 +29,27 @@ export function createVersion(input: CreateVersionInput): CreateVersionResult {
   const root = input.root ?? PROJECT_ROOT;
   const targetPath = repoRefToPath(input.targetRef, root);
   const candidatePath = repoRefToPath(input.contentRef, root);
-  if (!fs.existsSync(targetPath)) throw new Error(`目标文件不存在: ${input.targetRef}`);
   if (!fs.existsSync(candidatePath)) throw new Error(`候选内容不存在: ${input.contentRef}`);
+
+  if (!fs.existsSync(targetPath)) {
+    if (input.expectedVersion !== "0.0.0") {
+      throw new Error(`新建稳定 Context 必须使用基线版本 0.0.0: ${input.targetRef}`);
+    }
+    const candidate = parseFrontmatter(fs.readFileSync(candidatePath, "utf-8"));
+    const id = candidate.metadata.id;
+    if (typeof id !== "string") throw new Error(`候选内容缺少 id: ${input.contentRef}`);
+    const version = typeof candidate.metadata.version === "string" ? candidate.metadata.version : "0.1.0";
+    writeTextAtomic(targetPath, renderFrontmatter({
+      ...candidate.metadata,
+      id,
+      version,
+      status: "active",
+      source_refs: input.sourceRefs,
+      confirmed_by: "user",
+      confirmed_at: input.confirmedAt,
+    }, candidate.body));
+    return { status: "CREATED", target_ref: input.targetRef, previous_version: "0.0.0", version };
+  }
 
   const current = parseFrontmatter(fs.readFileSync(targetPath, "utf-8"));
   const candidate = parseFrontmatter(fs.readFileSync(candidatePath, "utf-8"));

@@ -8,6 +8,7 @@
     "protocol_version": { "type": "string", "const": "0.1" },
     "request_id": { "type": "string", "minLength": 1 },
     "task_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" },
     "session_id": { "type": "string", "minLength": 1 },
     "message": { "type": "string", "minLength": 1 },
     "material_path": { "type": "string", "minLength": 1 },

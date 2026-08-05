@@ -2,6 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
+import { contextIndexPath, contextRootPath } from "./lib/project-paths.js";
 import { incrementPatch, parseFrontmatter, renderFrontmatter, writeTextAtomic } from "./lib/repository.js";
 
 interface IndexEntry {
@@ -11,9 +12,17 @@ interface IndexEntry {
   version: string;
 }
 
-export function updateIndex(root = PROJECT_ROOT, updated = new Date().toISOString().slice(0, 10)) {
-  const contextDir = path.join(root, "context-workspace/context");
-  const indexPath = path.join(contextDir, "INDEX.md");
+export function updateIndex(root = PROJECT_ROOT, updated = new Date().toISOString().slice(0, 10), project?: string) {
+  const projectName = project ?? "help-center-search";
+  const contextDir = contextRootPath(project, root);
+  const indexPath = contextIndexPath(project, root);
+  fs.mkdirSync(contextDir, { recursive: true });
+  for (const group of ["product", "users", "business-rules", "glossary"]) {
+    fs.mkdirSync(path.join(contextDir, group), { recursive: true });
+  }
+  if (!fs.existsSync(indexPath)) {
+    writeTextAtomic(indexPath, renderFrontmatter({ version: "0.1.0", updated, project: projectName }, "# Context 索引\n\n> 此索引由 `scripts/update-index.ts` 根据稳定 Context 文件生成。"));
+  }
   const current = parseFrontmatter(fs.readFileSync(indexPath, "utf-8"));
   const currentVersion = typeof current.metadata.version === "string" ? current.metadata.version : "0.0.0";
   const groups: Record<string, IndexEntry[]> = {
@@ -49,7 +58,7 @@ export function updateIndex(root = PROJECT_ROOT, updated = new Date().toISOStrin
     return { status: "UNCHANGED", version: currentVersion, entry_count: Object.values(groups).flat().length };
   }
   const nextVersion = incrementPatch(currentVersion);
-  writeTextAtomic(indexPath, renderFrontmatter({ version: nextVersion, updated, project: "help-center-search" }, body));
+  writeTextAtomic(indexPath, renderFrontmatter({ version: nextVersion, updated, project: projectName }, body));
   return { status: "UPDATED", version: nextVersion, entry_count: Object.values(groups).flat().length };
 }
 

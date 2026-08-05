@@ -43,7 +43,7 @@ const input = `${requests.map((request) => JSON.stringify(request)).join("\n")}\
 const output = childProcess.execFileSync(
   process.execPath,
   ["--import", "tsx", path.join(PROJECT_ROOT, "scripts/agent-gateway.ts")],
-  { cwd: PROJECT_ROOT, input, encoding: "utf-8" }
+  { cwd: PROJECT_ROOT, input, encoding: "utf-8", env: { ...process.env, AGENT_PROVIDER: "case" } }
 );
 const responses = output.trim().split("\n").map((line) => JSON.parse(line) as GatewayResponse);
 const results = [

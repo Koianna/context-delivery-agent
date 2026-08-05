@@ -8,11 +8,12 @@ async function main() {
   const args = process.argv.slice(2);
   const agent = new AgentOrchestrator();
   const taskId = argVal(args, "--task-id");
+  const projectId = argVal(args, "--project");
   const materialPath = argVal(args, "--material");
   const debug = args.includes("--debug");
   const oneShot = argVal(args, "--message");
   if (oneShot) {
-    printResponse(agent.handleMessage(oneShot, { taskId, materialPath, debug }));
+    printResponse(agent.handleMessage(oneShot, { taskId, projectId, materialPath, debug }));
     return;
   }
 
@@ -22,7 +23,7 @@ async function main() {
   while (true) {
     const message = (await terminal.question("你：")).trim();
     if (["exit", "quit", "退出"].includes(message.toLowerCase())) break;
-    printResponse(agent.handleMessage(message, { taskId, materialPath, debug }));
+    printResponse(agent.handleMessage(message, { taskId, projectId, materialPath, debug }));
     console.log();
   }
   terminal.close();

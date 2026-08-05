@@ -15,7 +15,8 @@ import {
 export function registerMaterials(inputPath: string, root = PROJECT_ROOT) {
   const input = readJson<MaterialIngestInput>(inputPath);
   const allowed = new Set(input.analysis_scope.included_source_ids);
-  const targetDir = path.join(root, "context-workspace/drafts/help-center-search");
+  const workspaceSlug = input.workspace_slug ?? input.project_id ?? "default-project";
+  const targetDir = path.join(root, "context-workspace/drafts", safeSlug(workspaceSlug));
 
   const records = input.materials.map((material) => {
     if (!allowed.has(material.source_id)) {
@@ -24,7 +25,8 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT) {
     const sourcePath = repoRefToPath(material.content_ref, root);
     if (!fs.existsSync(sourcePath)) throw new Error(`材料不存在: ${material.content_ref}`);
     const content = fs.readFileSync(sourcePath, "utf-8");
-    if (!content.includes(`source_id: ${material.source_id}`)) {
+    const declaredSourceId = content.match(/(?:^|\n)source_id:\s*([^\s]+)\s*(?:\n|$)/)?.[1];
+    if (declaredSourceId && declaredSourceId !== material.source_id) {
       throw new Error(`材料 source_id 与清单不一致: ${material.source_id}`);
     }
 
@@ -47,7 +49,7 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT) {
   });
 
   const manifest = {
-    artifact_id: "material-manifest-help-center-search",
+    artifact_id: `material-manifest-${safeSlug(workspaceSlug)}`,
     version: "0.1.0",
     task_goal: input.task_goal,
     topic: input.analysis_scope.topic,
@@ -56,6 +58,11 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT) {
   const manifestPath = path.join(targetDir, "material-manifest.json");
   writeJsonAtomic(manifestPath, manifest);
   return { manifest_ref: pathToRepoRef(manifestPath, root), records };
+}
+
+function safeSlug(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "default-project";
 }
 
 function main() {

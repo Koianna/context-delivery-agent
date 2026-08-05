@@ -42,7 +42,7 @@ export function recordContextAnalysis(input: {
   const contextOutput = readJson<ContextAnalysisOutput>(input.contextOutputPath);
   const errors = [
     ...validateMaterialOutput(materialInput, materialOutput, root),
-    ...validateContextAnalysis(materialOutput, contextOutput, root),
+    ...validateContextAnalysis(materialOutput, contextOutput, root, materialInput.project_id ?? state.project_id),
   ];
   if (errors.length) throw new Error(`Context 分析输出校验失败:\n${errors.join("\n")}`);
 

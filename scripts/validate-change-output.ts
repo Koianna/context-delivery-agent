@@ -7,6 +7,7 @@ import type {
   ChangeAnalysisOutput, ChangeRequestInput, ChangeType, ReplanOutput, ReplanReturnState,
 } from "./lib/change-types.js";
 import { parseFrontmatter, readJson, repoRefToPath } from "./lib/repository.js";
+import { contextIndexPath } from "./lib/project-paths.js";
 
 const RETURN_BY_TYPE: Partial<Record<ChangeType, ReplanReturnState>> = {
   SOURCE_CHANGE: "CONTEXT_ANALYZING",
@@ -45,7 +46,7 @@ export function validateChangeInput(input: ChangeRequestInput, root = PROJECT_RO
       const confirmedIds = new Set(ledger.decisions.filter((item) => item.status === "CONFIRMED").map((item) => item.decision_id));
       if (input.confirmed_decision_refs.some((id) => !confirmedIds.has(id))) errors.push("输入引用了未确认或不存在的决策");
     }
-    const indexPath = path.join(root, "context-workspace/context/INDEX.md");
+    const indexPath = contextIndexPath(input.request_meta.project_id, root);
     const index = parseFrontmatter(fs.readFileSync(indexPath, "utf-8"));
     if (index.metadata.version !== input.task_snapshot.context_version) errors.push("输入 Context 版本与索引不一致");
   } catch (error) {

@@ -11,6 +11,7 @@ export interface ExternalAgentRequest {
   protocol_version?: string;
   request_id: string;
   task_id?: string;
+  project_id?: string;
   session_id?: string;
   message: string;
   material_path?: string;

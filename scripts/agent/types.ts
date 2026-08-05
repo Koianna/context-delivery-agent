@@ -38,6 +38,7 @@ export interface AgentResponse {
 export interface HandleMessageOptions {
   taskId?: string;
   sessionId?: string;
+  projectId?: string;
   materialPath?: string;
   debug?: boolean;
 }
@@ -70,7 +71,8 @@ export interface ChangeReplanAssets {
 export interface AgentProvider {
   readonly id: string;
   readonly label: string;
-  getContextAssets(materialPath?: string): {
+  setProjectId?(projectId: string): void;
+  getContextAssets(materialPath?: string, taskId?: string, taskGoal?: string): {
     inputPath: string;
     materialOutputPath: string;
     contextOutputPath: string;

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import type { ContextProposal } from "./context-types.js";
 import type { ConfirmationRecord, TaskState } from "./types.js";
 import { parseFrontmatter, repoRefToPath } from "./repository.js";
+import { contextRootRef } from "./project-paths.js";
 
 const STABLE_ACTIONS = new Set(["PROMOTE_TO_CONTEXT", "UPDATE_CONTEXT", "MARK_SUPERSEDED", "ARCHIVE"]);
 
@@ -21,8 +22,9 @@ export function authorizeContextWrite(input: AuthorizationInput): string[] {
   if (!STABLE_ACTIONS.has(proposal.action)) {
     errors.push(`proposal ${proposal.proposal_id} 不是稳定 Context 动作`);
   }
-  if (!proposal.target_ref?.startsWith("repo://context-workspace/context/")) {
-    errors.push("目标路径必须位于 context-workspace/context/");
+  const expectedContextRoot = contextRootRef(taskState.project_id);
+  if (!proposal.target_ref?.startsWith(expectedContextRoot)) {
+    errors.push(`目标路径必须位于 ${expectedContextRoot}`);
   }
   if (!proposal.source_refs.length) errors.push("稳定 Context 写入必须保留来源");
 

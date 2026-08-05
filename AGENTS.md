@@ -61,8 +61,11 @@
 ### Provider 边界
 
 - `AgentProvider` 负责材料理解和 Skill 结构化输出，不负责直接修改任务状态或业务产物。
+- 默认使用 `WorkspaceProvider` 处理当前 `project_id` 的真实材料；它必须保留原文、来源和不确定性。
 - `LocalCaseProvider` 仅用于无 API Key 的可复现演示，必须在用户响应中明确标识。
+- 只有显式设置 `AGENT_PROVIDER=case` 时才使用帮助中心搜索演示案例，不得把该案例当作日常项目默认数据源。
 - 真实模型 Provider 可以替换生成层，但不得绕过既有状态机、确认点、Schema 校验和写入守卫。
+- 通用项目的稳定 Context 使用 `context-workspace/projects/<project_id>/context/`；明确事实或已确认决策只能先生成候选，经过 CP-C01 后才能创建或更新稳定文件。
 
 ### Context 分支确定性校验
 

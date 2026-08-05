@@ -59,10 +59,10 @@ export function applyContextActions(
     versions.push({ proposal_id: proposal.proposal_id, version: result.version, target_ref: result.target_ref });
   }
 
-  const index = updateIndex(root, "2026-08-04");
+  const index = updateIndex(root, "2026-08-04", state.project_id);
   const logPath = repoRefToPath(logRef, root);
   const changeLog = {
-    artifact_id: "context-change-log-help-center-search",
+    artifact_id: `context-change-log-${state.project_id}`,
     version: "0.1.0",
     task_id: taskId,
     confirmation_id: latestApproved.confirmation_id,

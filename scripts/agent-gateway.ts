@@ -42,6 +42,7 @@ function handleLine(line: string): ExternalAgentResponse {
     const response = agent.handleMessage(request.message, {
       taskId: request.task_id,
       sessionId: request.session_id,
+      projectId: request.project_id,
       materialPath: request.material_path,
       debug: request.debug,
     });
@@ -80,9 +81,13 @@ function validateRequest(raw: unknown):
   if (typeof raw.message !== "string" || !raw.message.trim()) {
     return { ok: false, error: "缺少非空 message" };
   }
+  if (raw.project_id !== undefined && (typeof raw.project_id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(raw.project_id))) {
+    return { ok: false, error: "project_id 只能包含字母、数字、下划线或连字符，长度不超过 64" };
+  }
   for (const [field, value] of [
     ["task_id", raw.task_id],
     ["session_id", raw.session_id],
+    ["project_id", raw.project_id],
     ["material_path", raw.material_path],
   ] as const) {
     if (value !== undefined && typeof value !== "string") {
