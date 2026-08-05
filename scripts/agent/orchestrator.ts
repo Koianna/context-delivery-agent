@@ -147,11 +147,9 @@ export class AgentOrchestrator {
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "通用材料整理完成" });
       return this.response({
         message: [
-          "---\n以下为 Runtime 生成的整理稿，外部 Agent 请直接展示此内容：\n",
-          readStructuredMaterial(reportRefs.structuredMaterialRef),
-          "\n---",
-          `\n我已登记并分析 ${recorded.material_count} 份材料。`,
+          `我已登记并完成 ${recorded.material_count} 份材料的结构化整理。`,
           "当前没有可以直接提升为稳定 Context 的内容。原文、分类结果和待确认问题已保留在工作区。",
+          `整理稿已写入 ${reportRefs.structuredMaterialRef}。`,
           analysis.remaining_questions.length ? `发现 ${analysis.remaining_questions.length} 个需要产品经理判断的问题，未被当成既定需求。` : "没有遗留问题。",
         ].join("\n"),
         status: "COMPLETED",
@@ -178,8 +176,9 @@ export class AgentOrchestrator {
     assertTransition({ taskId: state.task_id, toState: "WAITING_CONTEXT_CONFIRM", reason: "稳定 Context 变更需要 CP-C01 人工确认" });
 
     return this.response({
-      message: [
-        `我已登记并分析 ${recorded.material_count} 份材料。`,
+        message: [
+        `我已登记并完成 ${recorded.material_count} 份材料的结构化整理。`,
+        `整理稿已写入 ${reportRefs.structuredMaterialRef}。`,
         `发现 ${analysis.conflicts.length} 个冲突，形成 ${analysis.update_proposals.length} 条处理建议，其中 ${confirmation.items.length} 条会修改稳定 Context，需要你判断。`,
         analysis.remaining_questions.length
           ? `另有 ${analysis.remaining_questions.length} 个问题保留在工作区，不会被当成已确认事实。`
@@ -354,7 +353,7 @@ export class AgentOrchestrator {
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_MAINTAINING", reason: "仅保留可逆分析产物" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "材料整理完成，稳定 Context 未变更" });
       return this.response({
-        message: "---\n以下为 Runtime 生成的整理稿：\n\n" + readStructuredMaterial(reportRefs.structuredMaterialRef) + "\n\n---\n\n材料、分析报告和待确认问题已保留在 drafts/workspace；按你的决定，本次没有更新稳定 Context。",
+        message: `材料、分析报告和整理稿已保留在 drafts/workspace；整理稿位置为 ${reportRefs.structuredMaterialRef}。按你的决定，本次没有更新稳定 Context。`,
         status: "COMPLETED",
         skill: "context-maintain",
         artifacts: [
@@ -381,10 +380,8 @@ export class AgentOrchestrator {
     assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "Context 维护任务完成" });
     return this.response({
       message: [
-        "---\n以下为 Runtime 生成的整理稿：\n",
-        readStructuredMaterial(reportRefs.structuredMaterialRef),
-        "\n---",
-        `\n已按你的决定处理 ${result.executed_actions.length + result.skipped_actions.length} 条稳定 Context 建议。`,
+        `已按你的决定处理 ${result.executed_actions.length + result.skipped_actions.length} 条稳定 Context 建议。`,
+        `整理稿位置为 ${reportRefs.structuredMaterialRef}。`,
         result.executed_actions.length
           ? `已更新：${result.executed_actions.join("、")}。`
           : "候选内容与现有稳定 Context 一致，因此保持幂等，没有重复创建版本。",
@@ -747,16 +744,9 @@ function instructionFor(status: AgentResponse["status"], state: StateId): string
   return "Runtime 正在处理。不得绕过 Runtime 执行业务 Skill 或写入业务文件。";
 }
 
-function readStructuredMaterial(ref: string): string {
-    try {
-      const p = repoRefToPath(ref, PROJECT_ROOT);
-      return fs.readFileSync(p, "utf-8");
-    } catch { return ""; }
-  }
-
 function routeIntent(message: string): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
-  if (/(只整理|整理材料|整理资料|整理.*(会议记录|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈)/i.test(message)) return "CONTEXT";
+  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈)/i.test(message)) return "CONTEXT";
   if (/(修改|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
   return "UNKNOWN";

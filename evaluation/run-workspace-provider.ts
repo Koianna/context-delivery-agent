@@ -62,6 +62,24 @@ results.push(
   check("WORKSPACE-10", fs.existsSync(contextIndexPath) && fs.readFileSync(contextIndexPath, "utf-8").includes("产品现状候选") && fs.readdirSync(path.join(contextRoot, "product")).some((item) => item.endsWith(".md")), "批准后创建稳定 Context 并更新项目索引"),
   check("WORKSPACE-11", contextApplied.execution_status === "COMPLETED" && contextApplied.artifacts.some((item) => item.label === "结构化整理稿" && item.ref.includes("context-workspace/")), "确认后仍返回 Runtime 生成的整理稿"),
 );
+
+clear();
+const paragraphSourceDir = path.join(PROJECT_ROOT, "runtime/workspace-provider-paragraph-materials");
+const paragraphSourcePath = path.join(paragraphSourceDir, "会议纪要-无发言人.md");
+fs.mkdirSync(paragraphSourceDir, { recursive: true });
+fs.writeFileSync(paragraphSourcePath, "本次会议确认帮助中心存在用户搜不到已有文章的问题，短期先做关键词别名和零结果页推荐，不做完整智能搜索。客服提供 Top 50 搜索词，运营维护别名表，产品下周二前输出第一期 PRD。日志导出前需要脱敏并和数据同学确认。", "utf-8");
+const paragraphResponse = new AgentOrchestrator(new WorkspaceProvider()).handleMessage(
+  "整理这份会议纪要，不写 PRD",
+  { taskId: "workspace-paragraph-meeting-demo", projectId: "help-center-search", materialPath: paragraphSourceDir, debug: true },
+);
+const paragraphArtifact = paragraphResponse.artifacts.find((item) => item.label === "结构化整理稿");
+const paragraphPath = paragraphArtifact ? repoRefToPath(paragraphArtifact.ref, PROJECT_ROOT) : null;
+const paragraphContent = paragraphPath && fs.existsSync(paragraphPath) ? fs.readFileSync(paragraphPath, "utf-8") : "";
+results.push(
+  check("WORKSPACE-12", paragraphResponse.state.id === "CONTEXT_TASK_COMPLETED" && paragraphResponse.status === "COMPLETED", "无发言人格式的会议材料也完成 Context 整理"),
+  check("WORKSPACE-13", paragraphPath?.includes("context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo/materials/meeting-note.md") === true && paragraphContent.includes("## 归纳摘要") && paragraphContent.includes("## 已确认决策") && paragraphContent.includes("## 行动项与分工"), "无发言人格式生成指定位置的结构化整理稿"),
+  check("WORKSPACE-14", paragraphContent !== fs.readFileSync(paragraphSourcePath, "utf-8") && paragraphContent.includes("会议决定") && paragraphContent.includes("方案建议"), "整理稿不是原文复制，并包含归纳分类结果"),
+);
 const passed = results.filter((item) => item.passed).length;
 console.log(JSON.stringify({ evaluation_id: "workspace-provider-generic-material", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));
 clear();
@@ -73,7 +91,9 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/provider-output"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/workspace-provider-eval-materials"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/workspace-provider-confirmed-materials"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "runtime/workspace-provider-paragraph-materials"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/projects/account-settings"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-phone-feedback-demo"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo"), { recursive: true, force: true });
 }

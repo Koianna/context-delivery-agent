@@ -43,7 +43,13 @@ export class WorkspaceProvider implements AgentProvider {
     const structuredName = input.materials.some((material) => /MEETING|会议|纪要|记录/i.test(`${material.source_type} ${material.name}`))
       ? "meeting-note.md"
       : "structured-materials.md";
-    const finalStructuredPath = path.join(outputDir, structuredName);
+    const finalStructuredPath = path.join(
+      PROJECT_ROOT,
+      "context-workspace/workspace/agent-runs",
+      slug,
+      "materials",
+      structuredName,
+    );
     writeStructuredMaterial(input, materialOutput, finalStructuredPath, PROJECT_ROOT);
     return { inputPath, materialOutputPath, contextOutputPath, structuredMaterialPath: finalStructuredPath };
   }
@@ -355,7 +361,9 @@ export class WorkspaceProvider implements AgentProvider {
 
   private existingStructuredMaterialName(taskId: string): string {
     const dir = this.outputDir(safeSlug(taskId));
-    return fs.existsSync(path.join(dir, "meeting-note.md")) ? "meeting-note.md" : "structured-materials.md";
+    if (fs.existsSync(path.join(dir, "meeting-note.md"))) return "meeting-note.md";
+    const runDir = path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", safeSlug(taskId), "materials");
+    return fs.existsSync(path.join(runDir, "meeting-note.md")) ? "meeting-note.md" : "structured-materials.md";
   }
 }
 

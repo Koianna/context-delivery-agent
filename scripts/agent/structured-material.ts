@@ -1,10 +1,9 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import { pathToRepoRef, repoRefToPath, writeTextAtomic } from "../lib/repository.js";
 
-interface SpeakerBlock {
-  speaker: string;
+interface MaterialSegment {
+  speaker: string | null;
   content: string;
 }
 
@@ -27,11 +26,11 @@ export function writeStructuredMaterial(
   for (const material of input.materials) {
     const materialPath = repoRefToPath(material.content_ref, root);
     const content = fs.readFileSync(materialPath, "utf-8");
-    const blocks = parseSpeakerBlocks(content, isMeeting);
+    const segments = parseMaterialSegments(content, isMeeting);
 
-    for (const block of blocks) {
-      const category = classifyBlock(block, isMeeting);
-      const entry = `**${block.speaker}**：${block.content}`;
+    for (const segment of segments) {
+      const category = classifySegment(segment);
+      const entry = summarizeSegment(segment, category);
       sections.get(category)?.push(entry);
     }
 
@@ -47,10 +46,15 @@ export function writeStructuredMaterial(
     `- 材料数量：${input.materials.length}`,
     `- 产物引用：${pathToRepoRef(targetPath, root)}`,
     "",
+    "## 归纳摘要",
+    "",
+    `- 本次材料按${isMeeting ? "会议内容" : "材料内容"}切分为独立信息单元，再按事实、反馈、方案、决策、行动项和风险进行归类。`,
+    "- 用户反馈、方案建议和待确认事项不会自动升级为稳定业务事实或产品需求。",
+    "",
     ...[...sections.entries()].flatMap(([heading, lines]) => [
       `## ${heading}`,
       "",
-      ...(lines.length ? lines.map((line) => `- ${line}`) : ["- 未从原文识别到明确内容，需人工补充。"]),
+      ...(lines.length ? unique(lines).map((line) => `- ${line}`) : ["- 未从原文识别到明确内容，需人工补充。"]),
       "",
     ]),
     "## 原文保留说明",
@@ -62,36 +66,49 @@ export function writeStructuredMaterial(
   return pathToRepoRef(targetPath, root);
 }
 
-function parseSpeakerBlocks(content: string, isMeeting: boolean): SpeakerBlock[] {
-  if (!isMeeting) return [{ speaker: "来源", content }];
+function parseMaterialSegments(content: string, isMeeting: boolean): MaterialSegment[] {
+  const cleanLines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/source_id:|^---$/.test(line));
+  if (!cleanLines.length) return [];
 
-  const blocks: SpeakerBlock[] = [];
-  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  let currentSpeaker = "";
-  let currentLines: string[] = [];
+  const hasSpeakerMarkers = isMeeting && cleanLines.some((line) => looksLikeSpeakerLine(line));
+  if (!hasSpeakerMarkers) {
+    return splitIntoSegments(cleanLines.join(" "), null);
+  }
 
-  for (const line of lines) {
-    if (/source_id:|^---$/.test(line)) continue;
-    const match = line.match(/^(.+?)[：:]\s*(.+)/);
-    if (match) {
-      if (currentSpeaker && currentLines.length) {
-        blocks.push({ speaker: currentSpeaker, content: currentLines.join("；") });
-      }
-      currentSpeaker = match[1];
-      currentLines = [match[2]];
-    } else if (currentSpeaker) {
-      currentLines.push(line);
-    }
+  const blocks: MaterialSegment[] = [];
+  const normalized = cleanLines.join(" ");
+  const marker = /([^：:，。！？；\s]{1,12})[：:]\s*/gu;
+  const matches = [...normalized.matchAll(marker)];
+  for (const [index, match] of matches.entries()) {
+    const start = (match.index ?? 0) + match[0].length;
+    const end = index + 1 < matches.length ? (matches[index + 1].index ?? normalized.length) : normalized.length;
+    const contentPart = normalized.slice(start, end).trim();
+    if (contentPart) blocks.push(...splitIntoSegments(contentPart, match[1]));
   }
-  if (currentSpeaker && currentLines.length) {
-    blocks.push({ speaker: currentSpeaker, content: currentLines.join("；") });
-  }
-  return blocks;
+  return blocks.length ? blocks : splitIntoSegments(normalized, null);
 }
 
-function classifyBlock(block: SpeakerBlock, _isMeeting: boolean): string {
-  const { speaker, content } = block;
-  const text = `${speaker}：${content}`;
+function looksLikeSpeakerLine(line: string): boolean {
+  const match = line.match(/^(.{1,20}?)[：:]\s*(.+)/);
+  if (!match) return false;
+  const prefix = match[1].trim();
+  return prefix.length <= 12 && !/[，。！？；,.!?;]/.test(prefix);
+}
+
+function splitIntoSegments(content: string, speaker: string | null): MaterialSegment[] {
+  return content
+    .split(/(?<=[。！？；!?;])\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => ({ speaker, content: part }));
+}
+
+function classifySegment(segment: MaterialSegment): string {
+  const { content } = segment;
+  const text = content;
 
   // 1. 明确决策
   if (/那[咱我]们?第一期先|那这次先定|先不做|不做完整|先解决|目标是|决定了|第一期只做|先定/.test(text) &&
@@ -117,8 +134,7 @@ function classifyBlock(block: SpeakerBlock, _isMeeting: boolean): string {
   }
 
   // 5. 观点与方案
-  if (/可以|建议|方案|短期|第一期|要做|做两件|维护一批|推荐热门|关键词别名|先维护|先做|能做|智能搜索|向量|召回|排序|配置|打通|格式|比如|例如/.test(text) ||
-      /周|研发|技术/.test(speaker)) {
+  if (/可以|建议|方案|短期|第一期|要做|做两件|维护一批|推荐热门|关键词别名|先维护|先做|能做|智能搜索|向量|召回|排序|配置|打通|格式|比如|例如/.test(text)) {
     return "观点与方案";
   }
 
@@ -133,4 +149,27 @@ function classifyBlock(block: SpeakerBlock, _isMeeting: boolean): string {
   }
 
   return "背景与事实";
+}
+
+function summarizeSegment(segment: MaterialSegment, category: string): string {
+  const source = compact(segment.content);
+  const speaker = segment.speaker ? `${segment.speaker}：` : "";
+  if (category === "用户反馈") return `用户/客服反馈：${source}`;
+  if (category === "观点与方案") return `方案建议：${source}`;
+  if (category === "已确认决策") return `会议决定：${source}`;
+  if (category === "行动项与分工") return `${speaker}${source}`;
+  if (category === "风险与待确认") return `风险/待确认：${source}`;
+  return `${speaker}${source}`;
+}
+
+function compact(value: string): string {
+  return value
+    .replace(/^[-*]\s*/, "")
+    .replace(/\s+/g, " ")
+    .replace(/[。！？；!?;]+$/u, "")
+    .slice(0, 220);
+}
+
+function unique(lines: string[]): string[] {
+  return [...new Set(lines)];
 }
