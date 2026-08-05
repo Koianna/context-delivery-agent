@@ -1,6 +1,8 @@
-# 响应格式规范
+# Runtime 响应格式规范
 
 > 版本：0.1.0
+
+Runtime 对外统一返回 `AgentResponse`。Gateway 在外层增加 `request_id`、协议版本、Runtime 摘要和错误包装。外部 Agent 可以自由选择展示形式，但必须保留状态、确认要求、产物引用和下一步。
 
 ## 结构化输出要求
 

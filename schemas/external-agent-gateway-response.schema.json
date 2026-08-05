@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/external-agent-gateway-response.schema.json",
+  "title": "External Agent Gateway JSONL Response",
+  "type": "object",
+  "required": ["protocol_version", "request_id", "status", "runtime", "error"],
+  "properties": {
+    "protocol_version": { "type": "string", "const": "0.1" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["SUCCESS", "INVALID_REQUEST", "RUNTIME_ERROR"] },
+    "agent_response": { "type": "object" },
+    "runtime": {
+      "type": "object",
+      "required": ["task_id", "session_id", "current_state", "provider", "runtime_version"],
+      "properties": {
+        "task_id": { "type": ["string", "null"] },
+        "session_id": { "type": ["string", "null"] },
+        "current_state": { "type": ["string", "null"] },
+        "provider": { "type": ["string", "null"] },
+        "runtime_version": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

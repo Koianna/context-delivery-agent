@@ -60,7 +60,7 @@ export class AgentOrchestrator {
       if (options.taskId && state && state.task_id !== options.taskId) {
         throw new Error(`当前运行任务是 ${state.task_id}，不是 ${options.taskId}`);
       }
-      if (!state) state = this.initializeTask(normalized, options.taskId);
+      if (!state) state = this.initializeTask(normalized, options.taskId, options.sessionId);
 
       if (isPause(normalized)) return this.pause(state, options);
       if (state.current_state === "TASK_PAUSED") return this.resume(state, normalized, options);
@@ -81,9 +81,10 @@ export class AgentOrchestrator {
     }
   }
 
-  private initializeTask(message: string, taskId?: string): TaskState {
+  private initializeTask(message: string, taskId?: string, sessionId?: string): TaskState {
     return createTask({
       taskId: taskId ?? `agent-${Date.now()}`,
+      sessionId,
       projectId: "help-center-search",
       goal: message,
     });

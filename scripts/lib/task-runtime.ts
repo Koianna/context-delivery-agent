@@ -7,6 +7,7 @@ import type { StateId, TaskState } from "./types.js";
 
 export interface CreateTaskInput {
   taskId: string;
+  sessionId?: string;
   projectId?: string;
   mode?: TaskState["task_mode"];
   goal?: string;
@@ -31,7 +32,7 @@ export function createTask(input: CreateTaskInput): TaskState {
   const state: TaskState = {
     task_id: input.taskId,
     project_id: input.projectId ?? "help-center-search",
-    session_id: `session_${Date.now()}`,
+    session_id: input.sessionId ?? `session_${Date.now()}`,
     task_mode: input.mode ?? null,
     current_state: "INITIALIZING",
     previous_state: null,

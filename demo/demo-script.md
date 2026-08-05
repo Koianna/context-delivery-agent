@@ -4,8 +4,19 @@
 
 ## 演示环境
 
-- 本地 Agent Runtime
+- 任意外部 Agent 宿主
+- External Agent Gateway（或参考 CLI 适配器）
 - 项目：帮助中心搜索体验优化
+
+外部 Agent 只负责与产品经理对话、展示结果和转发确认；所有业务编排、状态转移、Skill 执行、Harness 校验和产物写入均由项目 Runtime 完成。
+
+## 启动 Gateway
+
+```bash
+npm run gateway
+```
+
+以 JSONL 发送请求。需要继续时，只替换 `message`，保留 `task_id`，把用户的自然语言确认原文发送给 Gateway。
 
 ## 演示一：只整理 Context
 
@@ -29,15 +40,15 @@
 3. 展示受影响和保留内容
 4. 人工确认新计划
 5. 返回正确节点继续
-# 自然语言主 Agent 演示脚本
+# 自然语言交互演示脚本
 
-## 启动
+## 参考 CLI 启动
 
 ```bash
 npm run agent
 ```
 
-以下内容均在同一个会话中直接输入，不执行状态机或 Skill 脚本。
+以下内容均在同一个会话中直接输入，不执行状态机或 Skill 脚本。CLI 只是 Gateway 的本地参考适配器。
 
 ## 路径一：材料整理到 PRD 交付
 

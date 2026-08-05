@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/external-agent-gateway.schema.json",
+  "title": "External Agent Gateway JSONL Protocol",
+  "type": "object",
+  "required": ["request_id", "message"],
+  "properties": {
+    "protocol_version": { "type": "string", "const": "0.1" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "task_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 },
+    "material_path": { "type": "string", "minLength": 1 },
+    "debug": { "type": "boolean" },
+    "client": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

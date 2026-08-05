@@ -37,6 +37,7 @@ export interface AgentResponse {
 
 export interface HandleMessageOptions {
   taskId?: string;
+  sessionId?: string;
   materialPath?: string;
   debug?: boolean;
 }

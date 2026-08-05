@@ -39,9 +39,17 @@
 - `prd-review`：独立审核（REVIEW，对 Context/PRD 只读）
 - `change-impact`：影响分析与重规划（ANALYZE, REPLAN）
 
+## 交互宿主与 Runtime 边界
+
+- 外部 Agent 是可替换的自然语言交互宿主，负责理解用户表达、追问、收集确认和展示结果。
+- External Agent Gateway 是统一接入层，负责请求校验、调用 Runtime 和包装结构化响应。
+- 项目 Runtime（`AgentOrchestrator`、状态机、Skill、Harness、Context 写入和事件日志）是唯一的业务编排与执行中心。
+- 外部 Agent 不得直接修改 Context、PRD、Runtime 状态或确认记录，也不得自行决定状态转移。
+- 外部 Agent 发生中断、替换或重连时，权威任务状态仍以 `runtime/` 为准。
+
 ## 执行协议
 
-1. 面向用户的默认入口是 `npm run agent`；用户不需要手动调用 Harness 脚本
+1. 外部 Agent 通过 `npm run gateway` 对应的 JSONL Gateway 或其他兼容适配器发送自然语言请求；`npm run agent` 只是参考 CLI 适配器
 2. 每次处理用户输入前，主 Agent 必须读取当前运行时状态
 3. 在当前状态下解释用户输入
 4. 选择一个业务 Skill 或处理人工确认
@@ -103,3 +111,4 @@
 - 把用户沉默解释为默认批准
 - 创建 v1/v2/final 后缀的版本文件
 - 未经校验写入或覆盖稳定 Context
+- 让外部 Agent 绕过 Gateway 直接调用业务脚本或修改业务文件
