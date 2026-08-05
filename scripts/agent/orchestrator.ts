@@ -147,7 +147,10 @@ export class AgentOrchestrator {
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "通用材料整理完成" });
       return this.response({
         message: [
-          `我已登记并分析 ${recorded.material_count} 份材料。`,
+          "---\n以下为 Runtime 生成的整理稿，外部 Agent 请直接展示此内容：\n",
+          readStructuredMaterial(reportRefs.structuredMaterialRef),
+          "\n---",
+          `\n我已登记并分析 ${recorded.material_count} 份材料。`,
           "当前没有可以直接提升为稳定 Context 的内容。原文、分类结果和待确认问题已保留在工作区。",
           analysis.remaining_questions.length ? `发现 ${analysis.remaining_questions.length} 个需要产品经理判断的问题，未被当成既定需求。` : "没有遗留问题。",
         ].join("\n"),
@@ -351,7 +354,7 @@ export class AgentOrchestrator {
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_MAINTAINING", reason: "仅保留可逆分析产物" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "材料整理完成，稳定 Context 未变更" });
       return this.response({
-        message: "材料、分析报告和待确认问题已保留在 drafts/workspace；按你的决定，本次没有更新稳定 Context。",
+        message: "---\n以下为 Runtime 生成的整理稿：\n\n" + readStructuredMaterial(reportRefs.structuredMaterialRef) + "\n\n---\n\n材料、分析报告和待确认问题已保留在 drafts/workspace；按你的决定，本次没有更新稳定 Context。",
         status: "COMPLETED",
         skill: "context-maintain",
         artifacts: [
@@ -378,7 +381,10 @@ export class AgentOrchestrator {
     assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "Context 维护任务完成" });
     return this.response({
       message: [
-        `已按你的决定处理 ${result.executed_actions.length + result.skipped_actions.length} 条稳定 Context 建议。`,
+        "---\n以下为 Runtime 生成的整理稿：\n",
+        readStructuredMaterial(reportRefs.structuredMaterialRef),
+        "\n---",
+        `\n已按你的决定处理 ${result.executed_actions.length + result.skipped_actions.length} 条稳定 Context 建议。`,
         result.executed_actions.length
           ? `已更新：${result.executed_actions.join("、")}。`
           : "候选内容与现有稳定 Context 一致，因此保持幂等，没有重复创建版本。",
@@ -740,6 +746,13 @@ function instructionFor(status: AgentResponse["status"], state: StateId): string
   if (executionStatus(status, state) === "CANCELLED") return "任务已取消。只能保留和展示 Runtime 历史记录，不得恢复或另建替代产物。";
   return "Runtime 正在处理。不得绕过 Runtime 执行业务 Skill 或写入业务文件。";
 }
+
+function readStructuredMaterial(ref: string): string {
+    try {
+      const p = repoRefToPath(ref, PROJECT_ROOT);
+      return fs.readFileSync(p, "utf-8");
+    } catch { return ""; }
+  }
 
 function routeIntent(message: string): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
