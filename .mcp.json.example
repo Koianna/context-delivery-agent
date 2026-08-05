@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "context-delivery": {
+      "type": "stdio",
+      "command": "npm",
+      "args": [
+        "--prefix",
+        "/绝对路径/Context 工程与需求交付 Agent",
+        "run",
+        "mcp"
+      ]
+    }
+  }
+}
