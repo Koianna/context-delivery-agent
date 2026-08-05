@@ -4,20 +4,24 @@ import {
   PROJECT_ROOT, appendEvent, idempotencyKey, nowISO, readTaskState, uid, writeTaskState,
 } from "./lib/config.js";
 import type { ChangeAnalysisOutput, ReplanOutput } from "./lib/change-types.js";
-import { pathToRepoRef, readJson, writeJsonAtomic } from "./lib/repository.js";
+import { pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "./lib/repository.js";
 import { validateReplan } from "./validate-change-output.js";
 
-export function recordReplan(taskId: string, outputPath: string, root = PROJECT_ROOT) {
+export function recordReplan(
+  taskId: string,
+  outputPath: string,
+  root = PROJECT_ROOT,
+  planRef = "repo://context-workspace/workspace/plans/help-center-search-replan.json"
+) {
   const state = readTaskState();
   if (!state || state.task_id !== taskId) throw new Error(`任务 ${taskId} 不存在`);
   if (state.current_state !== "REPLANNING") throw new Error(`当前状态 ${state.current_state} 不允许记录重规划`);
-  const analysisPath = path.join(root, "context-workspace/workspace/reports/change-impact.json");
-  const analysis = readJson<ChangeAnalysisOutput>(analysisPath);
   const output = readJson<ReplanOutput>(outputPath);
+  const analysis = readJson<ChangeAnalysisOutput>(repoRefToPath(output.analysis_ref, root));
   const errors = validateReplan(analysis, output, root);
   if (errors.length) throw new Error(`change-impact/REPLAN 输出校验失败:\n${errors.join("\n")}`);
   if (output.plan.previous_version !== state.plan_version) throw new Error("重规划 previous_version 与任务计划基线不一致");
-  const planPath = path.join(root, "context-workspace/workspace/plans/help-center-search-replan.json");
+  const planPath = repoRefToPath(planRef, root);
   writeJsonAtomic(planPath, output);
   state.latest_output_ref = pathToRepoRef(planPath, root);
   writeTaskState(state);

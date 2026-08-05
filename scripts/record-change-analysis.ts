@@ -4,10 +4,16 @@ import {
   PROJECT_ROOT, appendEvent, idempotencyKey, nowISO, readTaskState, uid, writeTaskState,
 } from "./lib/config.js";
 import type { ChangeAnalysisOutput, ChangeRequestInput } from "./lib/change-types.js";
-import { pathToRepoRef, readJson, writeJsonAtomic } from "./lib/repository.js";
+import { pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "./lib/repository.js";
 import { validateChangeAnalysis } from "./validate-change-output.js";
 
-export function recordChangeAnalysis(taskId: string, inputPath: string, outputPath: string, root = PROJECT_ROOT) {
+export function recordChangeAnalysis(
+  taskId: string,
+  inputPath: string,
+  outputPath: string,
+  root = PROJECT_ROOT,
+  reportRef = "repo://context-workspace/workspace/reports/change-impact.json"
+) {
   const state = readTaskState();
   if (!state || state.task_id !== taskId) throw new Error(`任务 ${taskId} 不存在`);
   if (state.current_state !== "CHANGE_ANALYZING") throw new Error(`当前状态 ${state.current_state} 不允许记录影响分析`);
@@ -15,7 +21,7 @@ export function recordChangeAnalysis(taskId: string, inputPath: string, outputPa
   const output = readJson<ChangeAnalysisOutput>(outputPath);
   const errors = validateChangeAnalysis(input, output, root);
   if (errors.length) throw new Error(`change-impact/ANALYZE 输出校验失败:\n${errors.join("\n")}`);
-  const reportPath = path.join(root, "context-workspace/workspace/reports/change-impact.json");
+  const reportPath = repoRefToPath(reportRef, root);
   writeJsonAtomic(reportPath, output);
   state.latest_output_ref = pathToRepoRef(reportPath, root);
   state.skill_versions["change-impact"] = "0.2.0";

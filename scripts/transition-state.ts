@@ -1,371 +1,46 @@
 #!/usr/bin/env npx tsx
-// ============================================================
-// transition-state.ts — 校验并执行状态转移
-// ============================================================
-
-import {
-  readTaskState,
-  writeTaskState,
-  loadStates,
-  loadGuards,
-  isLegalTransition,
-  stateRequiresConfirmation,
-  hasPendingConfirmationForState,
-  getConfirmationTypeForState,
-  readPendingConfirmations,
-  appendEvent,
-  uid,
-  idempotencyKey,
-  nowISO,
-  getLatestConfirmation,
-  PROJECT_ROOT,
-} from "./lib/config.js";
-import type {
-  StateId,
-  TaskState,
-  Operator,
-  TransitionResult,
-} from "./lib/types.js";
-import {
-  validateCoreConfirmation,
-  validateDeliveryConfirmation,
-  validatePrdEntryConfirmation,
-} from "./lib/prd-guards.js";
-import {
-  validateAppliedReplan,
-  validateChangeCancellation,
-  validateReplanRevision,
-} from "./lib/change-guards.js";
-
-function usage(): never {
-  console.error(
-    [
-      "用法: npx tsx scripts/transition-state.ts",
-      "  --task-id <id>",
-      "  --to-state <STATE_ID>",
-      "  [--reason <text>]",
-      "  [--operator USER|AGENT|SYSTEM]",
-      "  [--dry-run]",
-      "  [--list-legal]",
-    ].join("\n")
-  );
-  process.exit(1);
-}
+import { loadStates, readTaskState } from "./lib/config.js";
+import { listLegalTransitions, transitionTask } from "./lib/state-runtime.js";
+import type { Operator, StateId } from "./lib/types.js";
 
 function main() {
   const args = process.argv.slice(2);
-
   const taskId = argVal(args, "--task-id");
-  const toStateRaw = argVal(args, "--to-state");
-  const reason = argVal(args, "--reason") ?? "未提供理由";
-  const operator: Operator = (argVal(args, "--operator") as Operator) ?? "AGENT";
-  const dryRun = args.includes("--dry-run");
-  const listLegal = args.includes("--list-legal");
-
   if (!taskId) usage();
-
   const state = readTaskState();
-  if (!state) {
-    console.error(`任务 ${taskId} 不存在`);
-    process.exit(1);
-  }
+  if (!state || state.task_id !== taskId) throw new Error(`任务 ${taskId} 不存在`);
 
-  const fromState = state.current_state;
-
-  // --list-legal: 列出当前状态的所有合法转移
-  if (listLegal) {
-    const legal = getAllLegalTransitions(fromState, state);
-    console.log(
-      JSON.stringify(
-        {
-          from: fromState,
-          legal_targets: legal,
-          current_state_type: loadStates().find((s) => s.id === fromState)?.type,
-        },
-        null,
-        2
-      )
-    );
+  if (args.includes("--list-legal")) {
+    console.log(JSON.stringify({
+      from: state.current_state,
+      legal_targets: listLegalTransitions(state.current_state, state),
+      current_state_type: loadStates().find((item) => item.id === state.current_state)?.type,
+    }, null, 2));
     return;
   }
-
-  if (!toStateRaw) usage();
-
-  // 校验目标状态是否存在
-  const allStates = loadStates();
-  const targetStateDef = allStates.find((s) => s.id === toStateRaw);
-  if (!targetStateDef) {
-    console.error(
-      `非法目标状态: ${toStateRaw}。有效状态: ${allStates.map((s) => s.id).join(", ")}`
-    );
-    process.exit(1);
-  }
-
-  const toState = toStateRaw as StateId;
-
-  // ---- 守卫 1: 转移表中是否存在 ----
-  const isStandardLegal = isLegalTransition(fromState, toState);
-  const isSpecialLegal = checkSpecialTransition(fromState, toState, state);
-
-  if (!isStandardLegal && !isSpecialLegal) {
-    const result: TransitionResult = {
-      ok: false,
-      from: fromState,
-      requested: toStateRaw,
-      error: `状态 ${fromState} 不允许直接转移到 ${toStateRaw}，请使用 --list-legal 查看合法目标`,
-    };
-    console.log(JSON.stringify(result, null, 2));
-
-    // 仍然记录被拒绝的尝试
-    appendEvent({
-      event_id: uid(),
-      event_type: "ERROR",
-      task_id: taskId,
-      request_id: `req_${uid()}`,
-      idempotency_key: idempotencyKey(taskId, "transition_rejected"),
-      timestamp: nowISO(),
-      operator,
-      current_state: fromState,
-      previous_state: fromState,
-      skill_name: null,
-      skill_version: null,
-      prompt_version: null,
-      artifact_ref: null,
-      details: { error: result.error, requested: toStateRaw, reason },
-    });
-    process.exit(1);
-  }
-
-  // ---- 守卫 2: 进入等待状态前必须有确认记录 ----
-  if (stateRequiresConfirmation(toState)) {
-    if (!hasPendingConfirmationForState(taskId, toState)) {
-      const ct = getConfirmationTypeForState(toState);
-      const result: TransitionResult = {
-        ok: false,
-        from: fromState,
-        requested: toStateRaw,
-        error: `状态 ${toState} 要求存在 PENDING 确认记录（类型: ${ct}），请先通过 manage-confirmation.ts 创建确认`,
-      };
-      console.log(JSON.stringify(result, null, 2));
-
-      appendEvent({
-        event_id: uid(),
-        event_type: "ERROR",
-        task_id: taskId,
-        request_id: `req_${uid()}`,
-        idempotency_key: idempotencyKey(taskId, "transition_no_confirmation"),
-        timestamp: nowISO(),
-        operator,
-        current_state: fromState,
-        previous_state: fromState,
-        skill_name: null,
-        skill_version: null,
-        prompt_version: null,
-        artifact_ref: null,
-        details: { error: result.error, requested: toStateRaw },
-      });
-      process.exit(1);
-    }
-  }
-
-  // ---- 守卫 2.1: 离开 CP-C01 进入 APPLY 前必须有已批准记录 ----
-  if (fromState === "WAITING_CONTEXT_CONFIRM" && toState === "CONTEXT_MAINTAINING") {
-    const confirmation = getLatestConfirmation(
-      taskId,
-      "WAITING_CONTEXT_CONFIRM",
-      "CONTEXT_UPDATE"
-    );
-    if (!confirmation || confirmation.status !== "APPROVED") {
-      console.error("CP-C01 尚未批准，不能进入 CONTEXT_MAINTAINING");
-      process.exit(1);
-    }
-    if (!confirmation.items.some((item) => item.approval_status === "APPROVED")) {
-      console.error("CP-C01 没有逐项批准的 proposal，不能执行稳定 Context 写入");
-      process.exit(1);
-    }
-  }
-
-  // ---- 守卫 3: CP-P01 PRD 准入 ----
-  if (fromState === "WAITING_DECISION_CONFIRM" && toState === "PRD_DRAFTING_CORE") {
-    const confirmation = getLatestConfirmation(
-      taskId,
-      "WAITING_DECISION_CONFIRM",
-      "DECISION_AND_WRITABLE_STATUS"
-    );
-    const errors = validatePrdEntryConfirmation(confirmation, taskId);
-    if (errors.length) {
-      console.error(`CP-P01 准入失败: ${errors.join("; ")}`);
-      process.exit(1);
-    }
-  }
-
-  // ---- 守卫 3.1: CP-P02 范围与核心流程准入 ----
-  if (fromState === "WAITING_SCOPE_CONFIRM" && toState === "PRD_DRAFTING_DETAILS") {
-    const confirmation = getLatestConfirmation(
-      taskId,
-      "WAITING_SCOPE_CONFIRM",
-      "SCOPE_AND_CORE_FLOW"
-    );
-    const errors = validateCoreConfirmation(confirmation, taskId);
-    if (errors.length) {
-      console.error(`CP-P02 准入失败: ${errors.join("; ")}`);
-      process.exit(1);
-    }
-  }
-
-  // ---- 守卫 3.2: CP-P03 审核交付准入 ----
-  if (fromState === "WAITING_REVIEW_DECISION" && toState === "DELIVERED") {
-    const confirmation = getLatestConfirmation(
-      taskId,
-      "WAITING_REVIEW_DECISION",
-      "REVIEW_DISPOSITION"
-    );
-    const errors = validateDeliveryConfirmation(confirmation, taskId);
-    if (errors.length) {
-      console.error(`CP-P03 准入失败: ${errors.join("; ")}`);
-      process.exit(1);
-    }
-  }
-
-  // ---- 守卫 3.3: CP-R01 批准、修改或取消 ----
-  if (fromState === "WAITING_REPLAN_CONFIRM") {
-    const confirmation = getLatestConfirmation(
-      taskId,
-      "WAITING_REPLAN_CONFIRM",
-      "REPLAN_APPROVAL"
-    );
-    let errors: string[] = [];
-    if (confirmation?.resolution === "APPROVE_REPLAN") {
-      errors = validateAppliedReplan(confirmation, state, toState, loadGuards().max_replan, PROJECT_ROOT);
-    } else if (confirmation?.resolution === "REVISE_REPLAN" && toState === "REPLANNING") {
-      errors = validateReplanRevision(confirmation, taskId);
-    } else if (confirmation?.resolution === "CANCEL_CHANGE") {
-      errors = validateChangeCancellation(confirmation, taskId, toState, PROJECT_ROOT);
-      if (state.return_state !== toState) errors.push("任务返回节点与快照原状态不一致");
-    } else {
-      errors = ["CP-R01 没有与目标状态匹配的已完成决定"];
-    }
-    if (errors.length) {
-      console.error(`CP-R01 准入失败: ${errors.join("; ")}`);
-      process.exit(1);
-    }
-  }
-
-  // ---- 守卫 4: TASK_CANCELLED 不可恢复 ----
-  if (fromState === "TASK_CANCELLED" && toState !== "INITIALIZING" && toState !== "INTENT_ROUTING") {
-    const result: TransitionResult = {
-      ok: false,
-      from: fromState,
-      requested: toStateRaw,
-      error: "已取消任务不能恢复到业务状态，只能通过新对话创建新任务",
-    };
-    console.log(JSON.stringify(result, null, 2));
-    process.exit(1);
-  }
-
-  // ---- 守卫 5: 终态不得继续修改 ----
-  const terminalStates: StateId[] = ["CONTEXT_TASK_COMPLETED", "DELIVERED"];
-  if (terminalStates.includes(fromState) && toState !== "PRD_THINKING" && toState !== "INTENT_ROUTING" && toState !== "INITIALIZING") {
-    const result: TransitionResult = {
-      ok: false,
-      from: fromState,
-      requested: toStateRaw,
-      error: `终态 ${fromState} 只能通过新任务入口转移，不能直接进入 ${toStateRaw}`,
-    };
-    console.log(JSON.stringify(result, null, 2));
-    process.exit(1);
-  }
-
-  // ---- 通过：执行转移 ----
-  if (dryRun) {
-    const result: TransitionResult = {
-      ok: true,
-      from: fromState,
-      to: toState,
-      reason: `[DRY-RUN] ${reason}`,
-    };
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  const newState: TaskState = {
-    ...state,
-    previous_state: fromState,
-    current_state: toState,
-    completed_steps: [...state.completed_steps, fromState],
-  };
-
-  writeTaskState(newState);
-
-  // 记录事件
-  appendEvent({
-    event_id: uid(),
-    event_type: "STATE_TRANSITION",
-    task_id: taskId,
-    request_id: `req_${uid()}`,
-    idempotency_key: idempotencyKey(taskId, `transition_${fromState}_to_${toState}`),
-    timestamp: nowISO(),
-    operator,
-    current_state: toState,
-    previous_state: fromState,
-    skill_name: null,
-    skill_version: null,
-    prompt_version: null,
-    artifact_ref: null,
-    details: {},
-    reason,
+  const toState = argVal(args, "--to-state") as StateId | undefined;
+  if (!toState) usage();
+  const result = transitionTask({
+    taskId,
+    toState,
+    reason: argVal(args, "--reason"),
+    operator: (argVal(args, "--operator") as Operator | undefined) ?? "AGENT",
+    dryRun: args.includes("--dry-run"),
   });
-
-  const result: TransitionResult = {
-    ok: true,
-    from: fromState,
-    to: toState,
-    reason,
-  };
   console.log(JSON.stringify(result, null, 2));
+  if (!result.ok) process.exit(1);
 }
 
-function getAllLegalTransitions(from: StateId, state: TaskState): string[] {
-  const transitions = [
-    ...require("./lib/config.js").loadTransitions()
-      .filter((t: { from: string }) => t.from === from)
-      .map((t: { to: string }) => t.to),
-  ];
-
-  // 特殊转移
-  if (from === "TASK_PAUSED") transitions.push("PREVIOUS_STATE");
-  if (from === "EXECUTION_BLOCKED") transitions.push("PREVIOUS_VALID_STATE");
-  if (from === "WAITING_REPLAN_CONFIRM" && state.return_state) transitions.push(state.return_state);
-
-  // 全局可进入的终态
-  if (from !== "TASK_CANCELLED") transitions.push("TASK_PAUSED", "TASK_CANCELLED");
-
-  return [...new Set(transitions)];
+function usage(): never {
+  console.error("用法: transition-state.ts --task-id <id> --to-state <STATE_ID> [--reason <text>] [--operator USER|AGENT|SYSTEM] [--dry-run] [--list-legal]");
+  process.exit(1);
 }
-
-function checkSpecialTransition(
-  from: StateId,
-  to: StateId,
-  state: TaskState
-): boolean {
-  // TASK_PAUSED 可以恢复到暂停前状态
-  if (from === "TASK_PAUSED" && state.previous_state === to) {
-    return true;
-  }
-  // EXECUTION_BLOCKED 可以恢复到最近有效状态
-  if (from === "EXECUTION_BLOCKED" && state.previous_state === to) {
-    return true;
-  }
-  if (from === "WAITING_REPLAN_CONFIRM" && state.return_state === to) {
-    return true;
-  }
-  return false;
-}
-
 function argVal(args: string[], flag: string): string | undefined {
-  const idx = args.indexOf(flag);
-  if (idx === -1 || idx + 1 >= args.length) return undefined;
-  return args[idx + 1];
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
 }
 
-main();
+try { main(); } catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}

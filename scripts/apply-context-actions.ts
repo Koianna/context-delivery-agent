@@ -13,10 +13,15 @@ import {
 import type { ContextAnalysisOutput, ContextProposal } from "./lib/context-types.js";
 import { authorizeContextWrite } from "./lib/context-write.js";
 import { createVersion } from "./create-version.js";
-import { pathToRepoRef, readJson, writeJsonAtomic } from "./lib/repository.js";
+import { pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "./lib/repository.js";
 import { updateIndex } from "./update-index.js";
 
-export function applyContextActions(taskId: string, analysisPath: string) {
+export function applyContextActions(
+  taskId: string,
+  analysisPath: string,
+  root = PROJECT_ROOT,
+  logRef = "repo://context-workspace/workspace/reports/context-change-log.json"
+) {
   const state = readTaskState();
   const pending = readPendingConfirmations();
   if (!state || state.task_id !== taskId || !pending || pending.task_id !== taskId) {
@@ -39,7 +44,7 @@ export function applyContextActions(taskId: string, analysisPath: string) {
   if (proposals.length === 0) throw new Error("CP-C01 没有授权当前分析结果中的 proposal");
 
   const preflightErrors = proposals.flatMap((proposal) =>
-    authorizeContextWrite({ taskState: state, confirmations: pending.records, proposal })
+    authorizeContextWrite({ taskState: state, confirmations: pending.records, proposal, root })
       .map((error) => `${proposal.proposal_id}: ${error}`)
   );
   if (preflightErrors.length) throw new Error(`Context 写入预检失败:\n${preflightErrors.join("\n")}`);
@@ -48,14 +53,14 @@ export function applyContextActions(taskId: string, analysisPath: string) {
   const skipped: Array<{ proposal_id: string; reason: string }> = [];
   const versions: Array<{ proposal_id: string; version: string; target_ref: string }> = [];
   for (const proposal of proposals) {
-    const result = executeProposal(proposal, latestApproved.resolved_at ?? nowISO());
+    const result = executeProposal(proposal, latestApproved.resolved_at ?? nowISO(), root);
     if (result.status === "CREATED") executed.push(proposal.proposal_id);
     else skipped.push({ proposal_id: proposal.proposal_id, reason: "候选内容与当前内容一致" });
     versions.push({ proposal_id: proposal.proposal_id, version: result.version, target_ref: result.target_ref });
   }
 
-  const index = updateIndex(PROJECT_ROOT, "2026-08-04");
-  const logPath = path.join(PROJECT_ROOT, "context-workspace/workspace/reports/context-change-log.json");
+  const index = updateIndex(root, "2026-08-04");
+  const logPath = repoRefToPath(logRef, root);
   const changeLog = {
     artifact_id: "context-change-log-help-center-search",
     version: "0.1.0",
@@ -70,7 +75,7 @@ export function applyContextActions(taskId: string, analysisPath: string) {
   writeJsonAtomic(logPath, changeLog);
 
   state.context_version = index.version;
-  state.latest_output_ref = pathToRepoRef(logPath);
+  state.latest_output_ref = pathToRepoRef(logPath, root);
   state.skill_versions["context-maintain"] = "0.2.0";
   writeTaskState(state);
   appendEvent({
@@ -78,7 +83,7 @@ export function applyContextActions(taskId: string, analysisPath: string) {
     request_id: `req_${uid()}`, idempotency_key: idempotencyKey(taskId, "context_apply"),
     timestamp: nowISO(), operator: "SYSTEM", current_state: state.current_state,
     previous_state: state.previous_state, skill_name: "context-maintain", skill_version: "0.2.0",
-    prompt_version: "0.2.0", artifact_ref: pathToRepoRef(logPath),
+    prompt_version: "0.2.0", artifact_ref: pathToRepoRef(logPath, root),
     details: { executed, skipped, index }
   });
   return {
@@ -88,12 +93,12 @@ export function applyContextActions(taskId: string, analysisPath: string) {
     failed_actions: [],
     new_context_version: index.version,
     new_index_version: index.version,
-    change_log_ref: pathToRepoRef(logPath),
+    change_log_ref: pathToRepoRef(logPath, root),
     health_check: { status: "PASS", remaining_issues: analysis.remaining_questions }
   };
 }
 
-function executeProposal(proposal: ContextProposal, confirmedAt: string) {
+function executeProposal(proposal: ContextProposal, confirmedAt: string, root: string) {
   if (!proposal.target_ref || !proposal.content_ref || !proposal.base_version) {
     throw new Error(`${proposal.proposal_id} 缺少版本写入参数`);
   }
@@ -103,6 +108,7 @@ function executeProposal(proposal: ContextProposal, confirmedAt: string) {
     expectedVersion: proposal.base_version,
     sourceRefs: proposal.source_refs,
     confirmedAt,
+    root,
   });
 }
 

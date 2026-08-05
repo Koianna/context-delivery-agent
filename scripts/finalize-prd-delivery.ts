@@ -38,29 +38,25 @@ export function validateFinalDeliveryArtifacts(
   return errors;
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  const taskId = argVal(args, "--task-id");
-  const prdRef = argVal(args, "--prd-ref");
-  const reviewArg = argVal(args, "--review");
-  if (!taskId || !prdRef || !reviewArg) {
-    console.error("用法: finalize-prd-delivery.ts --task-id <id> --prd-ref <repo-ref> --review <json>");
-    process.exit(1);
-  }
+export function finalizePrdDelivery(
+  taskId: string,
+  prdRef: string,
+  reviewPath: string,
+  root = PROJECT_ROOT
+) {
   const state = readTaskState();
   if (!state || state.task_id !== taskId) throw new Error(`任务 ${taskId} 不存在`);
   if (state.current_state !== "WAITING_REVIEW_DECISION") throw new Error(`当前状态 ${state.current_state} 不允许交付定稿`);
   const confirmation = getLatestConfirmation(taskId, "WAITING_REVIEW_DECISION", "REVIEW_DISPOSITION");
-  const reviewPath = path.isAbsolute(reviewArg) ? reviewArg : path.join(PROJECT_ROOT, reviewArg);
   const review = readJson<PrdReviewOutput>(reviewPath);
-  const guardErrors = validateFinalDeliveryArtifacts(confirmation, review, prdRef);
+  const guardErrors = validateFinalDeliveryArtifacts(confirmation, review, prdRef, root);
   if (guardErrors.length) throw new Error(`PRD 交付校验失败:\n${guardErrors.join("\n")}`);
-  const prdPath = repoRefToPath(prdRef);
+  const prdPath = repoRefToPath(prdRef, root);
   const document = parseFrontmatter(fs.readFileSync(prdPath, "utf-8"));
   const metadata: Record<string, string | string[] | null> = {
     ...document.metadata,
     status: "delivered",
-    review_ref: pathToRepoRef(reviewPath),
+    review_ref: pathToRepoRef(reviewPath, root),
     delivered_at: nowISO(),
   };
   writeTextAtomic(prdPath, renderFrontmatter(metadata, document.body));
@@ -74,7 +70,20 @@ function main() {
     prompt_version: null, artifact_ref: prdRef,
     details: { version: review.reviewed_prd_version, review_id: review.review_id, status: "delivered" }
   });
-  console.log(JSON.stringify({ status: "FINALIZED", prd_ref: prdRef, version: review.reviewed_prd_version }, null, 2));
+  return { status: "FINALIZED", prd_ref: prdRef, version: review.reviewed_prd_version };
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const taskId = argVal(args, "--task-id");
+  const prdRef = argVal(args, "--prd-ref");
+  const reviewArg = argVal(args, "--review");
+  if (!taskId || !prdRef || !reviewArg) {
+    console.error("用法: finalize-prd-delivery.ts --task-id <id> --prd-ref <repo-ref> --review <json>");
+    process.exit(1);
+  }
+  const reviewPath = path.isAbsolute(reviewArg) ? reviewArg : path.join(PROJECT_ROOT, reviewArg);
+  console.log(JSON.stringify(finalizePrdDelivery(taskId, prdRef, reviewPath), null, 2));
 }
 
 function argVal(args: string[], flag: string): string | undefined {

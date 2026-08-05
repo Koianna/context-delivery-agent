@@ -5,6 +5,7 @@
   "description": "Context 工程与需求交付协作 Agent - 个人 POC",
   "scripts": {
     "state:get": "node --import tsx scripts/get-state.ts",
+    "agent": "node --import tsx scripts/agent-cli.ts",
     "state:transition": "node --import tsx scripts/transition-state.ts",
     "runtime:init": "node --import tsx scripts/get-state.ts --init",
     "context:register": "node --import tsx scripts/register-materials.ts --input case-data/help-center-search/material-ingest.input.json",
@@ -22,6 +23,7 @@
     "eval:context": "node --import tsx evaluation/run-context-branch.ts",
     "eval:prd": "node --import tsx evaluation/run-prd-branch.ts",
     "eval:change": "node --import tsx evaluation/run-change-branch.ts",
+    "eval:agent": "node --import tsx evaluation/run-agent-interaction.ts",
     "typecheck": "tsc --noEmit",
     "eval:run": "node --import tsx evaluation/run.ts"
   },

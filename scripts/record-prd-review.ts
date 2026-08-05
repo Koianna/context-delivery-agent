@@ -9,7 +9,13 @@ import type { PrdReviewOutput, PrdReviewTemplate } from "./lib/prd-types.js";
 import { validatePrdReview } from "./validate-prd-output.js";
 import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "./lib/repository.js";
 
-export function recordPrdReview(taskId: string, templatePath: string, prdRef: string, root = PROJECT_ROOT) {
+export function recordPrdReview(
+  taskId: string,
+  templatePath: string,
+  prdRef: string,
+  root = PROJECT_ROOT,
+  reportRef = "repo://context-workspace/workspace/reports/prd-review.json"
+) {
   const state = readTaskState();
   if (!state || state.task_id !== taskId) throw new Error(`任务 ${taskId} 不存在`);
   if (state.current_state !== "PRD_REVIEWING") throw new Error(`当前状态 ${state.current_state} 不允许记录审核`);
@@ -23,7 +29,7 @@ export function recordPrdReview(taskId: string, templatePath: string, prdRef: st
   };
   const errors = validatePrdReview(review, prdRef, root);
   if (errors.length) throw new Error(`PRD 审核输出校验失败:\n${errors.join("\n")}`);
-  const reportPath = path.join(root, "context-workspace/workspace/reports/prd-review.json");
+  const reportPath = repoRefToPath(reportRef, root);
   writeJsonAtomic(reportPath, review);
   const after = fs.readFileSync(prdPath, "utf-8");
   if (before !== after) throw new Error("prd-review 不得修改 PRD");

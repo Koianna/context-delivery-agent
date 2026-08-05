@@ -34,7 +34,9 @@ export function validateChangeInput(input: ChangeRequestInput, root = PROJECT_RO
       const prd = parseFrontmatter(fs.readFileSync(repoRefToPath(prdRef, root), "utf-8"));
       if (prd.metadata.version !== input.task_snapshot.prd_version) errors.push("输入 PRD 版本与实际文件不一致");
     }
-    const ledgerRef = input.artifact_refs.find((ref) => ref.includes("/workspace/decisions/"));
+    const ledgerRef = input.artifact_refs.find((ref) =>
+      ref.includes("/decisions/") && ref.endsWith("decision-ledger.json")
+    );
     if (!ledgerRef) {
       errors.push("变更输入缺少决策账本引用");
     } else {

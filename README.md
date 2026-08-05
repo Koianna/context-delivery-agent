@@ -12,12 +12,67 @@
 # 安装依赖
 npm install
 
-# 初始化运行时状态
-npx tsx scripts/get-state.ts --init --task-id demo-task-01
+# 启动面向用户的自然语言交互
+npm run agent
+```
+
+进入会话后直接描述目标，不需要手动执行 Harness 脚本：
+
+```text
+你：只整理帮助中心搜索材料，不写 PRD
+Agent：完成材料登记与分析，停在 CP-C01，请确认两条稳定 Context 更新建议
+
+你：确认全部
+Agent：执行获批更新，报告材料、Context 索引和遗留问题的位置
+
+你：继续准备 PRD
+Agent：先完成写前对齐，停在 CP-P01，不会直接生成 PRD
+```
+
+也可以从 VS Code 终端发起单轮请求：
+
+```bash
+npm run agent -- \
+  --task-id demo-task-01 \
+  --message "只整理帮助中心搜索材料，不写 PRD" \
+  --material "$(pwd)/case-data/help-center-search/source-materials"
+```
+
+`npm run agent` 是产品使用和项目演示入口。`state:*`、`context:*`、`prd:*`、`change:*` 命令仍作为后台 Harness 与回归工具保留，不要求日常用户直接操作。
+
+当前用户交互层使用“本地可复现 Provider”：它读取帮助中心搜索案例的已校验结构化输出，让演示不依赖 API Key；材料登记、状态转移、人工确认、版本校验和产物写入仍由真实 Harness 执行。响应会明确展示 Provider 类型，不把固定案例输出表述为实时模型生成。
+
+## 面向用户的主 Agent
+
+主 Agent 每轮先读取运行时状态，再完成以下编排：
+
+1. 从自然语言识别“材料整理、PRD 交付、修改与重规划、继续任务”。
+2. 调用 Provider 获取结构化 Skill 输出，并使用既有校验器检查。
+3. 通过统一 Runtime 执行状态转移、创建和解析确认记录。
+4. 在 CP-C01、CP-P01、CP-P02、CP-P03、CP-R01 自动暂停。
+5. 将用户自然语言确认映射为当前节点允许的动作，不接受沉默或模糊表达作为批准。
+6. 返回业务阶段、产物位置、需要判断的事项和可回复内容；英文状态仅在 `--debug` 时显示。
+
+交互层支持：
+
+- **Context**：材料登记 → 分析 → CP-C01 → 稳定 Context 更新或暂缓
+- **PRD**：写前对齐 → CP-P01 → CORE → CP-P02 → DETAILS → 审核 → CP-P03 → 交付
+- **Change**：快照 → 影响分析 → 重规划 → CP-R01 → 返回最小修订节点
+- **任务控制**：暂停、继续、取消和模糊意图澄清
+
+POC 当前限制：单用户、单任务运行时；只内置帮助中心搜索案例 Provider；CP-R01 批准后返回修订节点，但不会在缺少新业务输入时自动覆盖已交付 PRD。接入真实模型时只需实现 `AgentProvider`，状态机和 Harness 不变。
+
+## 后台验证
+
+```bash
+# 主 Agent 自然语言完整链路
+npm run eval:agent
 
 # 查看当前状态
 npx tsx scripts/get-state.ts --task-id demo-task-01
 ```
+
+`npm run eval:agent` 隔离验证 12 个断言，包括自然语言路由、五个核心确认点、确认前禁止写入、PRD 分阶段交付、Change 最小返回节点和产物可追溯性。
 
 ## 阶段 3：Context 分支
 
