@@ -2,7 +2,7 @@
 .env
 .env.local
 
-# Runtime state (not committed to Git)
+# Runtime state and per-run analysis records (not committed to Git)
 runtime/task-state.json
 runtime/pending-confirmations.json
 runtime/task-events.jsonl

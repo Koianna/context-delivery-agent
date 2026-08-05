@@ -147,6 +147,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
   const changeId = `change-target-unavailable-${slug}`.slice(0, 80);
   for (const target of [
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", slug),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/projects/help-center-search/materials/structured-materials", `${slug}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `help-center-search-${slug}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `help-center-search-${slug}-replan.json`),

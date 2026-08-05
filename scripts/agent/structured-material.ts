@@ -11,7 +11,8 @@ export function writeStructuredMaterial(
   input: MaterialIngestInput,
   _output: MaterialIngestOutput,
   targetPath: string,
-  root: string
+  root: string,
+  artifactRef = pathToRepoRef(targetPath, root),
 ): string {
   const isMeeting = input.materials.some((material) =>
     /MEETING|会议|纪要|记录/i.test(`${material.source_type} ${material.name}`)
@@ -44,7 +45,7 @@ export function writeStructuredMaterial(
     "",
     `- 任务目标：${input.task_goal}`,
     `- 材料数量：${input.materials.length}`,
-    `- 产物引用：${pathToRepoRef(targetPath, root)}`,
+    `- 产物引用：${artifactRef}`,
     "",
     "## 归纳摘要",
     "",

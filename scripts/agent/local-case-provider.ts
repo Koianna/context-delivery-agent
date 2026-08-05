@@ -24,12 +24,18 @@ export class LocalCaseProvider implements AgentProvider {
   readonly label = "本地可复现 Provider";
   private readonly caseRoot = path.join(PROJECT_ROOT, "case-data/help-center-search");
 
-  getContextAssets(materialPath?: string) {
+  getContextAssets(materialPath?: string, taskId = "local-case") {
     if (materialPath) this.assertSupportedMaterialPath(materialPath);
     const input = readJson<import("../lib/context-types.js").MaterialIngestInput>(path.join(this.caseRoot, "material-ingest.input.json"));
     const output = readJson<import("../lib/context-types.js").MaterialIngestOutput>(path.join(this.caseRoot, "expected-outputs/material-ingest.output.json"));
-    const structuredMaterialPath = path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", "local-case-materials", "materials/structured-materials.md");
-    writeStructuredMaterial(input, output, structuredMaterialPath, PROJECT_ROOT);
+    const structuredMaterialPath = path.join(PROJECT_ROOT, "runtime/provider-output", "local-case-materials", "structured-materials.md");
+    writeStructuredMaterial(
+      input,
+      output,
+      structuredMaterialPath,
+      PROJECT_ROOT,
+      `repo://context-workspace/workspace/projects/help-center-search/materials/structured-materials/${safeSlug(taskId)}.md`,
+    );
     return {
       inputPath: path.join(this.caseRoot, "material-ingest.input.json"),
       materialOutputPath: path.join(
@@ -44,13 +50,12 @@ export class LocalCaseProvider implements AgentProvider {
     };
   }
 
-  getContextReportRefs(taskId: string, structuredMaterialPath?: string) {
+  getContextReportRefs(taskId: string, _structuredMaterialPath?: string) {
     const base = `repo://context-workspace/workspace/agent-runs/${safeSlug(taskId)}`;
-    const name = structuredMaterialPath ? path.basename(structuredMaterialPath) : "structured-materials.md";
     return {
       materialReportRef: `${base}/reports/material-analysis.json`,
       contextReportRef: `${base}/reports/context-analysis.json`,
-      structuredMaterialRef: `${base}/materials/${name}`,
+      structuredMaterialRef: `repo://context-workspace/workspace/projects/help-center-search/materials/structured-materials/${safeSlug(taskId)}.md`,
       changeLogRef: `${base}/reports/context-change-log.json`,
     };
   }

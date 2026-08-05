@@ -57,7 +57,7 @@ Gateway 返回统一的 `agent_response`、Runtime 状态、产物、确认项�
 
 例如材料中有“用户原话：手机号不用了”，Runtime 会保留原话并分类为用户反馈，询问这可能是修改手机号、解绑手机号还是其他诉求；在产品经理确认前，不会把它写成“用户要修改手机号”，也不会提升为稳定 Context。
 
-通用工作区支持 Markdown、纯文本和 JSON 材料。每个 `project_id` 的材料、报告、PRD 和稳定 Context 会隔离保存到对应项目路径；通用项目的稳定 Context 位于 `context-workspace/projects/<project_id>/context/`。
+通用工作区支持 Markdown、纯文本和 JSON 材料。原文只登记到 `context-workspace/drafts/<project_id>/source-materials/<task_id>/`；Runtime 分析记录保存在被 Git 忽略的 `workspace/agent-runs/`，可阅读整理稿发布到可版本管理的 `workspace/projects/<project_id>/materials/`。通用项目的稳定 Context 位于 `context-workspace/projects/<project_id>/context/`。
 
 不接入外部宿主时，也可以使用参考 CLI 适配器，直接描述目标，不需要手动执行 Harness 脚本：
 

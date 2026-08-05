@@ -125,6 +125,7 @@
 ## 运行时产物边界
 
 - 原始材料登记在 `context-workspace/drafts/`。
-- 分析报告、结构化整理稿和待确认建议保存在 `context-workspace/workspace/agent-runs/<task_id>/`。
+- 分析报告、Skill 中间输出和待确认建议保存在 `context-workspace/workspace/agent-runs/<task_id>/`，该目录属于可清理的运行记录，不纳入 Git。
+- Runtime 校验通过的可阅读整理稿发布到 `context-workspace/workspace/projects/<project_id>/materials/`，作为中可信度、可版本管理的业务产物；不得因此自动提升为稳定 Context。
 - 稳定业务 Context 只保存在 `context-workspace/projects/<project_id>/context/`，或帮助中心演示案例约定的 `context-workspace/context/`。
-- 会议记录等材料的可阅读整理稿由 Runtime 生成，默认位于 `workspace/agent-runs/<task_id>/materials/meeting-note.md`；通用材料位于同目录的 `structured-materials.md`。宿主只能引用和展示这些文件。
+- 会议记录等材料的可阅读整理稿由 Runtime 生成，默认位于 `workspace/projects/<project_id>/materials/meeting-notes/<task_id>.md`；通用材料位于 `workspace/projects/<project_id>/materials/structured-materials/<task_id>.md`。宿主只能引用和展示 Runtime 返回的这些文件。

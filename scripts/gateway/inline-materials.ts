@@ -57,7 +57,7 @@ export function writeInlineMaterials(
       content_bytes: bytes,
     };
   });
-  writeJsonAtomic(path.join(targetDir, ".inline-materials.json"), {
+  writeJsonAtomic(path.join(targetDir, "ingest-manifest.json"), {
     project_id: project,
     task_id: taskId,
     materials: manifest,

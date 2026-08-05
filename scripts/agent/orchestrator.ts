@@ -129,7 +129,7 @@ export class AgentOrchestrator {
     const materialPath = options.materialPath ?? extractExistingPath(message);
     const assets = this.provider.getContextAssets(materialPath, state.task_id, message);
     const reportRefs = this.provider.getContextReportRefs(state.task_id, assets.structuredMaterialPath);
-    const registered = registerMaterials(assets.inputPath);
+    const registered = registerMaterials(assets.inputPath, PROJECT_ROOT, state.project_id);
     const recorded = recordContextAnalysis({
       taskId: state.task_id,
       materialInputPath: assets.inputPath,
