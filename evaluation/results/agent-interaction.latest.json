@@ -1,0 +1,74 @@
+{
+  "evaluation_id": "agent-natural-language-interaction",
+  "eval_set_version": "0.1.0",
+  "git_commit": "f67c3485cb2253795180632d6fbbdf8a735e406f",
+  "provider": "local-case",
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  },
+  "results": [
+    {
+      "case_id": "AGENT-01",
+      "passed": true,
+      "detail": "自然语言输入自动路由到 Context，并停在 CP-C01"
+    },
+    {
+      "case_id": "AGENT-02",
+      "passed": true,
+      "detail": "人工确认前没有提升 Context 版本，且只展示两条稳定变更"
+    },
+    {
+      "case_id": "AGENT-03",
+      "passed": true,
+      "detail": "自然语言确认后执行 Context APPLY 并落盘"
+    },
+    {
+      "case_id": "AGENT-04",
+      "passed": true,
+      "detail": "prd-thinking 后先停在 CP-P01，未提前生成 PRD"
+    },
+    {
+      "case_id": "AGENT-05",
+      "passed": true,
+      "detail": "CP-P01 后生成 CORE，并停在 CP-P02"
+    },
+    {
+      "case_id": "AGENT-06",
+      "passed": true,
+      "detail": "CP-P02 后生成 DETAILS、独立审核并停在 CP-P03"
+    },
+    {
+      "case_id": "AGENT-07",
+      "passed": true,
+      "detail": "CP-P03 后交付 PRD，决策账本和审核报告可追溯"
+    },
+    {
+      "case_id": "AGENT-08",
+      "passed": true,
+      "detail": "自然语言变更自动完成快照、影响分析、重规划并停在 CP-R01"
+    },
+    {
+      "case_id": "AGENT-09",
+      "passed": true,
+      "detail": "CP-R01 前没有应用新计划"
+    },
+    {
+      "case_id": "AGENT-10",
+      "passed": true,
+      "detail": "批准后只返回最小 DETAILS 修订节点"
+    },
+    {
+      "case_id": "AGENT-11",
+      "passed": true,
+      "detail": "五个核心人工确认点均留下已批准记录"
+    },
+    {
+      "case_id": "AGENT-12",
+      "passed": true,
+      "detail": "用户响应明确 Provider 且不暴露脚本命令作为交互方式"
+    }
+  ],
+  "execution_log": "repo://evaluation/execution-logs/agent-interaction-demo.json"
+}

@@ -1,0 +1,465 @@
+{
+  "provider": "local-case",
+  "transcript": [
+    {
+      "user": "只整理帮助中心搜索材料，不写 PRD",
+      "response": {
+        "message": "我已登记并分析 4 份材料。\n发现 2 个冲突，形成 5 条处理建议，其中 2 条会修改稳定 Context，需要你判断。\n另有 1 个问题保留在工作区，不会被当成已确认事实。",
+        "state": {
+          "id": "WAITING_CONTEXT_CONFIRM",
+          "name": "等待 Context 更新确认",
+          "type": "waiting"
+        },
+        "status": "WAITING_CONFIRMATION",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "material-ingest → context-maintain",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/drafts/help-center-search/material-manifest.json",
+            "label": "材料登记清单"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/reports/material-analysis.json",
+            "label": "材料分析报告"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/reports/context-analysis.json",
+            "label": "Context 分析报告"
+          }
+        ],
+        "confirmation": {
+          "id": "confirm_demo",
+          "title": "确认稳定 Context 更新建议",
+          "actions": [
+            "APPROVE_ALL",
+            "APPROVE_SELECTED",
+            "DEFER_ALL",
+            "REJECT_ALL"
+          ],
+          "items": [
+            {
+              "proposal_id": "proposal_search_solution",
+              "action": "UPDATE_CONTEXT",
+              "target_ref": "repo://context-workspace/context/product/search-solution.md",
+              "item_id": "info_009",
+              "current_value": "搜索优化默认采用无结果页热门问题推荐，不建设关键词映射能力",
+              "proposed_value": "本期采用关键词别名配置，历史热门问题推荐不进入本期",
+              "source_refs": [
+                "src_meeting_20260801"
+              ],
+              "relationship": "SUPERSEDES",
+              "risk_level": "HIGH",
+              "requires_confirmation": true,
+              "impact_if_applied": "后续需求以关键词别名作为本期已确认方案",
+              "impact_if_ignored": "旧方案会继续误导后续分析",
+              "base_version": "1.0.0",
+              "content_ref": "repo://case-data/help-center-search/proposed-context/search-solution.md",
+              "approval_status": "PENDING"
+            },
+            {
+              "proposal_id": "proposal_search_boundary",
+              "action": "UPDATE_CONTEXT",
+              "target_ref": "repo://context-workspace/context/business-rules/search-boundaries.md",
+              "item_id": "info_010",
+              "current_value": "搜索体验优化默认包含智能问答能力",
+              "proposed_value": "本期不包含语义检索和智能问答",
+              "source_refs": [
+                "src_meeting_20260801"
+              ],
+              "relationship": "CONFLICT",
+              "risk_level": "HIGH",
+              "requires_confirmation": true,
+              "impact_if_applied": "后续本期任务不会擅自扩展到智能问答",
+              "impact_if_ignored": "稳定 Context 与当前确认边界持续冲突",
+              "base_version": "1.0.0",
+              "content_ref": "repo://case-data/help-center-search/proposed-context/search-boundaries.md",
+              "approval_status": "PENDING"
+            }
+          ]
+        },
+        "next_steps": [
+          "回复“确认全部”",
+          "回复“只确认方案”或“只确认边界”",
+          "回复“暂不更新稳定 Context”"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "WAITING_CONTEXT_CONFIRM"
+        }
+      }
+    },
+    {
+      "user": "确认全部",
+      "response": {
+        "message": "已按你的决定处理 2 条稳定 Context 建议。\n候选内容与现有稳定 Context 一致，因此保持幂等，没有重复创建版本。\n仍有 1 个问题保留为待确认事项。",
+        "state": {
+          "id": "CONTEXT_TASK_COMPLETED",
+          "name": "Context 整理任务已完成",
+          "type": "terminal"
+        },
+        "status": "COMPLETED",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "context-maintain/APPLY",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/reports/context-change-log.json",
+            "label": "Context 变更记录"
+          },
+          {
+            "ref": "repo://context-workspace/context/INDEX.md",
+            "label": "稳定 Context 索引"
+          }
+        ],
+        "next_steps": [
+          "回复“继续准备 PRD”进入写前对齐",
+          "回复新的材料整理任务"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "CONTEXT_TASK_COMPLETED"
+        }
+      }
+    },
+    {
+      "user": "继续准备 PRD",
+      "response": {
+        "message": "我已完成 PRD 写前对齐，还没有生成 PRD。\n当前有 2 个阻塞决策：关键词别名维护责任、无查询词日志时的验证口径。\n建议采用：运营维护、产品定义规则并审核；上线前用版本化典型查询集验证，生产指标待日志能力具备后补充。",
+        "state": {
+          "id": "WAITING_DECISION_CONFIRM",
+          "name": "等待关键决策确认",
+          "type": "waiting"
+        },
+        "status": "WAITING_CONFIRMATION",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "prd-thinking",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/reports/prd-thinking.json",
+            "label": "PRD 写前分析"
+          }
+        ],
+        "confirmation": {
+          "id": "confirm_demo",
+          "title": "确认关键决策并授权生成 PRD 主体",
+          "actions": [
+            "CONFIRM_WRITABLE"
+          ],
+          "items": [
+            {
+              "confirmation_type": "DECISION_AND_WRITABLE_STATUS",
+              "resolution": "CONFIRM_WRITABLE",
+              "writable_status": true,
+              "confirmed_decision_ids": [
+                "decision_solution",
+                "decision_boundary",
+                "decision_owner",
+                "decision_validation"
+              ],
+              "decisions": [
+                {
+                  "decision_id": "decision_owner",
+                  "status": "CONFIRMED",
+                  "human_decision": "运营维护关键词别名；产品定义命名、启停规则并负责审核"
+                },
+                {
+                  "decision_id": "decision_validation",
+                  "status": "CONFIRMED",
+                  "human_decision": "上线前使用人工维护的典型查询集验证；生产量化指标待查询词日志能力具备后补充"
+                }
+              ],
+              "reason": "问题和范围已明确，补齐会影响权限、验收的关键决策后允许生成 PRD 主体",
+              "approval_status": "PENDING"
+            }
+          ]
+        },
+        "next_steps": [
+          "回复“按建议确认，可以生成 PRD”",
+          "回复“暂停”保留当前任务"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "WAITING_DECISION_CONFIRM"
+        }
+      }
+    },
+    {
+      "user": "按建议确认，可以生成 PRD",
+      "response": {
+        "message": "关键决策已写入决策账本，PRD 主体 0.1.0 已生成。\n主体只包含背景、目标、范围、核心流程和已确认决策，尚未展开权限、异常与验收细节。\n请确认范围与核心流程后，再继续生成 DETAILS。当前还有 1 个非阻塞待办。",
+        "state": {
+          "id": "WAITING_SCOPE_CONFIRM",
+          "name": "等待范围与核心流程确认",
+          "type": "waiting"
+        },
+        "status": "WAITING_CONFIRMATION",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "prd-write/CORE",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/decisions/decision-ledger.json",
+            "label": "已确认决策账本"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/prd/help-center-search-agent-demo.md",
+            "label": "PRD 主体"
+          }
+        ],
+        "confirmation": {
+          "id": "confirm_demo",
+          "title": "确认 PRD 范围与核心流程",
+          "actions": [
+            "APPROVE_CORE"
+          ],
+          "items": [
+            {
+              "confirmation_type": "SCOPE_AND_CORE_FLOW",
+              "resolution": "APPROVE_CORE",
+              "approved_core_version": "0.1.0",
+              "approved_scope": [
+                "关键词别名新增、启用、停用",
+                "沿用现有标题和标签检索"
+              ],
+              "approved_out_of_scope": [
+                "语义检索",
+                "智能问答",
+                "查询词日志建设"
+              ],
+              "approved_core_flow": [
+                "用户搜索 → 别名映射或沿用原词 → 现有检索 → 返回结果或无结果页"
+              ],
+              "reason": "主体范围和核心流程与已确认方案一致，允许补充可验收细节",
+              "approval_status": "PENDING"
+            }
+          ]
+        },
+        "next_steps": [
+          "回复“确认范围和核心流程”",
+          "回复“暂停”保留当前版本"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "WAITING_SCOPE_CONFIRM"
+        }
+      }
+    },
+    {
+      "user": "确认范围和核心流程",
+      "response": {
+        "message": "PRD 已补充到 0.2.0，并完成独立审核。\n审核结果：P0=0，P1=0，P2=2，建议 PASS_WITH_NOTES。\n两项 P2 已进入发布前待办，不阻塞当前版本交付，但需要你明确接受。",
+        "state": {
+          "id": "WAITING_REVIEW_DECISION",
+          "name": "等待审核处理决定",
+          "type": "waiting"
+        },
+        "status": "WAITING_CONFIRMATION",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "prd-write/DETAILS → prd-review",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/prd/help-center-search-agent-demo.md",
+            "label": "完整 PRD"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/reports/prd-review.json",
+            "label": "PRD 独立审核报告"
+          }
+        ],
+        "confirmation": {
+          "id": "confirm_demo",
+          "title": "处理独立审核结果并决定是否交付",
+          "actions": [
+            "ACCEPT_AND_DELIVER",
+            "FIX_AND_REVIEW"
+          ],
+          "items": [
+            {
+              "confirmation_type": "REVIEW_DISPOSITION",
+              "resolution": "ACCEPT_AND_DELIVER",
+              "disposition": "ACCEPT_WITH_P2_NOTES",
+              "accepted_review_id": "review-help-center-search-001",
+              "review_summary": {
+                "p0_count": 0,
+                "p1_count": 0,
+                "p2_count": 2,
+                "recommendation": "PASS_WITH_NOTES"
+              },
+              "accepted_p2_issue_ids": [
+                "issue_target_unavailable",
+                "issue_query_set_owner"
+              ],
+              "reason": "无 P0/P1 阻塞问题，P2 待办已进入发布前清单，允许交付当前版本",
+              "approval_status": "PENDING"
+            }
+          ]
+        },
+        "next_steps": [
+          "回复“接受 P2 并交付”",
+          "回复“先修复再审核”"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "WAITING_REVIEW_DECISION"
+        }
+      }
+    },
+    {
+      "user": "接受 P2 并交付",
+      "response": {
+        "message": "PRD 0.2.0 已完成交付。材料来源、已确认决策、PRD 正文和独立审核报告均已落盘并可追溯。",
+        "state": {
+          "id": "DELIVERED",
+          "name": "需求交付已完成",
+          "type": "terminal"
+        },
+        "status": "COMPLETED",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "PRD delivery",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/prd/help-center-search-agent-demo.md",
+            "label": "已交付 PRD"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/reports/prd-review.json",
+            "label": "独立审核报告"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/agent-runs/agent-demo/decisions/decision-ledger.json",
+            "label": "决策账本"
+          }
+        ],
+        "next_steps": [
+          "可直接用自然语言提出后续变更",
+          "也可以开始新的材料整理任务"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "DELIVERED"
+        }
+      }
+    },
+    {
+      "user": "修改已交付需求：目标文章下线或目标标签删除后，系统自动停用相关别名并展示原因，产品审核后可重新启用",
+      "response": {
+        "message": "我已为本次变更创建包含 6 个产物的不可变快照。\n影响分析判断这是规则级变化：只需修订 PRD 细节、重新审核，不重跑需求目标、范围和核心流程。\n批准前不会改写 PRD 或稳定 Context。",
+        "state": {
+          "id": "WAITING_REPLAN_CONFIRM",
+          "name": "等待重规划方案确认",
+          "type": "waiting"
+        },
+        "status": "WAITING_CONFIRMATION",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "change-impact/ANALYZE → change-impact/REPLAN",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/snapshots/change-target-unavailable-agent-demo/manifest.json",
+            "label": "变更前快照"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/reports/change-impact-agent-demo.json",
+            "label": "变更影响报告"
+          },
+          {
+            "ref": "repo://context-workspace/workspace/plans/help-center-search-agent-demo-replan.json",
+            "label": "重规划方案"
+          }
+        ],
+        "confirmation": {
+          "id": "confirm_demo",
+          "title": "确认最小重规划方案",
+          "actions": [
+            "APPROVE_REPLAN",
+            "REVISE_REPLAN",
+            "CANCEL_CHANGE"
+          ],
+          "items": [
+            {
+              "confirmation_type": "REPLAN_APPROVAL",
+              "resolution": "APPROVE_REPLAN",
+              "change_id": "change-target-unavailable-agent-demo",
+              "approved_plan_version": "0.2.0",
+              "approved_plan_sha256": "a4c38844ea6188eb168a59fe6f7912d9536ee2c23578baa326f804d8c47ffc80",
+              "approved_prd_base_version": "0.2.0",
+              "approved_return_state": "PRD_DRAFTING_DETAILS",
+              "snapshot_ref": "repo://context-workspace/workspace/snapshots/change-target-unavailable-agent-demo/manifest.json",
+              "analysis_ref": "repo://context-workspace/workspace/reports/change-impact-agent-demo.json",
+              "plan_ref": "repo://context-workspace/workspace/plans/help-center-search-agent-demo-replan.json",
+              "preserved_artifact_refs": [
+                "repo://context-workspace/workspace/agent-runs/agent-demo/decisions/decision-ledger.json",
+                "repo://context-workspace/context/product/search-current-state.md",
+                "repo://context-workspace/context/product/search-solution.md",
+                "repo://context-workspace/context/business-rules/search-boundaries.md"
+              ],
+              "deprecated_artifact_refs": [
+                "repo://context-workspace/workspace/agent-runs/agent-demo/reports/prd-review.json"
+              ],
+              "reason": "目标、范围和核心流程不变，仅回到 DETAILS 修订规则、异常与验收后重新审核",
+              "approval_status": "PENDING"
+            }
+          ]
+        },
+        "next_steps": [
+          "回复“批准重规划”",
+          "回复“修改重规划方案”",
+          "回复“取消本次变更”"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "WAITING_REPLAN_CONFIRM"
+        }
+      }
+    },
+    {
+      "user": "批准重规划",
+      "response": {
+        "message": "重规划 0.2.0 已批准并固化。\n任务已返回 PRD 细节修订节点；目标、范围、核心流程和既有决策保持不变。\n当前本地 Provider 的自然语言 POC 在此停止自动写入，避免未经新的业务确认直接覆盖已交付 PRD。",
+        "state": {
+          "id": "PRD_DRAFTING_DETAILS",
+          "name": "PRD 细节补充中",
+          "type": "execution"
+        },
+        "status": "CONTINUE",
+        "provider": {
+          "id": "local-case",
+          "label": "本地可复现 Provider"
+        },
+        "skill": "change-impact/APPLY",
+        "artifacts": [
+          {
+            "ref": "repo://context-workspace/workspace/plans/help-center-search-agent-demo-replan.json",
+            "label": "已批准重规划方案"
+          }
+        ],
+        "next_steps": [
+          "补充具体细节修订内容后继续",
+          "也可说“暂停”保留当前节点"
+        ],
+        "debug": {
+          "task_id": "agent-demo",
+          "state_id": "PRD_DRAFTING_DETAILS"
+        }
+      }
+    }
+  ]
+}
