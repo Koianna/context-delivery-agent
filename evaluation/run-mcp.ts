@@ -44,6 +44,7 @@ const results = [
   check("MCP-02", messages[1]?.result?.tools?.some((tool) => tool.name === "context_delivery") === true, "MCP 暴露 context_delivery 工具"),
   check("MCP-03", first?.state?.id === "WAITING_CONTEXT_CONFIRM", "自然语言整理请求进入 Context 分支并停在 CP-C01，而不是 PRD 分支"),
   check("MCP-04", first?.skill?.includes("material-ingest") === true && sourceFound, "工具调用执行材料登记并保留原文到 drafts"),
+  check("MCP-04A", first?.execution_authority === "RUNTIME_ONLY" && first?.execution_status === "WAITING_USER_CONFIRMATION" && first?.artifacts?.some((item) => item.label === "结构化整理稿" && item.ref?.includes("context-workspace/workspace/agent-runs/") && item.ref?.endsWith("meeting-note.md")) === true, "等待确认时只返回 Runtime 生成的 context-workspace 会议整理稿"),
   check("MCP-05", second?.task_id === taskId && second?.state?.id === "CONTEXT_TASK_COMPLETED", "确认轮次复用同一 task_id 并由 Runtime 处理"),
 ];
 const passed = results.filter((item) => item.passed).length;
@@ -75,4 +76,4 @@ function clear() {
 }
 function check(caseId: string, passed: boolean, detail: string) { return { case_id: caseId, passed, detail }; }
 interface JsonRpcMessage { result?: { serverInfo?: { name?: string }; tools?: Array<{ name?: string }>; structuredContent?: unknown } }
-interface Structured { state?: { id?: string }; skill?: string; task_id?: string }
+interface Structured { state?: { id?: string }; skill?: string; task_id?: string; execution_authority?: string; execution_status?: string; artifacts?: Array<{ label?: string; ref?: string }> }

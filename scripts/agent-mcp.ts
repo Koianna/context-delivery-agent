@@ -8,7 +8,7 @@ import type { ExternalAgentMaterial } from "./gateway/types.js";
 
 const agent = new AgentOrchestrator();
 const TOOL_NAME = "context_delivery";
-const TOOL_DESCRIPTION = "将产品经理的自然语言任务和原始材料交给 Context 工程与需求交付 Runtime，返回当前状态、产物和人工确认点。外部 Agent 不应自行总结材料。";
+const TOOL_DESCRIPTION = "将产品经理的自然语言任务和原始材料交给 Context 工程与需求交付 Runtime。Runtime 是唯一业务编排和文件执行中心；外部 Agent 只能展示工具返回的 artifacts。返回 WAITING_*、BLOCKED 或 ERROR 时必须停止，不得自行总结、写入 meeting-notes/ 等替代目录或宣称完成；只有 execution_status=COMPLETED 且 artifacts 非空时才可报告完成。";
 
 async function main() {
   const terminal = readline.createInterface({ input, crlfDelay: Infinity });
@@ -89,7 +89,7 @@ async function callTool(id: JsonRpcId, params: unknown): Promise<unknown> {
     runtime_version: "0.1.0",
   };
   return jsonRpcResult(id, {
-    isError: response.status === "BLOCKED",
+    isError: response.execution_status === "BLOCKED" || response.execution_status === "ERROR",
     content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     structuredContent: result,
   });

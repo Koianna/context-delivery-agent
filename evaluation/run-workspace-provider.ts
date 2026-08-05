@@ -21,15 +21,19 @@ const response = agent.handleMessage(
 const state = readTaskState();
 const materialReport = response.artifacts.find((item) => item.label === "材料分析报告");
 const contextReport = response.artifacts.find((item) => item.label === "Context 分析报告");
+const structuredMaterial = response.artifacts.find((item) => item.label === "结构化整理稿");
 const materialReportPath = materialReport ? repoRefToPath(materialReport.ref, PROJECT_ROOT) : null;
 const contextReportPath = contextReport ? repoRefToPath(contextReport.ref, PROJECT_ROOT) : null;
 const materialReportContent = materialReportPath && fs.existsSync(materialReportPath) ? fs.readFileSync(materialReportPath, "utf-8") : "";
 const contextReportContent = contextReportPath && fs.existsSync(contextReportPath) ? fs.readFileSync(contextReportPath, "utf-8") : "";
+const structuredMaterialPath = structuredMaterial ? repoRefToPath(structuredMaterial.ref, PROJECT_ROOT) : null;
+const structuredMaterialContent = structuredMaterialPath && fs.existsSync(structuredMaterialPath) ? fs.readFileSync(structuredMaterialPath, "utf-8") : "";
 const results = [
   check("WORKSPACE-01", response.provider.id === "workspace", "未指定案例时使用通用项目工作区 Provider"),
   check("WORKSPACE-02", response.state.id === "CONTEXT_TASK_COMPLETED" && response.status === "COMPLETED", "通用材料整理完成，不进入 PRD 生成"),
   check("WORKSPACE-03", materialReportContent.includes("手机号不用了") && materialReportContent.includes("USER_FEEDBACK"), "保留用户原话并分类为用户反馈"),
   check("WORKSPACE-04", contextReportContent.includes("具体诉求") && !contextReportContent.includes("修改手机号"), "将可能诉求保留为待确认问题，不擅自升级为明确需求"),
+  check("WORKSPACE-04A", response.execution_status === "COMPLETED" && structuredMaterialPath?.includes("context-workspace/workspace/agent-runs") === true && structuredMaterialContent.includes("手机号不用了"), "Runtime 生成可阅读整理稿并放入 context-workspace，保留原始反馈"),
   check("WORKSPACE-05", state?.project_id === "account-settings" && response.artifacts.some((item) => item.ref.includes("account-settings")), "产物按项目隔离并带有项目标识"),
 ];
 
@@ -56,6 +60,7 @@ const contextIndexPath = path.join(contextRoot, "INDEX.md");
 results.push(
   check("WORKSPACE-09", contextApplied.state.id === "CONTEXT_TASK_COMPLETED" && contextApplied.status === "COMPLETED", "CP-C01 后完成 Context 维护任务"),
   check("WORKSPACE-10", fs.existsSync(contextIndexPath) && fs.readFileSync(contextIndexPath, "utf-8").includes("产品现状候选") && fs.readdirSync(path.join(contextRoot, "product")).some((item) => item.endsWith(".md")), "批准后创建稳定 Context 并更新项目索引"),
+  check("WORKSPACE-11", contextApplied.execution_status === "COMPLETED" && contextApplied.artifacts.some((item) => item.label === "结构化整理稿" && item.ref.includes("context-workspace/")), "确认后仍返回 Runtime 生成的整理稿"),
 );
 const passed = results.filter((item) => item.passed).length;
 console.log(JSON.stringify({ evaluation_id: "workspace-provider-generic-material", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));

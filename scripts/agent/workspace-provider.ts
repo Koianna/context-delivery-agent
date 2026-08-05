@@ -10,6 +10,7 @@ import { contextDocumentRef, contextIndexRef, contextIndexPath, contextRootPath,
 import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets } from "./types.js";
+import { writeStructuredMaterial } from "./structured-material.js";
 
 /**
  * 通用工作区 Provider：负责把用户材料接入当前项目，并提供可校验的保守基线输出。
@@ -30,6 +31,7 @@ export class WorkspaceProvider implements AgentProvider {
     const inputPath = path.join(outputDir, "material-ingest.input.json");
     const materialOutputPath = path.join(outputDir, "material-ingest.output.json");
     const contextOutputPath = path.join(outputDir, "context-maintain.analysis.json");
+    const structuredMaterialPath = path.join(outputDir, "structured-materials.md");
     const sourceDir = this.prepareSources(materialPath, taskGoal);
     this.ensureProjectContext();
     const input = this.buildMaterialInput(sourceDir, taskGoal);
@@ -38,14 +40,21 @@ export class WorkspaceProvider implements AgentProvider {
     writeJsonAtomic(inputPath, input);
     writeJsonAtomic(materialOutputPath, materialOutput);
     writeJsonAtomic(contextOutputPath, contextOutput);
-    return { inputPath, materialOutputPath, contextOutputPath };
+    const structuredName = input.materials.some((material) => /MEETING|会议|纪要|记录/i.test(`${material.source_type} ${material.name}`))
+      ? "meeting-note.md"
+      : "structured-materials.md";
+    const finalStructuredPath = path.join(outputDir, structuredName);
+    writeStructuredMaterial(input, materialOutput, finalStructuredPath, PROJECT_ROOT);
+    return { inputPath, materialOutputPath, contextOutputPath, structuredMaterialPath: finalStructuredPath };
   }
 
-  getContextReportRefs(taskId: string) {
+  getContextReportRefs(taskId: string, structuredMaterialPath?: string) {
     const base = `repo://context-workspace/workspace/agent-runs/${safeSlug(taskId)}`;
+    const name = structuredMaterialPath ? path.basename(structuredMaterialPath) : this.existingStructuredMaterialName(taskId);
     return {
       materialReportRef: `${base}/reports/material-analysis.json`,
       contextReportRef: `${base}/reports/context-analysis.json`,
+      structuredMaterialRef: `${base}/materials/${name}`,
       changeLogRef: `${base}/reports/context-change-log.json`,
     };
   }
@@ -343,6 +352,11 @@ export class WorkspaceProvider implements AgentProvider {
   }
 
   private outputDir(slug: string) { const dir = path.join(PROJECT_ROOT, "runtime/provider-output", slug); fs.mkdirSync(dir, { recursive: true }); return dir; }
+
+  private existingStructuredMaterialName(taskId: string): string {
+    const dir = this.outputDir(safeSlug(taskId));
+    return fs.existsSync(path.join(dir, "meeting-note.md")) ? "meeting-note.md" : "structured-materials.md";
+  }
 }
 
 function readInlineMetadata(sourceDir: string): Record<string, {

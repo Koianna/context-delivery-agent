@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import * as fs from "node:fs";
 import {
   appendEvent,
   idempotencyKey,
@@ -13,7 +14,7 @@ import type {
   MaterialIngestInput,
   MaterialIngestOutput,
 } from "./lib/context-types.js";
-import { pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "./lib/repository.js";
+import { pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "./lib/repository.js";
 import {
   validateContextAnalysis,
   validateMaterialOutput,
@@ -27,6 +28,8 @@ export function recordContextAnalysis(input: {
   root?: string;
   materialReportRef?: string;
   contextReportRef?: string;
+  structuredMaterialPath?: string;
+  structuredMaterialRef?: string;
 }) {
   const root = input.root ?? PROJECT_ROOT;
   const state = readTaskState();
@@ -54,6 +57,13 @@ export function recordContextAnalysis(input: {
     : path.join(root, "context-workspace/workspace/reports/context-analysis.json");
   writeJsonAtomic(materialReport, materialOutput);
   writeJsonAtomic(contextReport, contextOutput);
+  const structuredMaterial = input.structuredMaterialPath && input.structuredMaterialRef
+    ? repoRefToPath(input.structuredMaterialRef, root)
+    : null;
+  const sourceStructuredMaterial = input.structuredMaterialPath;
+  if (structuredMaterial && sourceStructuredMaterial && fs.existsSync(sourceStructuredMaterial)) {
+    writeTextAtomic(structuredMaterial, fs.readFileSync(sourceStructuredMaterial, "utf-8"));
+  }
 
   state.latest_output_ref = pathToRepoRef(contextReport, root);
   state.material_version = "0.2.0";
@@ -82,11 +92,13 @@ export function recordContextAnalysis(input: {
       confirmation_count: contextOutput.update_proposals.filter(
         (proposal) => proposal.requires_confirmation
       ).length,
+      structured_material_ref: structuredMaterial ? pathToRepoRef(structuredMaterial, root) : null,
     },
   });
   return {
     material_report_ref: pathToRepoRef(materialReport, root),
     context_report_ref: pathToRepoRef(contextReport, root),
+    structured_material_ref: structuredMaterial ? pathToRepoRef(structuredMaterial, root) : null,
     material_count: materialOutput.processing_summary.material_count,
     proposal_count: contextOutput.update_proposals.length,
   };

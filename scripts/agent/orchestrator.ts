@@ -128,15 +128,17 @@ export class AgentOrchestrator {
 
     const materialPath = options.materialPath ?? extractExistingPath(message);
     const assets = this.provider.getContextAssets(materialPath, state.task_id, message);
-    const reportRefs = this.provider.getContextReportRefs(state.task_id);
+    const reportRefs = this.provider.getContextReportRefs(state.task_id, assets.structuredMaterialPath);
     const registered = registerMaterials(assets.inputPath);
     const recorded = recordContextAnalysis({
       taskId: state.task_id,
       materialInputPath: assets.inputPath,
       materialOutputPath: assets.materialOutputPath,
       contextOutputPath: assets.contextOutputPath,
+      structuredMaterialPath: assets.structuredMaterialPath,
       materialReportRef: reportRefs.materialReportRef,
       contextReportRef: reportRefs.contextReportRef,
+      structuredMaterialRef: reportRefs.structuredMaterialRef,
     });
     const analysis = readJson<ContextAnalysisOutput>(assets.contextOutputPath);
     const confirmableProposals = analysis.update_proposals.filter((proposal) => proposal.requires_confirmation);
@@ -155,6 +157,7 @@ export class AgentOrchestrator {
           { ref: registered.manifest_ref, label: "材料登记清单" },
           { ref: recorded.material_report_ref, label: "材料分析报告" },
           { ref: recorded.context_report_ref, label: "Context 分析报告" },
+          ...(recorded.structured_material_ref ? [{ ref: recorded.structured_material_ref, label: "结构化整理稿" }] : []),
         ],
         nextSteps: ["如需准备 PRD，请明确说明目标和范围", "也可以继续补充材料"],
         debug: options.debug,
@@ -185,6 +188,7 @@ export class AgentOrchestrator {
         { ref: registered.manifest_ref, label: "材料登记清单" },
         { ref: recorded.material_report_ref, label: "材料分析报告" },
         { ref: recorded.context_report_ref, label: "Context 分析报告" },
+        ...(recorded.structured_material_ref ? [{ ref: recorded.structured_material_ref, label: "结构化整理稿" }] : []),
       ],
       confirmation,
       nextSteps: ["回复“确认全部”", "回复“只确认方案”或“只确认边界”", "回复“暂不更新稳定 Context”"],
@@ -352,6 +356,7 @@ export class AgentOrchestrator {
         skill: "context-maintain",
         artifacts: [
           { ref: reportRefs.contextReportRef, label: "Context 分析报告" },
+          { ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" },
         ],
         nextSteps: ["之后可说“继续准备 PRD”", "也可以补充新材料后重新分析"],
         debug: options.debug,
@@ -384,6 +389,7 @@ export class AgentOrchestrator {
       artifacts: [
         { ref: result.change_log_ref, label: "Context 变更记录" },
         { ref: contextIndexRef(state.project_id), label: "稳定 Context 索引" },
+        { ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" },
       ],
       nextSteps: ["回复“继续准备 PRD”进入写前对齐", "回复新的材料整理任务"],
       debug: options.debug,
@@ -700,6 +706,10 @@ export class AgentOrchestrator {
         type: definition?.type ?? "entry",
       },
       status: input.status,
+      execution_authority: "RUNTIME_ONLY",
+      execution_status: executionStatus(input.status, stateId),
+      result_is_authoritative: true,
+      external_agent_instruction: instructionFor(input.status, stateId),
       provider: { id: this.provider.id, label: this.provider.label },
       skill: input.skill,
       artifacts: input.artifacts,
@@ -713,6 +723,22 @@ export class AgentOrchestrator {
       debug: input.debug && state ? { task_id: state.task_id, state_id: state.current_state } : undefined,
     };
   }
+}
+
+function executionStatus(status: AgentResponse["status"], state: StateId): AgentResponse["execution_status"] {
+  if (status === "COMPLETED" && ["CONTEXT_TASK_COMPLETED", "DELIVERED"].includes(state)) return "COMPLETED";
+  if (status === "WAITING_CONFIRMATION" || state.startsWith("WAITING_")) return "WAITING_USER_CONFIRMATION";
+  if (state === "TASK_CANCELLED") return "CANCELLED";
+  if (status === "BLOCKED" || state === "EXECUTION_BLOCKED") return "BLOCKED";
+  return "IN_PROGRESS";
+}
+
+function instructionFor(status: AgentResponse["status"], state: StateId): string {
+  if (executionStatus(status, state) === "COMPLETED") return "只能展示 Runtime 返回的完成产物；不得另建替代文件。";
+  if (executionStatus(status, state) === "WAITING_USER_CONFIRMATION") return "Runtime 尚未完成。只能展示确认项并等待用户，不得自行整理、写文件或宣称任务完成。";
+  if (executionStatus(status, state) === "BLOCKED") return "Runtime 已停止。不得生成替代结果或写入业务文件，需先处理阻塞原因。";
+  if (executionStatus(status, state) === "CANCELLED") return "任务已取消。只能保留和展示 Runtime 历史记录，不得恢复或另建替代产物。";
+  return "Runtime 正在处理。不得绕过 Runtime 执行业务 Skill 或写入业务文件。";
 }
 
 function routeIntent(message: string): AgentIntent {

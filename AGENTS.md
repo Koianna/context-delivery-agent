@@ -46,6 +46,10 @@
 - 项目 Runtime（`AgentOrchestrator`、状态机、Skill、Harness、Context 写入和事件日志）是唯一的业务编排与执行中心。
 - 外部 Agent 不得直接修改 Context、PRD、Runtime 状态或确认记录，也不得自行决定状态转移。
 - 外部 Agent 发生中断、替换或重连时，权威任务状态仍以 `runtime/` 为准。
+- 外部 Agent 只能展示 Runtime 返回的业务结果；不得在项目根目录自行创建 `meeting-notes/` 等替代产物，也不得把自己的摘要写入项目并宣称任务完成。
+- “只整理资料”仍然必须经过 Runtime 的状态机和 `material-ingest → context-maintain` 路径；不进入 PRD 不等于可以绕过 Runtime。
+- 只有 Runtime 返回 `status = COMPLETED`、终态为 `CONTEXT_TASK_COMPLETED` 或 `DELIVERED`，并提供至少一个 `context-workspace/` 内的 artifact 时，宿主才能报告任务完成。
+- Runtime 返回 `WAITING_*`、`TASK_PAUSED`、`EXECUTION_BLOCKED`、`TASK_CANCELLED` 或错误时，宿主必须停止生成替代结果、停止写文件，并把等待项或错误交给用户处理。
 
 ## 执行协议
 
@@ -116,3 +120,11 @@
 - 未经校验写入或覆盖稳定 Context
 - 让外部 Agent 绕过 Gateway 直接调用业务脚本或修改业务文件
 - 让外部 Agent 在没有调用 `context_delivery` 的情况下直接总结用户材料并宣称任务已完成
+- Runtime 尚未完成时，外部 Agent 自行总结、写入项目文件或用“无需依赖 Runtime”等理由绕过状态机
+
+## 运行时产物边界
+
+- 原始材料登记在 `context-workspace/drafts/`。
+- 分析报告、结构化整理稿和待确认建议保存在 `context-workspace/workspace/agent-runs/<task_id>/`。
+- 稳定业务 Context 只保存在 `context-workspace/projects/<project_id>/context/`，或帮助中心演示案例约定的 `context-workspace/context/`。
+- 会议记录等材料的可阅读整理稿由 Runtime 生成，默认位于 `workspace/agent-runs/<task_id>/materials/meeting-note.md`；通用材料位于同目录的 `structured-materials.md`。宿主只能引用和展示这些文件。

@@ -2,6 +2,7 @@ import type { ConfirmationRecord, StateId, TaskState } from "../lib/types.js";
 
 export type AgentIntent = "CONTEXT" | "PRD" | "CHANGE" | "CONTINUE" | "UNKNOWN";
 export type AgentStatus = "CONTINUE" | "WAITING_CONFIRMATION" | "COMPLETED" | "BLOCKED";
+export type RuntimeExecutionStatus = "IN_PROGRESS" | "WAITING_USER_CONFIRMATION" | "COMPLETED" | "BLOCKED" | "CANCELLED" | "ERROR";
 
 export interface AgentArtifact {
   ref: string;
@@ -16,6 +17,10 @@ export interface AgentResponse {
     type: string;
   };
   status: AgentStatus;
+  execution_authority: "RUNTIME_ONLY";
+  execution_status: RuntimeExecutionStatus;
+  result_is_authoritative: true;
+  external_agent_instruction: string;
   provider: {
     id: string;
     label: string;
@@ -76,10 +81,12 @@ export interface AgentProvider {
     inputPath: string;
     materialOutputPath: string;
     contextOutputPath: string;
+    structuredMaterialPath: string;
   };
-  getContextReportRefs(taskId: string): {
+  getContextReportRefs(taskId: string, structuredMaterialPath?: string): {
     materialReportRef: string;
     contextReportRef: string;
+    structuredMaterialRef: string;
     changeLogRef: string;
   };
   getPrdAssets(taskId: string): PrdProviderAssets;

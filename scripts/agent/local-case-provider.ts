@@ -17,6 +17,7 @@ import type {
   ChangeReplanAssets,
   PrdProviderAssets,
 } from "./types.js";
+import { writeStructuredMaterial } from "./structured-material.js";
 
 export class LocalCaseProvider implements AgentProvider {
   readonly id = "local-case";
@@ -25,6 +26,10 @@ export class LocalCaseProvider implements AgentProvider {
 
   getContextAssets(materialPath?: string) {
     if (materialPath) this.assertSupportedMaterialPath(materialPath);
+    const input = readJson<import("../lib/context-types.js").MaterialIngestInput>(path.join(this.caseRoot, "material-ingest.input.json"));
+    const output = readJson<import("../lib/context-types.js").MaterialIngestOutput>(path.join(this.caseRoot, "expected-outputs/material-ingest.output.json"));
+    const structuredMaterialPath = path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", "local-case-materials", "materials/structured-materials.md");
+    writeStructuredMaterial(input, output, structuredMaterialPath, PROJECT_ROOT);
     return {
       inputPath: path.join(this.caseRoot, "material-ingest.input.json"),
       materialOutputPath: path.join(
@@ -35,14 +40,17 @@ export class LocalCaseProvider implements AgentProvider {
         this.caseRoot,
         "expected-outputs/context-maintain.analysis.json"
       ),
+      structuredMaterialPath,
     };
   }
 
-  getContextReportRefs(taskId: string) {
+  getContextReportRefs(taskId: string, structuredMaterialPath?: string) {
     const base = `repo://context-workspace/workspace/agent-runs/${safeSlug(taskId)}`;
+    const name = structuredMaterialPath ? path.basename(structuredMaterialPath) : "structured-materials.md";
     return {
       materialReportRef: `${base}/reports/material-analysis.json`,
       contextReportRef: `${base}/reports/context-analysis.json`,
+      structuredMaterialRef: `${base}/materials/${name}`,
       changeLogRef: `${base}/reports/context-change-log.json`,
     };
   }

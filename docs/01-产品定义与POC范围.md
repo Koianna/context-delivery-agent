@@ -214,6 +214,7 @@ Context 积累
 主要输出：
 
 - 材料分类报告；
+- 由 Runtime 生成的结构化材料整理稿（会议记录、用户反馈等）；
 - 信息成熟度清单；
 - 冲突与待确认清单；
 - Context 更新建议；
@@ -414,7 +415,7 @@ context/
 
 ### 9.4 文件、Runtime 与 Git 的职责边界
 
-- `context-workspace/` 是材料、业务 Context、决策和交付产物的运行时事实源；
+- `context-workspace/` 是材料、业务 Context、决策和交付产物的运行时事实源；“整理完成”必须以 Runtime 返回 `COMPLETED`、终态 `CONTEXT_TASK_COMPLETED` 和至少一个 `context-workspace/` artifact 为准。外部 Agent 不得自行创建项目外部整理文件或在 Runtime 阻塞时补写结果。
 - `runtime/` 是当前任务状态、待确认项和执行事件的运行时事实源；
 - Git 保存有意义的内容版本和代码版本，不替代正在运行的任务状态；
 - GitHub 用于远程备份、协作记录和脱敏后的作品展示；
