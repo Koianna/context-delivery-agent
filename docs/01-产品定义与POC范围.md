@@ -2,9 +2,9 @@
 
 ## 产品定义与 POC 最小验证范围
 
-> 版本：v1.1  
+> 版本：v1.2
 > 阶段：个人 POC  
-> 更新日期：2026-08-03  
+> 更新日期：2026-08-05
 > 默认形态：通用项目工作区；演示案例：帮助中心搜索体验优化
 
 ---
@@ -33,7 +33,7 @@ Context 工程与需求交付协作 Agent 是面向单人产品经理的 AI 工�
 本项目采用“外部 Agent 宿主 + 项目 Runtime”的产品形态：
 
 - 外部 Agent 是可替换的自然语言交互宿主，负责理解表达、追问、收集确认和展示结果；
-- External Agent Gateway 是统一协议适配层，负责请求校验、调用 Runtime 和包装响应；
+- MCP Adapter 是面向 Claude、Codex、Cursor 等外部 Agent 的主要工具适配层；JSONL Gateway 是兼容客户端和回归测试适配层；两者都只负责协议转换、调用 Runtime 和包装响应；
 - 项目 Runtime 是唯一的业务编排与执行中心，负责意图路由、状态机、Skill 编排、人工确认、Harness 校验、Context/PRD 受控写入、版本、日志和评测；
 - 外部 Agent 不直接修改业务产物、不保存权威任务状态，也不自行决定状态转移。
 
@@ -58,7 +58,27 @@ Context 工程与需求交付协作 Agent 是面向单人产品经理的 AI 工�
 - 保存当前任务快照、待确认项和追加事件日志的本地 Runtime；
 - 用于版本追溯、评测绑定和作品展示的 Git/GitHub 仓库。
 
-外部交互入口通过 JSONL Gateway、CLI Adapter 或未来的 MCP/HTTP/IDE Adapter 接入；更换宿主不改变业务状态、确认门禁和产物路径。
+外部交互入口以 MCP Tool 为主要日常入口，同时保留 JSONL Gateway 和 CLI Adapter。三种入口都调用同一个 Runtime；更换宿主不改变业务状态、确认门禁和产物路径。MCP、Gateway 和 CLI 不是三个 Agent，也不复制业务编排逻辑。
+
+### 1.3.1 外部 Agent 自然语言使用闭环
+
+产品经理只需要在外部 Agent 中输入自然语言，外部 Agent 必须调用本项目提供的 `context_delivery` 工具，并将用户原文、项目标识、任务标识和原始材料交给 Runtime：
+
+```text
+产品经理输入自然语言和材料
+    ↓
+外部 Agent 调用 context_delivery
+    ↓
+MCP Adapter 校验请求并调用 AgentOrchestrator
+    ↓
+Runtime 执行 material-ingest / context-maintain / PRD / Change 分支
+    ↓
+Runtime 返回状态、Skill、产物和确认点
+    ↓
+外部 Agent 展示结果；确认回复再次调用同一 task_id
+```
+
+外部 Agent 没有调用工具时，不能把自己的总结当成本项目的执行结果；只有 Runtime 返回的状态、产物和确认记录才属于本项目的业务结果。
 
 ### 1.4 产品阶段
 
@@ -450,6 +470,8 @@ POC 阶段收敛为 6 个核心能力模块：
 - 执行日志；
 - Git 本地版本管理与 GitHub 远程仓库；
 - 通用 External Agent Gateway 与可替换宿主接入协议；
+- MCP Tool 适配层和 `context_delivery` 统一工具；
+- 会议记录、用户反馈、历史 PRD 等材料的直接粘贴接入；
 - Prompt、Skill、评测结果与 Git commit 的可追溯绑定；
 - 评测集、Bad Case 和至少一轮修复回归。
 
@@ -468,6 +490,7 @@ POC 阶段收敛为 6 个核心能力模块：
 - 生产级并发、性能、权限和安全建设；
 - 真实用户增长、业务提效和 ROI 验证。
 - 特定厂商 Agent 的深度绑定和厂商专属交互实现。
+- MCP 宿主的完整 UI、账号体系和自动安装配置；
 
 ---
 
@@ -481,6 +504,7 @@ POC 阶段收敛为 6 个核心能力模块：
 - 历史 PRD；
 - 业务规则与边界；
 - 技术与数据约束；
+- 外部 Agent 通过 MCP Tool 传入的内联材料（材料名称、原文和可选来源元数据）；
 - 用户在对话中的确认和修改指令。
 
 ### 12.2 输出成果
@@ -499,6 +523,7 @@ POC 阶段收敛为 6 个核心能力模块：
 - 状态转移和工具调用日志；
 - 评测报告与 Bad Case 库。
 - External Agent Gateway 请求/响应协议和至少一条宿主替换验证记录。
+- MCP Tool 调用、原文保留、人工确认和确认后写入的端到端验证记录。
 
 ---
 
@@ -638,6 +663,8 @@ POC 实施阶段需要进一步定义每个状态的：
 - 取消任务后历史和已生成产物保留率 100%；
 - 已取消任务直接恢复次数为 0，必须通过新任务重新开始；
 - 每次业务工具调用和路由结果均可追溯；
+- 通过外部 Agent 粘贴的原始材料可在 `drafts/` 找到，未调用工具时不得产生“已执行”证据；
+- 同一 `task_id` 的确认回复可由不同外部 Agent 宿主继续执行；
 - 每次评测结果均记录 Git commit、Prompt 版本、Skill 版本、模型和评测集版本；
 - 至少完成一轮 Bad Case 修复与回归。
 

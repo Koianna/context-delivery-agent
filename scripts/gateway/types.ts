@@ -7,6 +7,15 @@ export interface ExternalAgentClient {
   version?: string;
 }
 
+export interface ExternalAgentMaterial {
+  name: string;
+  content: string;
+  source_type?: string;
+  source_owner?: string;
+  source_time?: string;
+  is_complete?: boolean;
+}
+
 export interface ExternalAgentRequest {
   protocol_version?: string;
   request_id: string;
@@ -15,6 +24,7 @@ export interface ExternalAgentRequest {
   session_id?: string;
   message: string;
   material_path?: string;
+  materials?: ExternalAgentMaterial[];
   client?: ExternalAgentClient;
   debug?: boolean;
 }

@@ -8,6 +8,7 @@
     "agent": "node --import tsx scripts/agent-cli.ts",
     "gateway": "node --import tsx scripts/agent-gateway.ts",
     "gateway:jsonl": "node --import tsx scripts/agent-gateway.ts",
+    "mcp": "node --import tsx scripts/agent-mcp.ts",
     "state:transition": "node --import tsx scripts/transition-state.ts",
     "runtime:init": "node --import tsx scripts/get-state.ts --init",
     "context:register": "node --import tsx scripts/register-materials.ts --input case-data/help-center-search/material-ingest.input.json",
@@ -27,6 +28,7 @@
     "eval:change": "node --import tsx evaluation/run-change-branch.ts",
     "eval:agent": "node --import tsx evaluation/run-agent-interaction.ts",
     "eval:gateway": "node --import tsx evaluation/run-gateway.ts",
+    "eval:mcp": "node --import tsx evaluation/run-mcp.ts",
     "eval:workspace": "node --import tsx evaluation/run-workspace-provider.ts",
     "typecheck": "tsc --noEmit",
     "eval:run": "node --import tsx evaluation/run.ts"

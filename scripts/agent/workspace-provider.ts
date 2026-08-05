@@ -209,6 +209,10 @@ export class WorkspaceProvider implements AgentProvider {
     }
     const resolved = path.resolve(materialPath);
     if (!fs.existsSync(resolved)) throw new Error(`材料路径不存在: ${materialPath}`);
+    const draftRoot = path.resolve(projectDir);
+    if (resolved.startsWith(draftRoot + path.sep) && fs.statSync(resolved).isDirectory()) {
+      return resolved;
+    }
     const files = fs.statSync(resolved).isDirectory()
       ? fs.readdirSync(resolved).map((name) => path.join(resolved, name)).filter(isSupportedFile)
       : [resolved];
@@ -222,18 +226,20 @@ export class WorkspaceProvider implements AgentProvider {
   }
 
   private buildMaterialInput(sourceDir: string, taskGoal: string): MaterialIngestInput {
+    const inlineMetadata = readInlineMetadata(sourceDir);
     const files = fs.readdirSync(sourceDir).filter((name) => isSupportedFile(path.join(sourceDir, name))).sort();
     const materials = files.map((name) => {
       const filePath = path.join(sourceDir, name);
       const content = fs.readFileSync(filePath, "utf-8");
       const sourceId = `src-${sha256Buffer(content).slice(0, 10)}`;
       const metadata = parseFrontmatter(content).metadata;
-      const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : "user-provided";
+      const inline = inlineMetadata[name];
+      const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : inline?.source_owner ?? "user-provided";
       const sourceTime = typeof metadata.source_time === "string" && metadata.source_time
         ? metadata.source_time
-        : new Date(fs.statSync(filePath).mtimeMs).toISOString();
-      const sourceType = typeof metadata.source_type === "string" && metadata.source_type ? metadata.source_type : extensionType(name);
-      return { source_id: sourceId, name, source_type: sourceType, source_owner: sourceOwner, source_time: sourceTime, content_ref: pathToRepoRef(filePath, PROJECT_ROOT), is_complete: true };
+        : inline?.source_time ?? new Date(fs.statSync(filePath).mtimeMs).toISOString();
+      const sourceType = typeof metadata.source_type === "string" && metadata.source_type ? metadata.source_type : inline?.source_type ?? extensionType(name);
+      return { source_id: sourceId, name: inline?.original_name ?? name, source_type: sourceType, source_owner: sourceOwner, source_time: sourceTime, content_ref: pathToRepoRef(filePath, PROJECT_ROOT), is_complete: inline?.is_complete ?? true };
     });
     return { task_goal: taskGoal, project_id: this.projectId, workspace_slug: this.projectId, analysis_scope: { topic: this.projectId, included_source_ids: materials.map((item) => item.source_id) }, materials };
   }
@@ -337,6 +343,28 @@ export class WorkspaceProvider implements AgentProvider {
   }
 
   private outputDir(slug: string) { const dir = path.join(PROJECT_ROOT, "runtime/provider-output", slug); fs.mkdirSync(dir, { recursive: true }); return dir; }
+}
+
+function readInlineMetadata(sourceDir: string): Record<string, {
+  original_name: string;
+  source_type: string | null;
+  source_owner: string | null;
+  source_time: string | null;
+  is_complete: boolean;
+}> {
+  const metadataPath = path.join(sourceDir, ".inline-materials.json");
+  if (!fs.existsSync(metadataPath)) return {};
+  const raw = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as { materials?: Array<Record<string, unknown>> };
+  return Object.fromEntries((raw.materials ?? []).flatMap((item) => {
+    if (typeof item.stored_name !== "string" || typeof item.original_name !== "string") return [];
+    return [[item.stored_name, {
+      original_name: item.original_name,
+      source_type: typeof item.source_type === "string" ? item.source_type : null,
+      source_owner: typeof item.source_owner === "string" ? item.source_owner : null,
+      source_time: typeof item.source_time === "string" ? item.source_time : null,
+      is_complete: item.is_complete !== false,
+    }]];
+  }));
 }
 
 function isSupportedFile(filePath: string): boolean { return fs.statSync(filePath).isFile() && /\.(md|markdown|txt|json)$/i.test(filePath) && !path.basename(filePath).startsWith("."); }

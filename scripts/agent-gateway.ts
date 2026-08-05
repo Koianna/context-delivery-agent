@@ -8,6 +8,7 @@ import type {
   ExternalAgentResponse,
 } from "./gateway/types.js";
 import { runtimeSummary } from "./gateway/types.js";
+import { InlineMaterialError, writeInlineMaterials } from "./gateway/inline-materials.js";
 
 const agent = new AgentOrchestrator();
 
@@ -39,11 +40,16 @@ function handleLine(line: string): ExternalAgentResponse {
 
   const request = validation.request;
   try {
+    const taskId = request.task_id ?? `agent-${Date.now()}`;
+    const projectId = request.project_id?.toLowerCase();
+    const inlineMaterialPath = request.materials?.length
+      ? writeInlineMaterials(request.materials, projectId ?? "default-project", taskId)
+      : undefined;
     const response = agent.handleMessage(request.message, {
-      taskId: request.task_id,
+      taskId,
       sessionId: request.session_id,
-      projectId: request.project_id,
-      materialPath: request.material_path,
+      projectId,
+      materialPath: inlineMaterialPath ?? request.material_path,
       debug: request.debug,
     });
     return {
@@ -55,6 +61,15 @@ function handleLine(line: string): ExternalAgentResponse {
       error: null,
     };
   } catch (error) {
+    if (error instanceof InlineMaterialError) {
+      return {
+        protocol_version: "0.1",
+        request_id: request.request_id,
+        status: "INVALID_REQUEST",
+        runtime: runtimeSummary(readTaskState()),
+        error: { code: error.code, message: error.message },
+      };
+    }
     return {
       protocol_version: "0.1",
       request_id: request.request_id,
@@ -94,8 +109,32 @@ function validateRequest(raw: unknown):
       return { ok: false, error: `${field} 必须是字符串` };
     }
   }
+  if (raw.materials !== undefined) {
+    if (!Array.isArray(raw.materials) || raw.materials.length === 0) {
+      return { ok: false, error: "materials 必须是非空数组" };
+    }
+    for (const [index, material] of raw.materials.entries()) {
+      if (!isRecord(material) || typeof material.name !== "string" || !material.name.trim()) {
+        return { ok: false, error: `materials[${index}].name 必须是非空字符串` };
+      }
+      if (typeof material.content !== "string" || !material.content.trim()) {
+        return { ok: false, error: `materials[${index}].content 必须是非空字符串` };
+      }
+      for (const field of ["source_type", "source_owner", "source_time"] as const) {
+        if (material[field] !== undefined && typeof material[field] !== "string") {
+          return { ok: false, error: `materials[${index}].${field} 必须是字符串` };
+        }
+      }
+      if (material.is_complete !== undefined && typeof material.is_complete !== "boolean") {
+        return { ok: false, error: `materials[${index}].is_complete 必须是布尔值` };
+      }
+    }
+  }
   if (raw.debug !== undefined && typeof raw.debug !== "boolean") {
     return { ok: false, error: "debug 必须是布尔值" };
+  }
+  if (raw.task_id === undefined && raw.material_path === undefined && raw.materials === undefined) {
+    return { ok: false, error: "新任务必须提供 material_path 或 materials" };
   }
   if (raw.client !== undefined) {
     if (!isRecord(raw.client) || typeof raw.client.id !== "string" || !raw.client.id.trim()) {

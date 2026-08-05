@@ -49,7 +49,7 @@
 
 ## 执行协议
 
-1. 外部 Agent 通过 `npm run gateway` 对应的 JSONL Gateway 或其他兼容适配器发送自然语言请求；`npm run agent` 只是参考 CLI 适配器
+1. 外部 Agent 通过 MCP `context_delivery` Tool 发送自然语言和原始材料；JSONL Gateway 是兼容/回归入口，`npm run agent` 只是参考 CLI 适配器
 2. 每次处理用户输入前，主 Agent 必须读取当前运行时状态
 3. 在当前状态下解释用户输入
 4. 选择一个业务 Skill 或处理人工确认
@@ -115,3 +115,4 @@
 - 创建 v1/v2/final 后缀的版本文件
 - 未经校验写入或覆盖稳定 Context
 - 让外部 Agent 绕过 Gateway 直接调用业务脚本或修改业务文件
+- 让外部 Agent 在没有调用 `context_delivery` 的情况下直接总结用户材料并宣称任务已完成

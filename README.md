@@ -16,6 +16,9 @@ npm install
 
 # 启动通用 External Agent Gateway（JSONL）
 npm run gateway
+
+# 启动 MCP stdio Server，供 Claude、Codex、Cursor 等外部 Agent 配置
+npm run mcp
 ```
 
 外部 Agent 向 Gateway 写入一行 JSON 请求，直接传递用户自然语言：
@@ -25,6 +28,24 @@ npm run gateway
 ```
 
 Gateway 返回统一的 `agent_response`、Runtime 状态、产物、确认项和下一步。外部 Agent 只展示结果并将用户的确认原文再次发送，不能自行构造批准状态。
+
+外部 Agent 的日常入口是 MCP 的 `context_delivery` 工具。工具支持直接传入 `materials[].content`，因此产品经理可以在外部 Agent 对话框粘贴会议记录，无需手动创建文件或执行 Skill 命令。MCP、JSONL Gateway 和 CLI 共享同一个 `AgentOrchestrator`，只有 Runtime 返回的结果才算项目执行结果。
+
+外部 Agent 的 MCP 配置示例：
+
+```json
+{
+  "mcpServers": {
+    "context-delivery": {
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "/绝对路径/Context 工程与需求交付 Agent"
+    }
+  }
+}
+```
+
+连接后，宿主应调用 `context_delivery`。产品经理只需说“请整理这份会议记录，先不要写 PRD”并粘贴原文；宿主负责把原文放入 `materials`，Runtime 会执行 `material-ingest` 并返回真实状态。
 
 ### 日常项目使用
 

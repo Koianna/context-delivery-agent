@@ -717,7 +717,7 @@ export class AgentOrchestrator {
 
 function routeIntent(message: string): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
-  if (/(只整理|整理材料|收集整理|整理并沉淀|沉淀|维护\s*context|先不写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈)/i.test(message)) return "CONTEXT";
+  if (/(只整理|整理材料|整理资料|整理.*(会议记录|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈)/i.test(message)) return "CONTEXT";
   if (/(修改|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
   return "UNKNOWN";
