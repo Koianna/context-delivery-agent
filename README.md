@@ -6,8 +6,7 @@
 
 ## 阶段
 
-当前为个人 POC，验证 Agent 架构和产品方案是否成立。默认面向真实日常工作材料，不内置业务案例；面试时直接从外部 Agent 现场输入材料，展示完整工作流。
-
+当前为个人 POC，验证 Agent 架构和产品方案是否成立。默认面向真实日常工作材料。
 ## 快速开始
 
 ```bash
@@ -84,7 +83,7 @@ npm run agent -- \
 
 `npm run agent` 是参考 CLI 适配器，不是项目唯一入口，也不是业务编排中心。`state:*`、`context:*`、`prd:*`、`change:*` 命令仍作为后台 Harness 与回归工具保留，不要求日常用户直接操作。Gateway 协议定义见 [`schemas/external-agent-gateway.schema.json`](schemas/external-agent-gateway.schema.json)。
 
-当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。项目不内置业务案例或固定演示数据，面试和日常使用都通过外部 Agent 现场提供真实材料。真实模型 Provider 后续可以替换结构化输出生成层，但不能绕过 Runtime。
+当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。真实模型 Provider 后续可以替换结构化输出生成层，但不能绕过 Runtime。
 
 ## Runtime 业务编排中心
 
@@ -131,7 +130,7 @@ npm run eval:workspace
 
 ## 阶段 3：Context 分支
 
-Context 分支验证材料登记、两个 Skill 的结构化结果和 Context 控制规则。回归测试使用隔离的通用测试夹具，不作为面试或日常工作材料：
+Context 分支验证材料登记、两个 Skill 的结构化结果和 Context 控制规则。回归测试使用隔离的通用测试夹具，不作为日常工作材料：
 
 ```bash
 npm run context:register
@@ -175,7 +174,7 @@ npm run change:validate-replan
 npm run eval:change
 ```
 
-`npm run eval:change` 在临时目录内执行 12 个断言，覆盖快照幂等、影响与保留范围、零改写分析、最小返回节点、CP-R01 门禁、重规划上限、`0.2.1` 局部修订和取消恢复。完整演示产物位于：
+`npm run eval:change` 在临时目录内执行 12 个断言，覆盖快照幂等、影响与保留范围、零改写分析、最小返回节点、CP-R01 门禁、重规划上限、`0.2.1` 局部修订和取消恢复。完整测试产物位于：
 
 - `context-workspace/workspace/snapshots/change-target-unavailable-001/`：六个业务产物的原始快照与 hash 清单
 - `context-workspace/workspace/reports/change-impact.json`：规则变更影响报告
@@ -198,11 +197,6 @@ npm run eval:change
 | `evaluation/fixtures/` | 隔离的通用回归测试夹具，不作为产品案例 |
 | `evaluation/` | 测试用例、评分标准、执行日志与 Bad Case |
 
-## 三条演示路径
-
-1. **只整理 Context**：上传材料 → 分析 → 确认 → 维护 → 完成
-2. **Context → PRD 完整交付**：写前对齐 → 确认 → 主体生成 → 确认 → 细节补充 → 审核 → 交付
-3. **修改与重规划**：变更输入 → 影响分析 → 新计划 → 确认 → 返回节点
 
 ## 架构分层
 
