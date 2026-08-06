@@ -39,7 +39,10 @@ export class OpenAICompatibleClient implements StructuredModelClient {
           model: this.options.model,
           temperature: 0,
           messages: [
-            { role: "system", content: `${input.instructions}\n\n只返回 JSON 对象，不要 Markdown 代码围栏。` },
+            {
+              role: "system",
+              content: `${input.instructions}\n\n# 本轮阶段性响应 JSON Schema\n\n${JSON.stringify(input.schema, null, 2)}\n\n只返回符合该 Schema 的 JSON 对象，不要 Markdown 代码围栏。`,
+            },
             { role: "user", content: JSON.stringify(input.content) },
           ],
           response_format: { type: "json_object" },

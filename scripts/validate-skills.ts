@@ -3,13 +3,19 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
 import { parseFrontmatter } from "./lib/repository.js";
+import { SKILL_NAMES, SkillRuntime, type SkillName } from "./agent/skill-runtime.js";
 
 const skillNames = process.argv.slice(2).length
   ? process.argv.slice(2)
   : ["material-ingest", "context-maintain", "prd-thinking", "prd-write", "prd-review", "change-impact"];
 const errors: string[] = [];
+const skillRuntime = new SkillRuntime(PROJECT_ROOT);
 
 for (const skillName of skillNames) {
+  if (!SKILL_NAMES.includes(skillName as SkillName)) {
+    errors.push(`${skillName}: 未知 Skill`);
+    continue;
+  }
   const directory = path.join(PROJECT_ROOT, "skills", skillName);
   const skillPath = path.join(directory, "SKILL.md");
   if (!fs.existsSync(skillPath)) {
@@ -28,9 +34,9 @@ for (const skillName of skillNames) {
     if (!fs.existsSync(path.join(directory, resource))) errors.push(`${skillName}: 缺少 ${resource}`);
   }
   try {
-    JSON.parse(fs.readFileSync(path.join(directory, "schema.json"), "utf-8"));
-  } catch {
-    errors.push(`${skillName}: schema.json 不是有效 JSON`);
+    skillRuntime.load(skillName as SkillName);
+  } catch (error) {
+    errors.push(`${skillName}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

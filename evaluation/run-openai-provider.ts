@@ -6,7 +6,9 @@ import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { OpenAIResponsesClient } from "../scripts/agent/openai-client.js";
 import { OpenAICompatibleClient } from "../scripts/agent/openai-compatible-client.js";
 import { AnthropicMessagesClient } from "../scripts/agent/anthropic-client.js";
+import type { ModelJsonRequest, StructuredModelClient } from "../scripts/agent/model-client.js";
 import { OpenAIProvider } from "../scripts/agent/openai-provider.js";
+import { SKILL_NAMES, SkillRuntime } from "../scripts/agent/skill-runtime.js";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
 
 interface Result { case_id: string; passed: boolean; detail: string }
@@ -58,6 +60,13 @@ async function main() {
     check("MODEL-03", body.text?.format?.name === "context_analysis" && typeof body.input === "string", "请求包含结构化任务名和输入材料"),
     check("MODEL-04", actual.information_items[0]?.evidence[0]?.quote === "当前产品支持导入会议材料。", "客户端解析模型结构化输出并保留来源证据"),
   ];
+  const skillRuntime = new SkillRuntime(PROJECT_ROOT);
+  const loadedSkills = SKILL_NAMES.map((name) => skillRuntime.load(name));
+  const compiledSkills = skillRuntime.buildInstructions(SKILL_NAMES.map((name) => ({ name })), "离线 Skill 加载校验");
+  results.push(
+    check("MODEL-13", loadedSkills.every((skill) => skill.promptVersion === "0.2.0" && skill.references.length > 0 && skill.examples.length > 0 && /^[a-f0-9]{64}$/.test(skill.sha256)), "六个 Skill 的 Prompt、规则、示例和内容哈希可被 Runtime 加载"),
+    check("MODEL-14", loadedSkills.every((skill) => compiledSkills.includes(`## 激活 Skill: ${skill.name}`) && compiledSkills.includes(String(skill.schema.$id))), "指令编译结果包含六个 Skill 及其业务 Schema"),
+  );
 
   const failedClient = new OpenAIResponsesClient({
     apiKey: "test-key",
@@ -85,10 +94,11 @@ async function main() {
     },
   });
   const compatibleResult = await compatible.generateJson<{ ok: boolean }>({ name: "demo", schema: { type: "object" }, instructions: "返回 JSON", content: { value: 1 } });
-  const compatibleBody = compatibleRequests[0] as { model?: string; response_format?: { type?: string }; messages?: unknown[] };
+  const compatibleBody = compatibleRequests[0] as { model?: string; response_format?: { type?: string }; messages?: Array<{ role?: string; content?: string }> };
   results.push(
     check("MODEL-10", compatibleBody.model === "deepseek-chat" && compatibleBody.response_format?.type === "json_object", "OpenAI 兼容服务使用 Chat Completions JSON 模式"),
     check("MODEL-11", compatibleResult.ok === true, "OpenAI 兼容服务响应可统一解析"),
+    check("MODEL-15", compatibleBody.messages?.[0]?.content?.includes("本轮阶段性响应 JSON Schema") === true, "DeepSeek、Kimi 等兼容模型会显式收到阶段性响应 Schema"),
   );
 
   const claude = new AnthropicMessagesClient({
@@ -113,22 +123,73 @@ async function main() {
   fs.mkdirSync(sourceDir, { recursive: true });
   fs.writeFileSync(path.join(sourceDir, "产品现状.md"), sourceText, "utf-8");
   const runtimeOutput = { ...expected, information_items: [{ ...expected.information_items[0], source_refs: [sourceId], evidence: [{ source_id: sourceId, location: "第 1 行", quote: sourceText }] }] };
+  const runtimeRequests: Array<Record<string, unknown>> = [];
   const runtimeClient = new OpenAIResponsesClient({
     apiKey: "test-key",
     model: "test-model",
-    fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify(runtimeOutput) }), { status: 200 }),
+    fetchImpl: async (_url, init) => {
+      runtimeRequests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ output_text: JSON.stringify(runtimeOutput) }), { status: 200 });
+    },
   });
   const response = await new AgentOrchestrator(new OpenAIProvider(runtimeClient, "test-model")).handleMessage(
     "整理并沉淀这份产品现状，不要写 PRD",
     { taskId, projectId, materialPath: sourceDir, debug: true },
   );
   const stableContext = path.join(PROJECT_ROOT, "context-workspace/context", projectId, "product");
+  const runtimeRequest = runtimeRequests[0] as {
+    instructions?: string;
+    text?: { format?: { schema?: { properties?: { information_items?: { items?: { properties?: { information_type?: { enum?: string[] } } } } } } } };
+  };
   results.push(
     check("MODEL-06", response.provider.id === "openai" && response.state.id === "WAITING_CONTEXT_CONFIRM", "模型 Provider 结果通过 Runtime 并停在 CP-C01"),
     check("MODEL-07", response.confirmation?.items.length === 1 && response.artifacts.some((item) => item.label === "结构化整理稿"), "Runtime 返回模型生成的候选和可阅读整理稿"),
     check("MODEL-08", !fs.existsSync(stableContext) || !fs.readdirSync(stableContext).some((name) => name.endsWith(".md")), "CP-C01 前模型不能写入稳定 Context"),
+    check("MODEL-16", runtimeRequest.instructions?.includes("激活 Skill: material-ingest / ANALYZE") === true && runtimeRequest.instructions.includes("激活 Skill: context-maintain / ANALYZE") && runtimeRequest.instructions.includes("classification-rules.md"), "Runtime 的真实模型请求包含当前 Skill 和确定性规则"),
+    check("MODEL-17", runtimeRequest.text?.format?.schema?.properties?.information_items?.items?.properties?.information_type?.enum?.includes("CONFIRMED_DECISION") === true, "Context 模型响应约束从 material-ingest Schema 派生"),
   );
   clearRuntime(taskId, projectId);
+
+  const prdTaskId = "skill-driven-prd-eval";
+  const prdProjectId = "skill-driven-prd";
+  const prdRequests: ModelJsonRequest[] = [];
+  const prdClient: StructuredModelClient = {
+    providerId: "openai",
+    async generateJson<T>(input: ModelJsonRequest): Promise<T> {
+      prdRequests.push(input);
+      const content = input.content as { sources?: Array<{ ref: string }>; core_markdown?: string };
+      const sourceRefs = content.sources?.map((item) => item.ref) ?? [];
+      const outputs: Record<string, unknown> = {
+        prd_thinking: {
+          background_card: {
+            materials_read: sourceRefs, source_refs: sourceRefs, current_state: "已读取项目 Context", problem: "待确认核心问题", target_users: ["待确认"], user_scenarios: ["待确认"],
+            upstream_dependencies: [], downstream_impacts: [], confirmed_scope: [], confirmed_out_of_scope: [], conflicts: [], missing_information: ["目标与范围"],
+          },
+          decision_questions: [{ decision_id: "decision_scope", question: "请确认本期目标与范围", source_refs: sourceRefs }],
+        },
+        prd_core: { core_markdown: "# Skill Driven PRD\n\n## 1. 背景与问题\n待确认。\n\n## 2. 目标与非目标\n待确认。\n\n## 3. 目标用户\n待确认。\n\n## 4. 本期范围\n待确认。\n\n## 5. 核心流程\n待确认。\n\n## 6. 已确认决策\n以 CP-P01 为准。" },
+        prd_details: { details_markdown: `${content.core_markdown ?? "# Skill Driven PRD"}\n\n## 功能规则\n待确认。\n\n## 角色与权限\n待确认。\n\n## 边界与异常\n待确认。\n\n## 验收标准\n待确认。` },
+        prd_review: { review_id: "review-skill-driven", reviewed_prd_version: "0.2.0", issues: [], summary: { p0_count: 0, p1_count: 0, p2_count: 0, recommendation: "PASS" }, passed_dimensions: ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"], unverifiable_items: [] },
+      };
+      return outputs[input.name] as T;
+    },
+  };
+  clearRuntime(prdTaskId, prdProjectId);
+  const prdProvider = new OpenAIProvider(prdClient, "test-model");
+  prdProvider.setProjectId(prdProjectId);
+  await prdProvider.getPrdAssets(prdTaskId, "THINKING");
+  await prdProvider.getPrdAssets(prdTaskId, "CORE", { userConfirmation: "确认目标与范围" });
+  const prdAssets = await prdProvider.getPrdAssets(prdTaskId, "DETAILS", { userConfirmation: "确认核心流程" });
+  const prdRequestNames = prdRequests.map((item) => item.name);
+  const detailsRequest = prdRequests.find((item) => item.name === "prd_details");
+  const reviewRequest = prdRequests.find((item) => item.name === "prd_review");
+  const reviewTemplate = JSON.parse(fs.readFileSync(prdAssets.reviewTemplatePath, "utf-8")) as { review_id?: string };
+  results.push(
+    check("MODEL-18", prdRequestNames.join(",") === "prd_thinking,prd_core,prd_details,prd_review", "PRD 写前、CORE、DETAILS 和独立审核按四次模型调用顺序执行"),
+    check("MODEL-19", detailsRequest?.instructions.includes("激活 Skill: prd-write / DETAILS") === true && !detailsRequest.instructions.includes("激活 Skill: prd-review"), "DETAILS 调用只由 prd-write Skill 驱动"),
+    check("MODEL-20", reviewRequest?.instructions.includes("激活 Skill: prd-review / REVIEW") === true && reviewTemplate.review_id === "review-skill-driven", "独立审核只由 prd-review Skill 驱动并产生 Runtime 审核模板"),
+  );
+  clearRuntime(prdTaskId, prdProjectId);
 
   const blockedTaskId = "openai-provider-missing-key-eval";
   const blockedProjectId = "model-provider-blocked-eval";

@@ -106,7 +106,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 Kimi 使用 `MODEL_PROVIDER=kimi`、`KIMI_API_KEY`、`KIMI_MODEL` 和 `KIMI_BASE_URL`；Claude 使用 `MODEL_PROVIDER=claude`、`ANTHROPIC_API_KEY` 和 `CLAUDE_MODEL`。其他支持 OpenAI 兼容 Chat Completions 的服务使用 `MODEL_PROVIDER=compatible`、`MODEL_API_KEY`、`MODEL_ID`、`MODEL_BASE_URL`。模型名称和可用能力以服务商账号为准，`.env` 已被 Git 忽略，不要把密钥提交到仓库。
 
-启用后，模型负责材料语义提取、结构化整理、PRD 候选和变更影响分析；所有厂商都必须通过统一的 `StructuredModelClient` 契约返回 JSON。Runtime 仍负责本地 Schema 校验、状态转移、人工确认、版本检查和文件写入。模型不能直接修改稳定 Context 或跳过 CP-C01、CP-P01、CP-P02、CP-P03、CP-R01。发送给模型的内容包括当前任务所需的原始材料或业务产物，因此接入真实业务资料前应确认其符合组织的数据和隐私政策。
+启用后，模型负责材料语义提取、结构化整理、PRD 候选和变更影响分析；所有厂商都必须通过统一的 `StructuredModelClient` 契约返回 JSON。每次模型调用前，`SkillRuntime` 会从 `skills/<skill_name>/` 动态加载 `SKILL.md`、`prompt.md`、`references/`、`schema.json` 和 `examples/`；修改这些文件会直接影响下一次真实模型生成。Runtime 仍负责本地 Schema 校验、状态转移、人工确认、版本检查和文件写入。模型不能直接修改稳定 Context 或跳过 CP-C01、CP-P01、CP-P02、CP-P03、CP-R01。发送给模型的内容包括当前任务所需的原始材料或业务产物，因此接入真实业务资料前应确认其符合组织的数据和隐私政策。
 
 ```bash
 # 不访问真实 API 的模型接入回归测试

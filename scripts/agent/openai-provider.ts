@@ -1,16 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { sha256Buffer } from "../lib/change-snapshot.js";
 import type { ChangeAnalysisOutput, ChangeType } from "../lib/change-types.js";
 import { PROJECT_ROOT } from "../lib/config.js";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import { loadLocalEnv } from "../lib/env.js";
 import type { PrdReviewTemplate, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
-import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { parseFrontmatter, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { OpenAIResponsesClient } from "./openai-client.js";
 import type { StructuredModelClient } from "./model-client.js";
+import { SkillRuntime } from "./skill-runtime.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
 
 interface ContextModelOutput {
@@ -31,8 +31,9 @@ interface PrdCoreModelOutput {
 
 interface PrdDetailsModelOutput {
   details_markdown: string;
-  review: PrdReviewTemplate;
 }
+
+type PrdReviewModelOutput = PrdReviewTemplate;
 
 interface ChangeModelOutput {
   change_type: ChangeType;
@@ -50,7 +51,13 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
   readonly id: string;
   readonly label: string;
 
-  constructor(private readonly client: StructuredModelClient, private readonly model: string, providerId = client.providerId, label?: string) {
+  constructor(
+    private readonly client: StructuredModelClient,
+    private readonly model: string,
+    providerId = client.providerId,
+    label?: string,
+    private readonly skills = new SkillRuntime(),
+  ) {
     super();
     this.id = providerId;
     this.label = label ?? `${providerId} Provider (${model})`;
@@ -78,8 +85,11 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     }));
     const generated = await this.client.generateJson<ContextModelOutput>({
       name: "context_analysis",
-      schema: CONTEXT_SCHEMA,
-      instructions: CONTEXT_INSTRUCTIONS,
+      schema: contextResponseSchema(this.skills.load("material-ingest").schema),
+      instructions: this.skills.buildInstructions(
+        [{ name: "material-ingest", mode: "ANALYZE" }, { name: "context-maintain", mode: "ANALYZE" }],
+        "从原始材料提取可追溯信息单元，识别冲突和待确认问题，并生成一份中文可阅读整理稿。Runtime 会统计材料处理记录并根据信息单元构建 Context proposal。",
+      ),
       content: { task_goal: taskGoal, project_id: this.projectId, sources },
     });
     const materialOutput = normalizeMaterialOutput(input, generated.information_items);
@@ -107,6 +117,7 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const thinkingPath = path.join(outputDir, "openai-prd-thinking.json");
     const corePath = path.join(outputDir, "openai-prd-core.json");
     const detailsPath = path.join(outputDir, "openai-prd-details.json");
+    const reviewPath = path.join(outputDir, "openai-prd-review.json");
 
     if (phase === "THINKING" && !fs.existsSync(thinkingPath)) {
       writeJsonAtomic(thinkingPath, await this.generatePrdThinking(assets));
@@ -123,7 +134,13 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
       if (!fs.existsSync(corePath)) throw new Error("缺少经 CP-P01 生成的 PRD CORE，不能生成 DETAILS");
       writeJsonAtomic(detailsPath, await this.generatePrdDetails(assets, context.userConfirmation));
     }
-    if (fs.existsSync(detailsPath)) applyPrdDetails(readJson<PrdDetailsModelOutput>(detailsPath), assets, this.projectId);
+    if (fs.existsSync(detailsPath)) {
+      applyPrdDetails(readJson<PrdDetailsModelOutput>(detailsPath), assets, this.projectId);
+    }
+    if (phase === "DETAILS" && !fs.existsSync(reviewPath)) {
+      writeJsonAtomic(reviewPath, await this.generatePrdReview(assets));
+    }
+    if (fs.existsSync(reviewPath)) applyPrdReview(readJson<PrdReviewModelOutput>(reviewPath), assets);
     return assets;
   }
 
@@ -134,7 +151,10 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const generated = await this.client.generateJson<ChangeModelOutput>({
       name: "change_analysis",
       schema: CHANGE_SCHEMA,
-      instructions: CHANGE_INSTRUCTIONS,
+      instructions: this.skills.buildInstructions(
+        [{ name: "change-impact", mode: "ANALYZE" }],
+        "对照用户变更请求、任务快照和当前业务产物，输出变更分类、受影响项、保留项、风险和待确认问题。返回节点由 Runtime 依据分类确定。",
+      ),
       content: { change_request: message, task_state: state, artifacts: artifactContents },
     });
     const recommended = returnStateFor(generated.change_type);
@@ -168,7 +188,10 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     return await this.client.generateJson<PrdThinkingModelOutput>({
       name: "prd_thinking",
       schema: PRD_THINKING_SCHEMA,
-      instructions: PRD_THINKING_INSTRUCTIONS,
+      instructions: this.skills.buildInstructions(
+        [{ name: "prd-thinking", mode: "ANALYZE" }],
+        "生成 PRD 写作前的背景理解和 1 至 3 个必须由产品经理回答的阻塞决策问题，不生成 PRD 正文。",
+      ),
       content: { project_id: this.projectId, sources },
     });
   }
@@ -178,7 +201,10 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     return await this.client.generateJson<PrdCoreModelOutput>({
       name: "prd_core",
       schema: PRD_CORE_SCHEMA,
-      instructions: PRD_CORE_INSTRUCTIONS,
+      instructions: this.skills.buildInstructions(
+        [{ name: "prd-write", mode: "CORE" }],
+        "依据经 CP-P01 确认的写前分析生成 PRD CORE Markdown，只包含主体结构，不提前展开 DETAILS。",
+      ),
       content: { project_id: this.projectId, thinking, user_confirmation: userConfirmation ?? "" },
     });
   }
@@ -187,10 +213,28 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const core = readJson<PrdWriteOutput>(assets.corePath);
     const coreMarkdown = fs.readFileSync(repoRefToPath(core.prd_artifact.content_ref, PROJECT_ROOT), "utf-8");
     return await this.client.generateJson<PrdDetailsModelOutput>({
-      name: "prd_details_review",
+      name: "prd_details",
       schema: PRD_DETAILS_SCHEMA,
-      instructions: PRD_DETAILS_INSTRUCTIONS,
+      instructions: this.skills.buildInstructions(
+        [{ name: "prd-write", mode: "DETAILS" }],
+        "保留已确认 CORE 的业务含义，补充功能规则、角色与权限、边界与异常、依赖和可验证验收标准，只返回完整 DETAILS Markdown。",
+      ),
       content: { project_id: this.projectId, core_markdown: coreMarkdown, user_confirmation: userConfirmation ?? "" },
+    });
+  }
+
+  private async generatePrdReview(assets: PrdProviderAssets): Promise<PrdReviewModelOutput> {
+    const details = readJson<PrdWriteOutput>(assets.detailsPath);
+    const prdMarkdown = fs.readFileSync(repoRefToPath(details.prd_artifact.content_ref, PROJECT_ROOT), "utf-8");
+    const thinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
+    return await this.client.generateJson<PrdReviewModelOutput>({
+      name: "prd_review",
+      schema: PRD_REVIEW_SCHEMA,
+      instructions: this.skills.buildInstructions(
+        [{ name: "prd-review", mode: "REVIEW" }],
+        "以独立审核者身份只读审查完整 PRD DETAILS，核对写前分析与决策，只返回审核模板；PRD 正文哈希由 Runtime 计算。",
+      ),
+      content: { project_id: this.projectId, prd_markdown: prdMarkdown, thinking },
     });
   }
 }
@@ -279,7 +323,10 @@ function applyPrdDetails(generated: PrdDetailsModelOutput, assets: PrdProviderAs
   writeTextAtomic(repoRefToPath(details.prd_artifact.content_ref, PROJECT_ROOT), withPrdFrontmatter(generated.details_markdown, projectId, "0.2.0"));
   details.prd_artifact.decision_refs = decisionIds;
   writeJsonAtomic(assets.detailsPath, details);
-  const review = { ...generated.review, reviewed_prd_version: "0.2.0" };
+}
+
+function applyPrdReview(generated: PrdReviewModelOutput, assets: PrdProviderAssets): void {
+  const review = { ...generated, reviewed_prd_version: "0.2.0" };
   writeJsonAtomic(assets.reviewTemplatePath, review);
   assets.p03 = {
     confirmation_type: "REVIEW_DISPOSITION",
@@ -329,26 +376,39 @@ function safeId(value: string, fallback: string): string {
 
 function clamp(value: number): number { return Math.max(0, Math.min(1, value)); }
 
-const CONTEXT_INSTRUCTIONS = `你是 material-ingest 与 context-maintain 的生成层。只依据输入原文提取信息，逐字 evidence.quote 必须真实出现在对应来源。用户反馈、建议、假设和问题不得标记为 CONFIRMED。只有原文明确陈述为现状、约束或已作出的决策时才可 target_layer=CONTEXT，且必须 requires_confirmation=true。输出中文整理稿，保留不确定性，不生成 PRD。`;
-const PRD_THINKING_INSTRUCTIONS = `你是 prd-thinking 的生成层。只依据提供的 Context 和材料生成背景卡，并提出 1 到 3 个必须由产品经理回答的阻塞决策问题。不能输出 PRD 正文，不能替产品经理决定价值、优先级、目标或范围。`;
-const PRD_CORE_INSTRUCTIONS = `你是 prd-write/CORE 的生成层。依据已经过 CP-P01 确认的写前分析生成 Markdown。只包含背景与问题、目标、非目标、目标用户、本期范围、核心流程和已确认决策；不得包含功能细节、角色与权限、边界与异常或验收标准。没有依据的内容明确标记待确认。`;
-const PRD_DETAILS_INSTRUCTIONS = `你是 prd-write/DETAILS 与独立 prd-review 的生成层。保留 CORE 全部内容并补充功能规则、角色与权限、边界与异常、验收标准。没有依据的内容明确标记待确认。随后只读审核该 DETAILS，不得修改正文；审核问题计数必须与 summary 一致。`;
-const CHANGE_INSTRUCTIONS = `你是 change-impact/ANALYZE 的生成层。比较变更请求和当前业务产物，只列受影响项、保留项、风险和问题，不修改原文。affected_items 和 unaffected_items 的 artifact_ref 必须来自输入 artifacts。无法判断时使用 UNKNOWN，不能擅自扩大重规划范围。`;
-
 const STRING_ARRAY = { type: "array", items: { type: "string" } };
 const IMPACT_ITEMS = { type: "array", items: { type: "object", additionalProperties: false, required: ["item_id", "artifact_ref", "locations", "impact_type", "reason"], properties: { item_id: { type: "string" }, artifact_ref: { type: "string" }, locations: STRING_ARRAY, impact_type: { type: ["string", "null"], enum: ["REWRITE_REQUIRED", "REVIEW_INVALIDATED", "DECISION_RECONFIRM_REQUIRED", "CONTEXT_REVALIDATION_REQUIRED", null] }, reason: { type: "string" } } } };
 
-const CONTEXT_SCHEMA = {
-  type: "object", additionalProperties: false, required: ["information_items", "conflicts", "remaining_questions", "structured_markdown"],
-  properties: {
-    information_items: { type: "array", items: { type: "object", additionalProperties: false, required: ["item_id", "content", "information_type", "maturity", "source_refs", "evidence", "target_layer", "confidence", "requires_confirmation"], properties: {
-      item_id: { type: "string" }, content: { type: "string" }, information_type: { type: "string", enum: ["USER_FEEDBACK", "OBSERVATION", "FACT", "DATA", "OPINION", "PROPOSAL", "CONFIRMED_DECISION", "OPEN_QUESTION", "DEPRECATED_CONTENT"] }, maturity: { type: "string", enum: ["RAW", "UNCONFIRMED", "CONFIRMED", "SUPERSEDED", "ARCHIVED"] }, source_refs: STRING_ARRAY, evidence: { type: "array", items: { type: "object", additionalProperties: false, required: ["source_id", "location", "quote"], properties: { source_id: { type: "string" }, location: { type: "string" }, quote: { type: "string" } } } }, target_layer: { type: "string", enum: ["DRAFTS", "WORKSPACE", "CONTEXT"] }, confidence: { type: "number" }, requires_confirmation: { type: "boolean" },
-    } } },
-    conflicts: STRING_ARRAY,
-    remaining_questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["question", "source_refs"], properties: { question: { type: "string" }, source_refs: STRING_ARRAY } } },
-    structured_markdown: { type: "string" },
-  },
-} as Record<string, unknown>;
+function contextResponseSchema(materialSchema: Record<string, unknown>): Record<string, unknown> {
+  const properties = materialSchema.properties as Record<string, unknown> | undefined;
+  const informationItems = properties?.information_items;
+  if (!informationItems || typeof informationItems !== "object") {
+    throw new Error("material-ingest/schema.json 缺少 information_items 契约");
+  }
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["information_items", "conflicts", "remaining_questions", "structured_markdown"],
+    properties: {
+      information_items: strictJsonSchema(informationItems),
+      conflicts: STRING_ARRAY,
+      remaining_questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["question", "source_refs"], properties: { question: { type: "string" }, source_refs: STRING_ARRAY } } },
+      structured_markdown: { type: "string" },
+    },
+  };
+}
+
+function strictJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(strictJsonSchema);
+  if (!value || typeof value !== "object") return value;
+  const output = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, strictJsonSchema(entry)]));
+  const properties = output.properties;
+  if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+    output.additionalProperties = false;
+    output.required = Object.keys(properties as Record<string, unknown>);
+  }
+  return output;
+}
 
 const PRD_THINKING_SCHEMA = {
   type: "object", additionalProperties: false, required: ["background_card", "decision_questions"],
@@ -363,11 +423,12 @@ const PRD_CORE_SCHEMA = {
 } as Record<string, unknown>;
 
 const PRD_DETAILS_SCHEMA = {
-  type: "object", additionalProperties: false, required: ["details_markdown", "review"],
-  properties: {
-    details_markdown: { type: "string" },
-    review: { type: "object", additionalProperties: false, required: ["review_id", "reviewed_prd_version", "issues", "summary", "passed_dimensions", "unverifiable_items"], properties: { review_id: { type: "string" }, reviewed_prd_version: { type: "string" }, issues: { type: "array", items: { type: "object", additionalProperties: false, required: ["issue_id", "severity", "dimension", "location", "description", "evidence", "impact", "recommended_fix", "requires_replan"], properties: { issue_id: { type: "string" }, severity: { type: "string", enum: ["P0", "P1", "P2"] }, dimension: { type: "string" }, location: { type: "string" }, description: { type: "string" }, evidence: STRING_ARRAY, impact: { type: "string" }, recommended_fix: { type: "string" }, requires_replan: { type: "boolean" } } } }, summary: { type: "object", additionalProperties: false, required: ["p0_count", "p1_count", "p2_count", "recommendation"], properties: { p0_count: { type: "integer" }, p1_count: { type: "integer" }, p2_count: { type: "integer" }, recommendation: { type: "string", enum: ["PASS", "PASS_WITH_NOTES", "FIX_BEFORE_DELIVERY", "REPLAN_REQUIRED"] } } }, passed_dimensions: STRING_ARRAY, unverifiable_items: STRING_ARRAY } },
-  },
+  type: "object", additionalProperties: false, required: ["details_markdown"], properties: { details_markdown: { type: "string" } },
+} as Record<string, unknown>;
+
+const PRD_REVIEW_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["review_id", "reviewed_prd_version", "issues", "summary", "passed_dimensions", "unverifiable_items"],
+  properties: { review_id: { type: "string" }, reviewed_prd_version: { type: "string" }, issues: { type: "array", items: { type: "object", additionalProperties: false, required: ["issue_id", "severity", "dimension", "location", "description", "evidence", "impact", "recommended_fix", "requires_replan"], properties: { issue_id: { type: "string" }, severity: { type: "string", enum: ["P0", "P1", "P2"] }, dimension: { type: "string", enum: ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"] }, location: { type: "string" }, description: { type: "string" }, evidence: STRING_ARRAY, impact: { type: "string" }, recommended_fix: { type: "string" }, requires_replan: { type: "boolean" } } } }, summary: { type: "object", additionalProperties: false, required: ["p0_count", "p1_count", "p2_count", "recommendation"], properties: { p0_count: { type: "integer" }, p1_count: { type: "integer" }, p2_count: { type: "integer" }, recommendation: { type: "string", enum: ["PASS", "PASS_WITH_NOTES", "FIX_BEFORE_DELIVERY", "REPLAN_REQUIRED"] } } }, passed_dimensions: STRING_ARRAY, unverifiable_items: STRING_ARRAY },
 } as Record<string, unknown>;
 
 const CHANGE_SCHEMA = {
