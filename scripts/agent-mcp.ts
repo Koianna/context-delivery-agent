@@ -75,7 +75,7 @@ async function callTool(id: JsonRpcId, params: unknown): Promise<unknown> {
   const inlinePath = args.materials?.length
     ? writeInlineMaterials(args.materials, projectId, taskId)
     : undefined;
-  const response = agent.handleMessage(args.message, {
+  const response = await agent.handleMessage(args.message, {
     taskId,
     sessionId: args.session_id,
     projectId,

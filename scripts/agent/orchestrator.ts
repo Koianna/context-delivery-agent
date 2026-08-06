@@ -14,11 +14,13 @@ import {
   loadStates,
   PROJECT_ROOT,
   readTaskState,
+  writeTaskState,
 } from "../lib/config.js";
 import type { ContextAnalysisOutput } from "../lib/context-types.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
 import type { ChangeAnalysisOutput } from "../lib/change-types.js";
 import { readJson, repoRefToPath } from "../lib/repository.js";
+import { loadLocalEnv } from "../lib/env.js";
 import { contextIndexRef } from "../lib/project-paths.js";
 import { assertTransition } from "../lib/state-runtime.js";
 import { createTask, updateTask } from "../lib/task-runtime.js";
@@ -32,6 +34,9 @@ import { recordReplan } from "../record-replan.js";
 import { registerMaterials } from "../register-materials.js";
 import { restoreCancelledChange } from "../restore-change-snapshot.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
+import { OpenAIProvider } from "./openai-provider.js";
+import { OpenAICompatibleClient } from "./openai-compatible-client.js";
+import { AnthropicMessagesClient } from "./anthropic-client.js";
 import type {
   AgentArtifact,
   AgentIntent,
@@ -53,7 +58,7 @@ const WAITING_STATES = new Set<StateId>([
 export class AgentOrchestrator {
   constructor(private readonly provider: AgentProvider = defaultProvider()) {}
 
-  handleMessage(message: string, options: HandleMessageOptions = {}): AgentResponse {
+  async handleMessage(message: string, options: HandleMessageOptions = {}): Promise<AgentResponse> {
     const normalized = message.trim();
     if (!normalized) return this.blocked("请输入你希望整理的材料、要准备的 PRD，或要修改的内容。", options);
 
@@ -66,21 +71,22 @@ export class AgentOrchestrator {
       this.provider.setProjectId?.(options.projectId ?? state.project_id);
 
       if (isPause(normalized)) return this.pause(state, options);
-      if (state.current_state === "TASK_PAUSED") return this.resume(state, normalized, options);
+      if (state.current_state === "EXECUTION_BLOCKED") return await this.retryBlocked(state, normalized, options);
+      if (state.current_state === "TASK_PAUSED") return await this.resume(state, normalized, options);
       if (isCancelTask(normalized) && state.current_state !== "WAITING_REPLAN_CONFIRM") {
         return this.cancelTask(state, options);
       }
 
       if (WAITING_STATES.has(state.current_state)) {
-        return this.handleWaitingState(state, normalized, options);
+        return await this.handleWaitingState(state, normalized, options);
       }
 
       const intent = routeIntent(normalized);
-      if (intent === "CONTINUE") return this.continueCurrent(state, options);
+      if (intent === "CONTINUE") return await this.continueCurrent(state, options);
       if (intent === "UNKNOWN") return this.requestIntentClarification(state, normalized, options);
-      return this.startIntent(state, intent, normalized, options);
+      return await this.startIntent(state, intent, normalized, options);
     } catch (error) {
-      return this.blocked(error instanceof Error ? error.message : String(error), options);
+      return this.blockExecution(error instanceof Error ? error.message : String(error), options);
     }
   }
 
@@ -93,16 +99,16 @@ export class AgentOrchestrator {
     });
   }
 
-  private startIntent(
+  private async startIntent(
     state: TaskState,
     intent: Exclude<AgentIntent, "CONTINUE" | "UNKNOWN">,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     state = this.moveToRouting(state);
-    if (intent === "CONTEXT") return this.startContext(state, message, options);
-    if (intent === "PRD") return this.startPrd(state, message, options);
-    return this.startChange(state, message, options);
+    if (intent === "CONTEXT") return await this.startContext(state, message, options);
+    if (intent === "PRD") return await this.startPrd(state, message, options);
+    return await this.startChange(state, message, options);
   }
 
   private moveToRouting(state: TaskState): TaskState {
@@ -114,11 +120,11 @@ export class AgentOrchestrator {
     return requireState(state.task_id);
   }
 
-  private startContext(
+  private async startContext(
     state: TaskState,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     if (state.current_state !== "INTENT_ROUTING") {
       throw new Error(`当前状态 ${state.current_state} 不能启动材料整理`);
     }
@@ -126,7 +132,7 @@ export class AgentOrchestrator {
     assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "用户要求整理材料和维护 Context" });
 
     const materialPath = options.materialPath ?? extractExistingPath(message);
-    const assets = this.provider.getContextAssets(materialPath, state.task_id, message);
+    const assets = await this.provider.getContextAssets(materialPath, state.task_id, message);
     const reportRefs = this.provider.getContextReportRefs(state.task_id, assets.structuredMaterialPath);
     const registered = registerMaterials(assets.inputPath, PROJECT_ROOT, state.project_id);
     const recorded = recordContextAnalysis({
@@ -197,11 +203,11 @@ export class AgentOrchestrator {
     });
   }
 
-  private startPrd(
+  private async startPrd(
     state: TaskState,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     if (state.current_state === "INTENT_ROUTING") {
       updateTask({ taskId: state.task_id, mode: "PRD", goal: message });
       assertTransition({ taskId: state.task_id, toState: "PRD_THINKING", reason: "用户要求准备 PRD" });
@@ -212,7 +218,7 @@ export class AgentOrchestrator {
       throw new Error(`当前状态 ${state.current_state} 不能启动 PRD 写前对齐`);
     }
 
-    const assets = this.provider.getPrdAssets(state.task_id);
+    const assets = await this.provider.getPrdAssets(state.task_id, "THINKING");
     const reportRefs = this.provider.getPrdReportRefs(state.task_id);
     const recorded = recordPrdThinking(
       state.task_id,
@@ -246,18 +252,18 @@ export class AgentOrchestrator {
     });
   }
 
-  private startChange(
+  private async startChange(
     state: TaskState,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     if (state.current_state !== "INTENT_ROUTING") {
       throw new Error(`当前状态 ${state.current_state} 不能启动变更分析`);
     }
     updateTask({ taskId: state.task_id, mode: "CHANGE", goal: message });
     assertTransition({ taskId: state.task_id, toState: "CHANGE_ANALYZING", reason: "用户提出已交付需求的实质变更" });
     let current = requireState(state.task_id);
-    const analysisAssets = this.provider.prepareChangeAnalysis(current, message);
+    const analysisAssets = await this.provider.prepareChangeAnalysis(current, message);
     const snapshot = createTaskChangeSnapshot(state.task_id, analysisAssets.inputPath);
     const analysisResult = recordChangeAnalysis(
       state.task_id,
@@ -268,7 +274,7 @@ export class AgentOrchestrator {
     );
     assertTransition({ taskId: state.task_id, toState: "REPLANNING", reason: "变更影响范围已分析" });
     current = requireState(state.task_id);
-    const replanAssets = this.provider.prepareChangeReplan(current, analysisAssets);
+    const replanAssets = await this.provider.prepareChangeReplan(current, analysisAssets);
     const replanResult = recordReplan(
       state.task_id,
       replanAssets.replanPath,
@@ -307,29 +313,29 @@ export class AgentOrchestrator {
     });
   }
 
-  private handleWaitingState(
+  private async handleWaitingState(
     state: TaskState,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     const confirmation = getActiveConfirmation(state.task_id, state.current_state);
     if (!confirmation) throw new Error(`等待状态 ${state.current_state} 缺少待确认记录`);
     if (state.current_state === "WAITING_INTENT_CLARIFICATION") {
       resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "CONFIRM" });
       assertTransition({ taskId: state.task_id, toState: "INTENT_ROUTING", reason: "用户补充了任务意图" });
-      return this.handleMessage(message, { ...options, taskId: state.task_id });
+      return await this.handleMessage(message, { ...options, taskId: state.task_id });
     }
     if (state.current_state === "WAITING_CONTEXT_CONFIRM") {
       return this.resolveContextConfirmation(state, confirmation, message, options);
     }
     if (state.current_state === "WAITING_DECISION_CONFIRM") {
-      return this.resolveP01(state, confirmation, message, options);
+      return await this.resolveP01(state, confirmation, message, options);
     }
     if (state.current_state === "WAITING_SCOPE_CONFIRM") {
-      return this.resolveP02(state, confirmation, message, options);
+      return await this.resolveP02(state, confirmation, message, options);
     }
     if (state.current_state === "WAITING_REVIEW_DECISION") {
-      return this.resolveP03(state, confirmation, message, options);
+      return await this.resolveP03(state, confirmation, message, options);
     }
     if (state.current_state === "WAITING_REPLAN_CONFIRM") {
       return this.resolveReplan(state, confirmation, message, options);
@@ -398,23 +404,23 @@ export class AgentOrchestrator {
     });
   }
 
-  private resolveP01(
+  private async resolveP01(
     state: TaskState,
     confirmation: ConfirmationRecord,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     if (!/(确认|同意|按建议|可以生成|继续)/.test(message)) return this.confirmationReminder(confirmation, options);
-    const assets = this.provider.getPrdAssets(state.task_id);
     const reportRefs = this.provider.getPrdReportRefs(state.task_id);
     resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "CONFIRM_WRITABLE" });
+    assertTransition({ taskId: state.task_id, toState: "PRD_DRAFTING_CORE", reason: "CP-P01 已确认可写" });
+    const assets = await this.provider.getPrdAssets(state.task_id, "CORE", { userConfirmation: message });
     recordConfirmedDecisions(
       state.task_id,
       assets.confirmedLedgerPath,
       PROJECT_ROOT,
       reportRefs.ledgerRef
     );
-    assertTransition({ taskId: state.task_id, toState: "PRD_DRAFTING_CORE", reason: "CP-P01 已确认可写" });
     const coreResult = applyPrdArtifact(state.task_id, assets.corePath);
     const core = readJson<PrdWriteOutput>(assets.corePath);
     const p02 = createConfirmation({
@@ -445,17 +451,17 @@ export class AgentOrchestrator {
     });
   }
 
-  private resolveP02(
+  private async resolveP02(
     state: TaskState,
     confirmation: ConfirmationRecord,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     if (!/(确认|同意|批准|继续)/.test(message)) return this.confirmationReminder(confirmation, options);
-    const assets = this.provider.getPrdAssets(state.task_id);
     const reportRefs = this.provider.getPrdReportRefs(state.task_id);
     resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "APPROVE_CORE" });
     assertTransition({ taskId: state.task_id, toState: "PRD_DRAFTING_DETAILS", reason: "CP-P02 已确认范围和核心流程" });
+    const assets = await this.provider.getPrdAssets(state.task_id, "DETAILS", { userConfirmation: message });
     const detailsResult = applyPrdArtifact(state.task_id, assets.detailsPath);
     assertTransition({ taskId: state.task_id, toState: "PRD_REVIEWING", reason: "PRD 细节已补充" });
     const reviewResult = recordPrdReview(
@@ -493,12 +499,12 @@ export class AgentOrchestrator {
     });
   }
 
-  private resolveP03(
+  private async resolveP03(
     state: TaskState,
     confirmation: ConfirmationRecord,
     message: string,
     options: HandleMessageOptions
-  ): AgentResponse {
+  ): Promise<AgentResponse> {
     if (/(修复|修改|先改)/.test(message)) {
       resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "FIX_AND_REVIEW" });
       assertTransition({ taskId: state.task_id, toState: "PRD_REVIEWING", reason: "用户要求先修复审核问题" });
@@ -512,7 +518,7 @@ export class AgentOrchestrator {
       });
     }
     if (!/(接受|交付|确认|同意)/.test(message)) return this.confirmationReminder(confirmation, options);
-    const assets = this.provider.getPrdAssets(state.task_id);
+    const assets = await this.provider.getPrdAssets(state.task_id, "REFERENCE");
     const reportRefs = this.provider.getPrdReportRefs(state.task_id);
     resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "ACCEPT_AND_DELIVER" });
     const reviewPath = repoRefToPath(reportRefs.reviewRef, PROJECT_ROOT);
@@ -609,9 +615,9 @@ export class AgentOrchestrator {
     });
   }
 
-  private continueCurrent(state: TaskState, options: HandleMessageOptions): AgentResponse {
+  private async continueCurrent(state: TaskState, options: HandleMessageOptions): Promise<AgentResponse> {
     if (state.current_state === "CONTEXT_TASK_COMPLETED") {
-      return this.startPrd(state, "基于已整理的 Context 继续准备 PRD", options);
+      return await this.startPrd(state, "基于已整理的 Context 继续准备 PRD", options);
     }
     return this.response({
       message: `当前任务位于“${stateName(state.current_state)}”，请给出该节点需要的具体输入。`,
@@ -636,7 +642,7 @@ export class AgentOrchestrator {
     });
   }
 
-  private resume(state: TaskState, message: string, options: HandleMessageOptions): AgentResponse {
+  private async resume(state: TaskState, message: string, options: HandleMessageOptions): Promise<AgentResponse> {
     if (!/(继续|恢复)/.test(message)) {
       return this.response({
         message: "任务当前已暂停。回复“继续”可以恢复，回复“取消任务”可以结束。",
@@ -653,7 +659,7 @@ export class AgentOrchestrator {
       const confirmation = getActiveConfirmation(resumed.task_id, resumed.current_state);
       if (confirmation) return this.confirmationReminder(confirmation, options);
     }
-    return this.continueCurrent(resumed, options);
+    return await this.continueCurrent(resumed, options);
   }
 
   private cancelTask(state: TaskState, options: HandleMessageOptions): AgentResponse {
@@ -665,6 +671,58 @@ export class AgentOrchestrator {
       nextSteps: ["输入新的明确目标可开始新任务"],
       debug: options.debug,
     });
+  }
+
+  private async retryBlocked(state: TaskState, message: string, options: HandleMessageOptions): Promise<AgentResponse> {
+    if (!/(重试|继续|恢复)/.test(message)) {
+      return this.response({
+        message: `任务因错误停止：${state.error_info ?? "未记录错误原因"}。修正配置或输入后回复“重试”，也可以暂停或取消任务。`,
+        status: "BLOCKED",
+        artifacts: state.latest_output_ref ? [{ ref: state.latest_output_ref, label: "最近有效产物" }] : [],
+        nextSteps: ["重试", "暂停", "取消任务"],
+        debug: options.debug,
+      });
+    }
+    if (!state.previous_state) throw new Error("阻塞任务缺少可恢复状态");
+    assertTransition({ taskId: state.task_id, toState: state.previous_state, reason: "用户修正阻塞原因后重试", operator: "USER" });
+    const resumed = requireState(state.task_id);
+    resumed.error_info = null;
+    resumed.retry_count += 1;
+    writeTaskState(resumed);
+    if (WAITING_STATES.has(resumed.current_state)) {
+      const confirmation = getActiveConfirmation(resumed.task_id, resumed.current_state);
+      if (confirmation) return this.confirmationReminder(confirmation, options);
+    }
+    const intent = resumed.task_mode ?? routeIntent(resumed.task_goal);
+    if (resumed.current_state === "CONTEXT_TASK_COMPLETED" && intent === "PRD") {
+      return await this.startPrd(resumed, resumed.task_goal, options);
+    }
+    if (["INTENT_ROUTING", "DELIVERED", "TASK_CANCELLED"].includes(resumed.current_state) && ["CONTEXT", "PRD", "CHANGE"].includes(intent)) {
+      return await this.startIntent(resumed, intent as Exclude<AgentIntent, "CONTINUE" | "UNKNOWN">, resumed.task_goal, options);
+    }
+    return this.response({
+      message: `已恢复到“${stateName(resumed.current_state)}”。请重新提交该节点所需的确认或业务输入。`,
+      status: "CONTINUE",
+      artifacts: resumed.latest_output_ref ? [{ ref: resumed.latest_output_ref, label: "最近有效产物" }] : [],
+      nextSteps: ["重新提交上一条输入"],
+      debug: options.debug,
+    });
+  }
+
+  private blockExecution(message: string, options: HandleMessageOptions): AgentResponse {
+    const state = readTaskState();
+    const executionStates = new Set<StateId>([
+      "INTENT_ROUTING", "CONTEXT_ANALYZING", "CONTEXT_MAINTAINING", "PRD_THINKING",
+      "PRD_DRAFTING_CORE", "PRD_DRAFTING_DETAILS", "PRD_REVIEWING", "CHANGE_ANALYZING", "REPLANNING",
+    ]);
+    if (state && executionStates.has(state.current_state)) {
+      assertTransition({ taskId: state.task_id, toState: "EXECUTION_BLOCKED", reason: message, operator: "SYSTEM" });
+      const blockedState = requireState(state.task_id);
+      blockedState.previous_state = "INTENT_ROUTING";
+      blockedState.error_info = message;
+      writeTaskState(blockedState);
+    }
+    return this.blocked(message, options);
   }
 
   private confirmationReminder(confirmation: ConfirmationRecord, options: HandleMessageOptions): AgentResponse {
@@ -833,6 +891,36 @@ function isCancelTask(message: string): boolean {
 }
 
 function defaultProvider(): AgentProvider {
+  loadLocalEnv();
+  const provider = (process.env.MODEL_PROVIDER ?? "workspace").toLowerCase();
+  if (provider === "openai") return OpenAIProvider.fromEnv();
+  if (["deepseek", "kimi", "moonshot", "compatible", "openai-compatible"].includes(provider)) {
+    const prefix = provider === "deepseek" ? "DEEPSEEK" : provider === "kimi" || provider === "moonshot" ? "KIMI" : "MODEL";
+    const model = process.env[`${prefix}_MODEL`] ?? process.env.MODEL_ID ?? "";
+    const apiKey = process.env[`${prefix}_API_KEY`] ?? "";
+    const baseUrl = process.env[`${prefix}_BASE_URL`] ?? (provider === "deepseek" ? "https://api.deepseek.com" : provider === "kimi" || provider === "moonshot" ? "https://api.moonshot.cn/v1" : "");
+    if (!baseUrl) throw new Error("启用 OpenAI 兼容 Provider 时必须配置 MODEL_BASE_URL");
+    const timeout = Number(process.env[`${prefix}_TIMEOUT_MS`] ?? process.env.MODEL_TIMEOUT_MS ?? "120000");
+    return new OpenAIProvider(new OpenAICompatibleClient({
+      apiKey,
+      model,
+      baseUrl,
+      timeoutMs: Number.isFinite(timeout) ? timeout : 120_000,
+      providerId: provider === "moonshot" ? "kimi" : provider === "openai-compatible" ? "compatible" : provider,
+      apiKeyName: `${prefix}_API_KEY`,
+    }), model, provider === "moonshot" ? "kimi" : provider === "openai-compatible" ? "compatible" : provider, `${provider === "moonshot" ? "Kimi" : provider === "compatible" || provider === "openai-compatible" ? "兼容接口" : provider} Provider (${model})`);
+  }
+  if (["claude", "anthropic"].includes(provider)) {
+    const model = process.env.CLAUDE_MODEL ?? process.env.ANTHROPIC_MODEL ?? process.env.MODEL_ID ?? "";
+    const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
+    const timeout = Number(process.env.CLAUDE_TIMEOUT_MS ?? process.env.MODEL_TIMEOUT_MS ?? "120000");
+    return new OpenAIProvider(new AnthropicMessagesClient({
+      apiKey,
+      model,
+      baseUrl: process.env.ANTHROPIC_BASE_URL,
+      timeoutMs: Number.isFinite(timeout) ? timeout : 120_000,
+    }), model, "claude", `Claude Provider (${model})`);
+  }
   return new WorkspaceProvider();
 }
 

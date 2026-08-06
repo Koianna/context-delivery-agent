@@ -201,6 +201,7 @@ function isSpecialTransition(from: StateId, to: StateId, state: TaskState): bool
   if (from === "TASK_PAUSED" && state.previous_state === to) return true;
   if (from === "EXECUTION_BLOCKED" && state.previous_state === to) return true;
   if (from === "WAITING_REPLAN_CONFIRM" && state.return_state === to) return true;
+  if (to === "EXECUTION_BLOCKED" && loadStates().find((item) => item.id === from)?.type === "execution") return true;
   if (to === "TASK_PAUSED" && !["TASK_CANCELLED", "DELIVERED", "CONTEXT_TASK_COMPLETED"].includes(from)) {
     return true;
   }

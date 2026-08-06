@@ -48,6 +48,10 @@ export interface HandleMessageOptions {
   debug?: boolean;
 }
 
+export interface PrdProviderContext {
+  userConfirmation?: string;
+}
+
 export interface PrdProviderAssets {
   thinkingPath: string;
   confirmedLedgerPath: string;
@@ -59,6 +63,8 @@ export interface PrdProviderAssets {
   p03: Record<string, unknown>;
   prdRef: string;
 }
+
+export type PrdProviderPhase = "THINKING" | "CORE" | "DETAILS" | "REFERENCE";
 
 export interface ChangeAnalysisAssets {
   inputPath: string;
@@ -73,28 +79,30 @@ export interface ChangeReplanAssets {
   approval: Record<string, unknown>;
 }
 
+export type ProviderResult<T> = T | Promise<T>;
+
 export interface AgentProvider {
   readonly id: string;
   readonly label: string;
   setProjectId?(projectId: string): void;
-  getContextAssets(materialPath?: string, taskId?: string, taskGoal?: string): {
+  getContextAssets(materialPath?: string, taskId?: string, taskGoal?: string): ProviderResult<{
     inputPath: string;
     materialOutputPath: string;
     contextOutputPath: string;
     structuredMaterialPath: string;
-  };
+  }>;
   getContextReportRefs(taskId: string, structuredMaterialPath?: string): {
     materialReportRef: string;
     contextReportRef: string;
     structuredMaterialRef: string;
     changeLogRef: string;
   };
-  getPrdAssets(taskId: string): PrdProviderAssets;
+  getPrdAssets(taskId: string, phase?: PrdProviderPhase, context?: PrdProviderContext): ProviderResult<PrdProviderAssets>;
   getPrdReportRefs(taskId: string): {
     thinkingRef: string;
     ledgerRef: string;
     reviewRef: string;
   };
-  prepareChangeAnalysis(state: TaskState, message: string): ChangeAnalysisAssets;
-  prepareChangeReplan(state: TaskState, assets: ChangeAnalysisAssets): ChangeReplanAssets;
+  prepareChangeAnalysis(state: TaskState, message: string): ProviderResult<ChangeAnalysisAssets>;
+  prepareChangeReplan(state: TaskState, assets: ChangeAnalysisAssets): ProviderResult<ChangeReplanAssets>;
 }

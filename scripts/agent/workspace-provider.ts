@@ -9,7 +9,7 @@ import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../li
 import { contextDocumentRef, contextIndexRef, contextIndexPath, contextRootPath, safeProjectSlug } from "../lib/project-paths.js";
 import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
-import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets } from "./types.js";
+import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { writeStructuredMaterial } from "./structured-material.js";
 
 /**
@@ -17,15 +17,20 @@ import { writeStructuredMaterial } from "./structured-material.js";
  * 真实模型可以替换输出生成部分，但不能绕过同一套 Runtime/Harness。
  */
 export class WorkspaceProvider implements AgentProvider {
-  readonly id = "workspace";
-  readonly label = "通用项目工作区 Provider";
-  private projectId = "default-project";
+  readonly id: string = "workspace";
+  readonly label: string = "通用项目工作区 Provider";
+  protected projectId = "default-project";
 
   setProjectId(projectId: string) {
     this.projectId = safeProjectSlug(projectId);
   }
 
-  getContextAssets(materialPath?: string, taskId = "task", taskGoal = "整理项目材料") {
+  async getContextAssets(materialPath?: string, taskId = "task", taskGoal = "整理项目材料"): Promise<{
+    inputPath: string;
+    materialOutputPath: string;
+    contextOutputPath: string;
+    structuredMaterialPath: string;
+  }> {
     const slug = safeSlug(taskId);
     const outputDir = this.outputDir(slug);
     const inputPath = path.join(outputDir, "material-ingest.input.json");
@@ -64,7 +69,7 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  getPrdAssets(taskId: string): PrdProviderAssets {
+  async getPrdAssets(taskId: string, phase: PrdProviderPhase = "REFERENCE", _context: PrdProviderContext = {}): Promise<PrdProviderAssets> {
     const slug = safeSlug(taskId);
     const outputDir = this.outputDir(slug);
     const base = `repo://context-workspace/workspace/agent-runs/${slug}`;
@@ -75,6 +80,8 @@ export class WorkspaceProvider implements AgentProvider {
     const ledgerPath = path.join(outputDir, "decision-ledger.confirmed.json");
     const corePath = path.join(outputDir, "prd-write.core.json");
     const detailsPath = path.join(outputDir, "prd-write.details.json");
+    const coreCandidatePath = path.join(outputDir, "prd.core.md");
+    const detailsCandidatePath = path.join(outputDir, "prd.details.md");
     const reviewTemplatePath = path.join(outputDir, "prd-review.template.json");
 
     const thinking: PrdThinkingOutput = {
@@ -111,8 +118,8 @@ export class WorkspaceProvider implements AgentProvider {
       version: "0.1.0",
       decisions: decisionIds.map((decision_id) => ({ decision_id, status: "CONFIRMED", decision: "按用户在 CP-P01 中确认的内容执行" })),
     };
-    const core = this.buildPrdOutput(prdRef, sourceRefs, decisionIds, "CORE", "0.1.0", null, corePath);
-    const details = this.buildPrdOutput(prdRef, sourceRefs, decisionIds, "DETAILS", "0.2.0", "0.1.0", detailsPath);
+    const core = this.buildPrdOutput(prdRef, sourceRefs, decisionIds, "CORE", "0.1.0", null, coreCandidatePath, phase === "CORE");
+    const details = this.buildPrdOutput(prdRef, sourceRefs, decisionIds, "DETAILS", "0.2.0", "0.1.0", detailsCandidatePath, phase === "DETAILS");
     const reviewTemplate: PrdReviewTemplate = {
       review_id: `review-${safeSlug(this.projectId)}-${slug}`,
       reviewed_prd_version: "0.2.0",
@@ -121,11 +128,15 @@ export class WorkspaceProvider implements AgentProvider {
       passed_dimensions: ["FACT_STATUS", "SCOPE", "DEPENDENCY", "CONSISTENCY"],
       unverifiable_items: ["真实业务指标需由产品经理补充"],
     };
-    writeJsonAtomic(thinkingPath, thinking);
-    writeJsonAtomic(ledgerPath, ledger);
-    writeJsonAtomic(corePath, core);
-    writeJsonAtomic(detailsPath, details);
-    writeJsonAtomic(reviewTemplatePath, reviewTemplate);
+    if (phase === "THINKING") writeJsonAtomic(thinkingPath, thinking);
+    if (phase === "CORE") {
+      writeJsonAtomic(ledgerPath, ledger);
+      writeJsonAtomic(corePath, core);
+    }
+    if (phase === "DETAILS") {
+      writeJsonAtomic(detailsPath, details);
+      writeJsonAtomic(reviewTemplatePath, reviewTemplate);
+    }
     return {
       thinkingPath,
       confirmedLedgerPath: ledgerPath,
@@ -167,9 +178,9 @@ export class WorkspaceProvider implements AgentProvider {
     return { thinkingRef: `${base}/reports/prd-thinking.json`, ledgerRef: `${base}/decisions/decision-ledger.json`, reviewRef: `${base}/reports/prd-review.json` };
   }
 
-  prepareChangeAnalysis(state: TaskState, message: string): ChangeAnalysisAssets {
+  async prepareChangeAnalysis(state: TaskState, message: string): Promise<ChangeAnalysisAssets> {
     const slug = safeSlug(state.task_id);
-    const prd = this.getPrdAssets(state.task_id);
+    const prd = await this.getPrdAssets(state.task_id);
     const reports = this.getPrdReportRefs(state.task_id);
     const indexRef = contextIndexRef(this.projectId);
     const changeId = `change-${safeSlug(this.projectId)}-${slug}`.slice(0, 80);
@@ -198,7 +209,7 @@ export class WorkspaceProvider implements AgentProvider {
     return { inputPath, analysisPath, reportRef, changeId };
   }
 
-  prepareChangeReplan(state: TaskState, assets: ChangeAnalysisAssets): ChangeReplanAssets {
+  async prepareChangeReplan(state: TaskState, assets: ChangeAnalysisAssets): Promise<ChangeReplanAssets> {
     const slug = safeSlug(state.task_id);
     const planRef = `repo://context-workspace/workspace/plans/${safeSlug(this.projectId)}-${slug}-replan.json`;
     const analysisRef = assets.reportRef;
@@ -294,7 +305,7 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  private buildContextProposal(item: MaterialIngestOutput["information_items"][number]) {
+  protected buildContextProposal(item: MaterialIngestOutput["information_items"][number]) {
     const relativePath = item.information_type === "FACT"
       ? `product/${safeSlug(item.item_id)}.md`
       : `business-rules/${safeSlug(item.item_id)}.md`;
@@ -347,18 +358,18 @@ export class WorkspaceProvider implements AgentProvider {
     return refs;
   }
 
-  private buildPrdOutput(prdRef: string, sourceRefs: string[], decisionIds: string[], phase: "CORE" | "DETAILS", version: string, previousVersion: string | null, candidatePath: string): PrdWriteOutput {
+  private buildPrdOutput(prdRef: string, sourceRefs: string[], decisionIds: string[], phase: "CORE" | "DETAILS", version: string, previousVersion: string | null, candidatePath: string, writeCandidate: boolean): PrdWriteOutput {
     const headings = phase === "CORE" ? ["background", "problem", "goal", "non-goals", "target-users", "scope", "core-flow", "confirmed-decisions"] : ["background", "problem", "goal", "non-goals", "target-users", "scope", "core-flow", "confirmed-decisions", "rules", "roles", "exceptions", "acceptance"];
     const body = phase === "CORE"
       ? `# ${this.projectId} 需求文档\n\n## 1. 背景与问题\n基于当前项目材料整理，具体问题待产品经理确认。\n\n## 2. 目标\n待确认。\n\n## 3. 本期范围与非范围\n待确认。\n\n## 4. 核心流程\n用户场景 → 核心任务 → 结果反馈。\n\n## 5. 已确认决策\n等待产品经理确认目标与范围。`
       : `# ${this.projectId} 需求文档\n\n## 1. 背景与问题\n基于当前项目材料整理，具体问题待产品经理确认。\n\n## 2. 目标\n待确认。\n\n## 3. 本期范围与非范围\n待确认。\n\n## 4. 核心流程\n用户场景 → 核心任务 → 结果反馈。\n\n## 5. 已确认决策\n等待产品经理确认目标与范围。\n\n## 功能规则\n待补充。\n\n## 角色与权限\n待补充。\n\n## 边界与异常\n待补充。\n\n## 验收标准\n待补充。`;
-    writeTextAtomic(candidatePath, `---\nid: ${safeSlug(this.projectId)}-prd\nversion: ${version}\n---\n\n${body}`);
+    if (writeCandidate) writeTextAtomic(candidatePath, `---\nid: ${safeSlug(this.projectId)}-prd\nversion: ${version}\n---\n\n${body}`);
     return { prd_artifact: { artifact_id: `prd-${safeSlug(this.projectId)}`, version, previous_version: previousVersion, phase, structured_sections: headings, markdown_ref: prdRef, content_ref: pathToRepoRef(candidatePath, PROJECT_ROOT), source_refs: sourceRefs, decision_refs: decisionIds }, coverage: { required_sections: headings, covered_sections: headings, missing_sections: [] }, unresolved_items: [{ item: "业务事实、目标和验收口径待确认", status: "OPEN", source_refs: sourceRefs }], unsupported_claims: [], change_summary: phase === "CORE" ? "通用项目 PRD 主体草稿" : "通用项目 PRD 细节草稿" };
   }
 
-  private outputDir(slug: string) { const dir = path.join(PROJECT_ROOT, "runtime/provider-output", slug); fs.mkdirSync(dir, { recursive: true }); return dir; }
+  protected outputDir(slug: string) { const dir = path.join(PROJECT_ROOT, "runtime/provider-output", slug); fs.mkdirSync(dir, { recursive: true }); return dir; }
 
-  private publishedStructuredMaterialRef(taskId: string, name: string): string {
+  protected publishedStructuredMaterialRef(taskId: string, name: string): string {
     const folder = name === "meeting-note.md" ? "meeting-notes" : "structured-materials";
     return `repo://context-workspace/workspace/projects/${safeProjectSlug(this.projectId)}/materials/${folder}/${safeSlug(taskId)}.md`;
   }

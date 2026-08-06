@@ -16,13 +16,13 @@ async function main() {
   const terminal = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of terminal) {
     if (!line.trim()) continue;
-    const response = handleLine(line);
+    const response = await handleLine(line);
     output.write(`${JSON.stringify(response)}\n`);
   }
   terminal.close();
 }
 
-function handleLine(line: string): ExternalAgentResponse {
+async function handleLine(line: string): Promise<ExternalAgentResponse> {
   let raw: unknown;
   try {
     raw = JSON.parse(line);
@@ -45,7 +45,7 @@ function handleLine(line: string): ExternalAgentResponse {
     const inlineMaterialPath = request.materials?.length
       ? writeInlineMaterials(request.materials, projectId ?? "default-project", taskId)
       : undefined;
-    const response = agent.handleMessage(request.message, {
+    const response = await agent.handleMessage(request.message, {
       taskId,
       sessionId: request.session_id,
       projectId,

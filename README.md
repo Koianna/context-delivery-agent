@@ -83,7 +83,37 @@ npm run agent -- \
 
 `npm run agent` 是参考 CLI 适配器，不是项目唯一入口，也不是业务编排中心。`state:*`、`context:*`、`prd:*`、`change:*` 命令仍作为后台 Harness 与回归工具保留，不要求日常用户直接操作。Gateway 协议定义见 [`schemas/external-agent-gateway.schema.json`](schemas/external-agent-gateway.schema.json)。
 
-当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。真实模型 Provider 后续可以替换结构化输出生成层，但不能绕过 Runtime。
+当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。
+
+### 启用真实模型
+
+项目已提供可替换的真实模型 Provider。复制 `.env.example` 为 `.env`，然后按服务商配置：
+
+```dotenv
+MODEL_PROVIDER=openai
+OPENAI_API_KEY=你的 API Key
+OPENAI_MODEL=你的账号可用模型 ID
+```
+
+当前内置三类协议适配：OpenAI Responses API、DeepSeek/Kimi 等常见的 OpenAI 兼容 Chat Completions API，以及 Claude 的 Anthropic Messages API。DeepSeek 示例：
+
+```dotenv
+MODEL_PROVIDER=deepseek
+DEEPSEEK_API_KEY=你的 DeepSeek Key
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+Kimi 使用 `MODEL_PROVIDER=kimi`、`KIMI_API_KEY`、`KIMI_MODEL` 和 `KIMI_BASE_URL`；Claude 使用 `MODEL_PROVIDER=claude`、`ANTHROPIC_API_KEY` 和 `CLAUDE_MODEL`。其他支持 OpenAI 兼容 Chat Completions 的服务使用 `MODEL_PROVIDER=compatible`、`MODEL_API_KEY`、`MODEL_ID`、`MODEL_BASE_URL`。模型名称和可用能力以服务商账号为准，`.env` 已被 Git 忽略，不要把密钥提交到仓库。
+
+启用后，模型负责材料语义提取、结构化整理、PRD 候选和变更影响分析；所有厂商都必须通过统一的 `StructuredModelClient` 契约返回 JSON。Runtime 仍负责本地 Schema 校验、状态转移、人工确认、版本检查和文件写入。模型不能直接修改稳定 Context 或跳过 CP-C01、CP-P01、CP-P02、CP-P03、CP-R01。发送给模型的内容包括当前任务所需的原始材料或业务产物，因此接入真实业务资料前应确认其符合组织的数据和隐私政策。
+
+```bash
+# 不访问真实 API 的模型接入回归测试
+npm run eval:model
+```
+
+若密钥缺失、请求超时、API 返回错误、JSON 无法解析或模型输出未通过现有校验，Runtime 会停止本轮执行并进入可恢复阻塞，不会回退后静默写入业务产物。未设置真实模型 Provider 时继续使用本地 `WorkspaceProvider`。因此不能承诺“任意模型无条件可用”，但可以保证任何遵守该契约、能稳定输出所需 JSON 且通过本地校验的模型都不会破坏 Runtime 的控制边界；新增厂商只需新增协议客户端和 Provider 工厂路由。
 
 ## Runtime 业务编排中心
 
@@ -103,7 +133,7 @@ npm run agent -- \
 - **Change**：快照 → 影响分析 → 重规划 → CP-R01 → 返回最小修订节点
 - **任务控制**：暂停、继续、取消和模糊意图澄清
 
-POC 当前限制：单用户、单项目、单活跃任务运行时；通用 Provider 当前以保守规则和结构化基线为主，复杂语义分析需要接入真实模型 Provider；CP-R01 批准后返回修订节点，但不会在缺少新业务输入时自动覆盖已交付 PRD。更换 Provider 时状态机和 Harness 不变。
+POC 当前限制：单用户、单项目、单活跃任务运行时；本地 Provider 以保守规则和结构化基线为主，OpenAI Provider 的输出仍受同一套确定性校验约束；CP-R01 批准后返回修订节点，但不会在缺少新业务输入时自动覆盖已交付 PRD。更换 Provider 时状态机和 Harness 不变。
 
 ## 后台验证
 

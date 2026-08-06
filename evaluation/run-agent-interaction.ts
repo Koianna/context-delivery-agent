@@ -9,19 +9,20 @@ import { repoRefToPath } from "../scripts/lib/repository.js";
 
 interface CaseResult { case_id: string; passed: boolean; detail: string }
 const results: CaseResult[] = [];
-const transcript: Array<{ user: string; response: ReturnType<AgentOrchestrator["handleMessage"]> }> = [];
+const transcript: Array<{ user: string; response: Awaited<ReturnType<AgentOrchestrator["handleMessage"]>> }> = [];
 const taskId = `agent-eval-${Date.now()}`;
 const projectId = "evaluation-product";
 const sourceDir = path.join(PROJECT_ROOT, "runtime/agent-interaction-materials");
 const sourcePath = path.join(sourceDir, "产品现状.md");
 const agent = new AgentOrchestrator(new WorkspaceProvider());
 
+async function main() {
 clearRuntime();
 clearAgentArtifacts(taskId);
 fs.mkdirSync(sourceDir, { recursive: true });
 fs.writeFileSync(sourcePath, "---\nsource_type: PRODUCT_DOC\nsource_owner: 产品团队\nsource_time: 2026-08-06T10:00:00+08:00\n---\n\n当前项目支持用户提交材料并查看处理结果。\n", "utf-8");
-const turn = (user: string) => {
-  const response = agent.handleMessage(user, { taskId, projectId, materialPath: sourcePath, debug: true });
+const turn = async (user: string) => {
+  const response = await agent.handleMessage(user, { taskId, projectId, materialPath: sourcePath, debug: true });
   transcript.push({ user, response });
   return response;
 };
@@ -29,7 +30,7 @@ const check = (caseId: string, passed: boolean, detail: string) => {
   results.push({ case_id: caseId, passed, detail });
 };
 
-const context = turn("请整理这份会议记录，先不要写 PRD");
+const context = await turn("请整理这份会议记录，先不要写 PRD");
 check(
   "AGENT-01",
   context.state.id === "CONTEXT_TASK_COMPLETED" && context.status === "COMPLETED",
@@ -49,32 +50,35 @@ check(
   "自然语言整理完成后返回 Runtime 产物并落盘"
 );
 
-const p01 = turn("继续准备 PRD");
+const p01 = await turn("继续准备 PRD");
 check(
   "AGENT-04",
-  p01.state.id === "WAITING_DECISION_CONFIRM" && !p01.artifacts.some((item) => item.label.includes("PRD 主体")),
+  p01.state.id === "WAITING_DECISION_CONFIRM"
+    && !p01.artifacts.some((item) => item.label.includes("PRD 主体"))
+    && !fs.existsSync(path.join(PROJECT_ROOT, "runtime/provider-output", taskId, "prd.core.md"))
+    && !fs.existsSync(path.join(PROJECT_ROOT, "runtime/provider-output", taskId, "prd.details.md")),
   "prd-thinking 后先停在 CP-P01，未提前生成 PRD"
 );
-const p02 = turn("按建议确认，可以生成 PRD");
+const p02 = await turn("按建议确认，可以生成 PRD");
 check(
   "AGENT-05",
   p02.state.id === "WAITING_SCOPE_CONFIRM" && p02.artifacts.some((item) => item.label === "PRD 主体" && fileExists(item.ref)),
   "CP-P01 后生成 CORE，并停在 CP-P02"
 );
-const p03 = turn("确认范围和核心流程");
+const p03 = await turn("确认范围和核心流程");
 check(
   "AGENT-06",
   p03.state.id === "WAITING_REVIEW_DECISION" && p03.artifacts.some((item) => item.label === "PRD 独立审核报告" && fileExists(item.ref)),
   "CP-P02 后生成 DETAILS、独立审核并停在 CP-P03"
 );
-const delivered = turn("接受 P2 并交付");
+const delivered = await turn("接受 P2 并交付");
 check(
   "AGENT-07",
   delivered.state.id === "DELIVERED" && delivered.artifacts.every((item) => fileExists(item.ref)),
   "CP-P03 后交付 PRD，决策账本和审核报告可追溯"
 );
 
-const change = turn("修改已交付需求：目标文章下线或目标标签删除后，系统自动停用相关别名并展示原因，产品审核后可重新启用");
+const change = await turn("修改已交付需求：目标文章下线或目标标签删除后，系统自动停用相关别名并展示原因，产品审核后可重新启用");
 check(
   "AGENT-08",
   change.state.id === "WAITING_REPLAN_CONFIRM" && change.artifacts.every((item) => fileExists(item.ref)),
@@ -86,7 +90,7 @@ check(
   beforeReplan?.plan_version === "0.1.0" && beforeReplan.replan_count === 0,
   "CP-R01 前没有应用新计划"
 );
-const replanned = turn("批准重规划");
+const replanned = await turn("批准重规划");
 check(
   "AGENT-10",
   replanned.state.id === "PRD_DRAFTING_DETAILS" && readTaskState()?.replan_count === 1,
@@ -134,6 +138,7 @@ if (process.argv.includes("--write-result")) {
 clearRuntime();
 clearAgentArtifacts(taskId);
 if (passed !== results.length) process.exit(1);
+}
 
 function fileExists(ref: string): boolean {
   try { return fs.existsSync(repoRefToPath(ref, PROJECT_ROOT)); } catch { return false; }
@@ -149,9 +154,11 @@ function clearRuntime() {
 
 function clearAgentArtifacts(dynamicTaskId: string) {
   const slug = dynamicTaskId.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-  const changeId = `change-target-unavailable-${slug}`.slice(0, 80);
+  const changeId = `change-${projectId}-${slug}`.slice(0, 80);
   for (const target of [
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", slug),
+    path.join(PROJECT_ROOT, "context-workspace/drafts", projectId),
+    path.join(PROJECT_ROOT, "context-workspace/projects", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId, "materials"),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${slug}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),
@@ -163,7 +170,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
 }
 
 function sanitizeTranscript(
-  items: Array<{ user: string; response: ReturnType<AgentOrchestrator["handleMessage"]> }>
+  items: Array<{ user: string; response: Awaited<ReturnType<AgentOrchestrator["handleMessage"]>> }>
 ) {
   return replaceDynamicIds(items.map(({ user, response }) => ({
     user,
@@ -178,6 +185,11 @@ function sanitizeTranscript(
     },
   })), taskId) as typeof items;
 }
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});
 
 function replaceDynamicIds<T>(value: T, dynamicTaskId: string): T {
   if (typeof value === "string") {

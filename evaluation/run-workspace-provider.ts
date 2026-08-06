@@ -7,6 +7,7 @@ import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
 import { registerMaterials } from "../scripts/register-materials.js";
 
+async function main() {
 const taskId = "workspace-phone-feedback-demo";
 const sourceDir = path.join(PROJECT_ROOT, "runtime/workspace-provider-eval-materials");
 const sourcePath = path.join(sourceDir, "用户反馈.txt");
@@ -15,7 +16,7 @@ fs.mkdirSync(sourceDir, { recursive: true });
 fs.writeFileSync(sourcePath, "用户原话：手机号不用了。\n", "utf-8");
 
 const agent = new AgentOrchestrator(new WorkspaceProvider());
-const response = agent.handleMessage(
+const response = await agent.handleMessage(
   "请收集整理这条用户反馈，不要直接写成修改手机号需求，也不要写 PRD",
   { taskId, projectId: "account-settings", materialPath: sourceDir, debug: true }
 );
@@ -48,7 +49,7 @@ const confirmedSourcePath = path.join(confirmedSourceDir, "产品现状.md");
 fs.mkdirSync(confirmedSourceDir, { recursive: true });
 fs.writeFileSync(confirmedSourcePath, "---\nsource_type: PRODUCT_DOC\nsource_owner: 产品团队\nsource_time: 2026-08-05T10:00:00+08:00\n---\n\n# 当前产品现状\n\n当前产品支持手机号绑定和登录验证。\n", "utf-8");
 const contextAgent = new AgentOrchestrator(new WorkspaceProvider());
-const contextPending = contextAgent.handleMessage(
+const contextPending = await contextAgent.handleMessage(
   "整理并沉淀这份产品现状，先让我确认 Context 更新，不要写 PRD",
   { taskId: "workspace-confirmed-context-demo", projectId: "account-settings", materialPath: confirmedSourceDir, debug: true }
 );
@@ -60,7 +61,7 @@ results.push(
   check("WORKSPACE-07", !fs.existsSync(contextRoot) || !fs.readdirSync(contextRoot, { recursive: true }).some((item) => String(item).endsWith(".md")), "CP-C01 前不写入项目稳定 Context"),
   check("WORKSPACE-08", typeof contextCandidate === "string" && contextCandidate.includes("runtime/provider-output"), "候选内容保存在可追踪的工作区产物中"),
 );
-const contextApplied = contextAgent.handleMessage("确认全部", { taskId: "workspace-confirmed-context-demo", projectId: "account-settings", debug: true });
+const contextApplied = await contextAgent.handleMessage("确认全部", { taskId: "workspace-confirmed-context-demo", projectId: "account-settings", debug: true });
 const contextIndexPath = path.join(contextRoot, "INDEX.md");
 results.push(
   check("WORKSPACE-09", contextApplied.state.id === "CONTEXT_TASK_COMPLETED" && contextApplied.status === "COMPLETED", "CP-C01 后完成 Context 维护任务"),
@@ -73,7 +74,7 @@ const paragraphSourceDir = path.join(PROJECT_ROOT, "runtime/workspace-provider-p
 const paragraphSourcePath = path.join(paragraphSourceDir, "会议纪要-无发言人.md");
 fs.mkdirSync(paragraphSourceDir, { recursive: true });
 fs.writeFileSync(paragraphSourcePath, "决定了：先完成用户反馈归类。建议短期先验证一项可维护规则和结果反馈，不直接扩大到未确认的扩展能力。业务团队提供样本，产品经理下周输出第一期需求草稿。资料导出前需要脱敏并和数据同学确认。", "utf-8");
-const paragraphResponse = new AgentOrchestrator(new WorkspaceProvider()).handleMessage(
+const paragraphResponse = await new AgentOrchestrator(new WorkspaceProvider()).handleMessage(
   "整理这份会议纪要，不写 PRD",
   { taskId: "workspace-paragraph-meeting-demo", projectId: "workspace-paragraph-eval", materialPath: paragraphSourceDir, debug: true },
 );
@@ -89,6 +90,7 @@ const passed = results.filter((item) => item.passed).length;
 console.log(JSON.stringify({ evaluation_id: "workspace-provider-generic-material", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));
 clear();
 if (passed !== results.length) process.exit(1);
+}
 
 function check(caseId: string, passed: boolean, detail: string) { return { case_id: caseId, passed, detail }; }
 function clear() {
@@ -107,3 +109,8 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-confirmed-context-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo"), { recursive: true, force: true });
 }
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});

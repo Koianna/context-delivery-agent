@@ -13,7 +13,7 @@ async function main() {
   const debug = args.includes("--debug");
   const oneShot = argVal(args, "--message");
   if (oneShot) {
-    printResponse(agent.handleMessage(oneShot, { taskId, projectId, materialPath, debug }));
+    printResponse(await agent.handleMessage(oneShot, { taskId, projectId, materialPath, debug }));
     return;
   }
 
@@ -23,7 +23,7 @@ async function main() {
   while (true) {
     const message = (await terminal.question("你：")).trim();
     if (["exit", "quit", "退出"].includes(message.toLowerCase())) break;
-    printResponse(agent.handleMessage(message, { taskId, projectId, materialPath, debug }));
+    printResponse(await agent.handleMessage(message, { taskId, projectId, materialPath, debug }));
     console.log();
   }
   terminal.close();
