@@ -6,7 +6,7 @@
 
 ## 阶段
 
-当前为个人 POC，验证 Agent 架构和产品方案是否成立。默认支持按项目接入日常材料；「帮助中心搜索体验优化」作为可复现的面试演示案例保留。
+当前为个人 POC，验证 Agent 架构和产品方案是否成立。默认面向真实日常工作材料，不内置业务案例；面试时直接从外部 Agent 现场输入材料，展示完整工作流。
 
 ## 快速开始
 
@@ -24,7 +24,7 @@ npm run mcp
 外部 Agent 向 Gateway 写入一行 JSON 请求，直接传递用户自然语言：
 
 ```json
-{"protocol_version":"0.1","request_id":"req_demo_001","task_id":"demo-task","session_id":"session_demo","message":"只整理帮助中心搜索材料，不写 PRD","client":{"id":"my-agent","name":"可替换外部 Agent","version":"1.0.0"}}
+{"protocol_version":"0.1","request_id":"req_demo_001","task_id":"demo-task","project_id":"product-work","session_id":"session_demo","message":"请整理这份会议记录，先不要写 PRD","client":{"id":"my-agent","name":"可替换外部 Agent","version":"1.0.0"},"materials":[{"name":"会议记录.md","content":"在这里粘贴本次真实会议记录原文","source_type":"MEETING_NOTE","is_complete":true}]}
 ```
 
 Gateway 返回统一的 `agent_response`、Runtime 状态、产物、确认项和下一步。外部 Agent 只展示结果并将用户的确认原文再次发送，不能自行构造批准状态。
@@ -62,7 +62,7 @@ Gateway 返回统一的 `agent_response`、Runtime 状态、产物、确认项�
 不接入外部宿主时，也可以使用参考 CLI 适配器，直接描述目标，不需要手动执行 Harness 脚本：
 
 ```text
-你：只整理帮助中心搜索材料，不写 PRD
+你：请整理这份会议记录，先不要写 PRD
 Agent：完成材料登记与分析，停在 CP-C01，请确认两条稳定 Context 更新建议
 
 你：确认全部
@@ -77,21 +77,14 @@ Agent：先完成写前对齐，停在 CP-P01，不会直接生成 PRD
 ```bash
 npm run agent -- \
   --task-id demo-task-01 \
-  --message "只整理帮助中心搜索材料，不写 PRD" \
-  --material "$(pwd)/case-data/help-center-search/source-materials"
+  --message "请整理这份会议记录，先不要写 PRD" \
+  --project product-work \
+  --material "/path/to/your/materials"
 ```
 
 `npm run agent` 是参考 CLI 适配器，不是项目唯一入口，也不是业务编排中心。`state:*`、`context:*`、`prd:*`、`change:*` 命令仍作为后台 Harness 与回归工具保留，不要求日常用户直接操作。Gateway 协议定义见 [`schemas/external-agent-gateway.schema.json`](schemas/external-agent-gateway.schema.json)。
 
-当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。面试演示可显式使用“本地可复现 Provider”，读取帮助中心搜索案例的已校验结构化输出；两者都必须经过同一套 Runtime、状态机、确认点和 Harness。真实模型 Provider 后续可以替换结构化输出生成层，但不能绕过 Runtime。
-
-### 面试案例演示
-
-```bash
-AGENT_PROVIDER=case npm run gateway
-```
-
-不设置 `AGENT_PROVIDER=case` 时，默认使用通用项目工作区，不会自动读取帮助中心搜索固定案例。
+当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。项目不内置业务案例或固定演示数据，面试和日常使用都通过外部 Agent 现场提供真实材料。真实模型 Provider 后续可以替换结构化输出生成层，但不能绕过 Runtime。
 
 ## Runtime 业务编排中心
 
@@ -134,11 +127,11 @@ npx tsx scripts/get-state.ts --task-id demo-task-01
 npm run eval:workspace
 ```
 
-`npm run eval:workspace` 使用独立的用户反馈材料验证：默认使用通用 Provider、保留“手机号不用了”原话、将具体诉求作为待确认问题，并按项目隔离产物。
+`npm run eval:workspace` 使用隔离的通用测试材料验证：默认使用通用 Provider、保留原话、将具体诉求作为待确认问题，并按项目隔离产物。
 
 ## 阶段 3：Context 分支
 
-帮助中心搜索案例包含产品现状、用户反馈、当前讨论结论和历史需求边界四类材料。面试演示时显式使用该案例，验证材料登记、两个 Skill 的结构化结果和 Context 控制规则：
+Context 分支验证材料登记、两个 Skill 的结构化结果和 Context 控制规则。回归测试使用隔离的通用测试夹具，不作为面试或日常工作材料：
 
 ```bash
 npm run context:register
@@ -148,7 +141,7 @@ npm run context:validate-analysis
 npm run eval:context
 ```
 
-`npm run eval:context` 在临时目录内验证 11 个断言，不修改稳定 Context。完整演示产物位于 `context-workspace/`：原始材料保存在 drafts，分析与未决问题保存在 workspace，只有经过 CP-C01 逐项批准的内容进入 context。案例数据位于 `case-data/help-center-search/`，不代表项目只能处理这一类业务。
+`npm run eval:context` 在临时目录内验证 11 个断言，不修改稳定 Context。真实任务的原始材料保存在 drafts，分析与未决问题保存在 workspace，只有经过 CP-C01 逐项批准的内容进入 context。测试夹具位于 `evaluation/fixtures/`，不会被 Runtime 当作默认项目材料。
 
 ## 阶段 4：PRD 分支
 
@@ -163,11 +156,11 @@ npm run prd:validate-review
 npm run eval:prd
 ```
 
-`npm run eval:prd` 在临时目录内执行 12 个断言，覆盖写前阻塞、确认门禁、CORE/DETAILS 分阶段生成、稳定路径与连续版本、幂等写入、只读审核，以及审核后正文漂移等交付阻断。案例输入与预期结果位于 `case-data/help-center-search/prd/`，完整演示产物位于：
+`npm run eval:prd` 在临时目录内执行 12 个断言，覆盖写前阻塞、确认门禁、CORE/DETAILS 分阶段生成、稳定路径与连续版本、幂等写入、只读审核，以及审核后正文漂移等交付阻断。测试输入与预期结果位于 `evaluation/fixtures/prd/`，完整回归产物位于：
 
 - `context-workspace/workspace/reports/prd-thinking.json`：写前背景、决策和可写性分析
 - `context-workspace/workspace/decisions/decision-ledger.json`：经 CP-P01 确认的决策账本
-- `context-workspace/workspace/prd/help-center-search.md`：从 CORE `0.1.0` 演进到 DETAILS `0.2.0` 的稳定 PRD
+- `context-workspace/workspace/prd/<project_id>.md`：从 CORE `0.1.0` 演进到 DETAILS `0.2.0` 的稳定 PRD
 - `context-workspace/workspace/reports/prd-review.json`：带 PRD 正文哈希的独立审核结果
 - `evaluation/execution-logs/prd-branch-demo.json`：状态路径、确认点和交付结果
 
@@ -186,7 +179,7 @@ npm run eval:change
 
 - `context-workspace/workspace/snapshots/change-target-unavailable-001/`：六个业务产物的原始快照与 hash 清单
 - `context-workspace/workspace/reports/change-impact.json`：规则变更影响报告
-- `context-workspace/workspace/plans/help-center-search-replan.json`：CP-R01 批准的最小重跑计划
+- `context-workspace/workspace/plans/<project_id>-replan.json`：CP-R01 批准的最小重跑计划
 - `evaluation/execution-logs/change-branch-demo.json`：状态路径、错误节点阻断和 PRD 完整性证据
 
 ## 目录结构
@@ -202,7 +195,7 @@ npm run eval:change
 | `state-machine/` | 22 个状态、合法转移表与守卫条件配置 |
 | `schemas/` | JSON Schema 定义 |
 | `scripts/` | TypeScript Harness：状态转移、确认管理、写入校验、版本与索引 |
-| `case-data/` | 可复现演示案例；当前包含帮助中心搜索体验优化 |
+| `evaluation/fixtures/` | 隔离的通用回归测试夹具，不作为产品案例 |
 | `evaluation/` | 测试用例、评分标准、执行日志与 Bad Case |
 
 ## 三条演示路径

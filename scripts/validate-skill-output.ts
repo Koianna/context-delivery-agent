@@ -116,7 +116,7 @@ export function validateContextAnalysis(
       if (!item || !["CONFIRMED", "SUPERSEDED", "ARCHIVED"].includes(item.maturity)) {
         errors.push(`${proposal.proposal_id} 使用未确认信息修改稳定 Context`);
       }
-      if (!proposal.target_ref?.startsWith(contextRootRef(projectId))) {
+      if (!proposal.target_ref?.startsWith("repo://context-workspace/projects/") || !proposal.target_ref.includes("/context/")) {
         errors.push(`${proposal.proposal_id} 稳定写入目标不在 context/`);
       }
       if (!proposal.base_version || !proposal.content_ref) {

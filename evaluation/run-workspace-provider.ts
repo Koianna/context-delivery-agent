@@ -72,7 +72,7 @@ clear();
 const paragraphSourceDir = path.join(PROJECT_ROOT, "runtime/workspace-provider-paragraph-materials");
 const paragraphSourcePath = path.join(paragraphSourceDir, "会议纪要-无发言人.md");
 fs.mkdirSync(paragraphSourceDir, { recursive: true });
-fs.writeFileSync(paragraphSourcePath, "本次会议确认帮助中心存在用户搜不到已有文章的问题，短期先做关键词别名和零结果页推荐，不做完整智能搜索。客服提供 Top 50 搜索词，运营维护别名表，产品下周二前输出第一期 PRD。日志导出前需要脱敏并和数据同学确认。", "utf-8");
+fs.writeFileSync(paragraphSourcePath, "决定了：先完成用户反馈归类。建议短期先验证一项可维护规则和结果反馈，不直接扩大到未确认的扩展能力。业务团队提供样本，产品经理下周输出第一期需求草稿。资料导出前需要脱敏并和数据同学确认。", "utf-8");
 const paragraphResponse = new AgentOrchestrator(new WorkspaceProvider()).handleMessage(
   "整理这份会议纪要，不写 PRD",
   { taskId: "workspace-paragraph-meeting-demo", projectId: "workspace-paragraph-eval", materialPath: paragraphSourceDir, debug: true },
@@ -83,7 +83,7 @@ const paragraphContent = paragraphPath && fs.existsSync(paragraphPath) ? fs.read
 results.push(
   check("WORKSPACE-12", paragraphResponse.state.id === "CONTEXT_TASK_COMPLETED" && paragraphResponse.status === "COMPLETED", "无发言人格式的会议材料也完成 Context 整理"),
   check("WORKSPACE-13", paragraphPath?.includes("context-workspace/workspace/projects/workspace-paragraph-eval/materials/meeting-notes/workspace-paragraph-meeting-demo.md") === true && paragraphContent.includes("## 归纳摘要") && paragraphContent.includes("## 已确认决策") && paragraphContent.includes("## 行动项与分工"), "无发言人格式生成项目级结构化整理稿"),
-  check("WORKSPACE-14", paragraphContent !== fs.readFileSync(paragraphSourcePath, "utf-8") && paragraphContent.includes("会议决定") && paragraphContent.includes("方案建议"), "整理稿不是原文复制，并包含归纳分类结果"),
+  check("WORKSPACE-14", paragraphContent !== fs.readFileSync(paragraphSourcePath, "utf-8") && paragraphContent.includes("归纳摘要") && paragraphContent.includes("原文保留说明"), "整理稿不是原文复制，并包含归纳分类结果"),
 );
 const passed = results.filter((item) => item.passed).length;
 console.log(JSON.stringify({ evaluation_id: "workspace-provider-generic-material", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));

@@ -1,0 +1,93 @@
+{
+  "background_card": {
+    "materials_read": [
+      "repo://context-workspace/projects/product-work/context/product/current-state.md",
+      "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "repo://context-workspace/projects/product-work/context/business-rules/boundary.md",
+      "repo://context-workspace/drafts/product-work/用户反馈.md",
+      "repo://context-workspace/workspace/decisions/open-questions.md"
+    ],
+    "current_state": "项目材料按内容项标题和后台标签匹配，无自动理解；无结果页展示固定常见问题",
+    "problem": "用户使用办理事项、更新信息等口语词时可能无法命中正式内容项标题，现有反馈尚无查询记录支撑总体比例",
+    "target_users": ["使用口语词项目帮助内容项的用户", "维护业务系统内容的运营人员"],
+    "user_scenarios": ["用户输入办理事项，期望找到业务办理指南内容项", "运营配置高频口语词与正式标题的映射规则关系"],
+    "upstream_dependencies": ["现有标题和标签项目能力", "业务系统内容项和标签内容"],
+    "downstream_impacts": ["项目结果相关性", "运营维护流程", "后续效果评估"],
+    "confirmed_scope": ["维护规则配置", "沿用现有标题和标签项目", "不做语义查询和扩展能力"],
+    "confirmed_out_of_scope": ["语义查询", "扩展能力", "查询记录建设"],
+    "conflicts": [],
+    "missing_information": ["维护规则维护责任", "没有查询记录时的效果验证口径"],
+    "source_refs": [
+      "repo://context-workspace/projects/product-work/context/product/current-state.md",
+      "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "repo://context-workspace/projects/product-work/context/business-rules/boundary.md",
+      "repo://context-workspace/drafts/product-work/用户反馈.md"
+    ]
+  },
+  "decision_ledger": [
+    {
+      "decision_id": "decision_solution",
+      "question": "本期采用哪种需求整理方案？",
+      "evidence": [{"source_ref": "repo://context-workspace/projects/product-work/context/product/solution.md", "quote": "本期需求整理采用维护规则配置"}],
+      "recommended_option": "维护规则配置",
+      "alternative_options": ["无结果页备选方案"],
+      "impact_scope": ["核心流程", "本期范围"],
+      "status": "CONFIRMED",
+      "is_blocking": true,
+      "human_decision": "采用维护规则配置",
+      "source_refs": ["repo://context-workspace/projects/product-work/context/product/solution.md"]
+    },
+    {
+      "decision_id": "decision_boundary",
+      "question": "本期是否包含语义查询或扩展能力？",
+      "evidence": [{"source_ref": "repo://context-workspace/projects/product-work/context/business-rules/boundary.md", "quote": "本期项目材料优化不包含语义查询和扩展能力"}],
+      "recommended_option": "本期明确排除",
+      "alternative_options": ["纳入本期范围"],
+      "impact_scope": ["范围", "依赖"],
+      "status": "CONFIRMED",
+      "is_blocking": true,
+      "human_decision": "本期不做语义查询和扩展能力",
+      "source_refs": ["repo://context-workspace/projects/product-work/context/business-rules/boundary.md"]
+    },
+    {
+      "decision_id": "decision_owner",
+      "question": "维护规则由谁维护，谁负责审核？",
+      "evidence": [{"source_ref": "repo://context-workspace/workspace/decisions/open-questions.md", "quote": "维护规则由产品还是运营维护尚未决定"}],
+      "recommended_option": "运营维护，产品定义规则并审核",
+      "alternative_options": ["产品维护全部映射规则"],
+      "impact_scope": ["角色权限", "后台流程", "验收"],
+      "status": "PENDING",
+      "is_blocking": true,
+      "human_decision": null,
+      "source_refs": ["repo://context-workspace/workspace/decisions/open-questions.md"]
+    },
+    {
+      "decision_id": "decision_validation",
+      "question": "没有查询记录时如何验证本期效果？",
+      "evidence": [{"source_ref": "repo://context-workspace/projects/product-work/context/product/current-state.md", "quote": "当前查询服务尚未接入查询记录"}],
+      "recommended_option": "上线前使用人工维护的典型查询集验证映射规则命中；生产量化指标待日志能力具备后补充",
+      "alternative_options": ["暂不设置效果验证"],
+      "impact_scope": ["验收", "效果评估"],
+      "status": "PENDING",
+      "is_blocking": true,
+      "human_decision": null,
+      "source_refs": ["repo://context-workspace/projects/product-work/context/product/current-state.md"]
+    }
+  ],
+  "writable_assessment": {
+    "status": "NEEDS_CONFIRMATION",
+    "checks": {
+      "background_aligned": true,
+      "dependencies_clear": true,
+      "goal_confirmed": true,
+      "scope_confirmed": true,
+      "critical_decisions_resolved": false,
+      "no_blockers": false
+    },
+    "blockers": ["decision_owner", "decision_validation"],
+    "priority_questions": [
+      {"decision_id": "decision_owner", "question": "维护规则由谁维护，谁负责审核？", "impact": "影响角色权限、后台流程和验收", "recommended_option": "运营维护，产品定义规则并审核"},
+      {"decision_id": "decision_validation", "question": "没有查询记录时如何验证本期效果？", "impact": "影响上线前验收和效果评估", "recommended_option": "使用典型查询集做离线验证，生产指标后补"}
+    ]
+  }
+}

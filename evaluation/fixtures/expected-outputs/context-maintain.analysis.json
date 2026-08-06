@@ -1,0 +1,121 @@
+{
+  "action": "ANALYZE",
+  "update_proposals": [
+    {
+      "proposal_id": "proposal_current_state_duplicate",
+      "action": "NO_ACTION",
+      "target_ref": "repo://context-workspace/projects/product-work/context/product/current-state.md",
+      "item_id": "info_001",
+      "current_value": "项目材料匹配内容项标题和后台标签",
+      "proposed_value": "业务系统当前只匹配内容项标题和后台标签",
+      "source_refs": ["src_product_20260728"],
+      "relationship": "DUPLICATE",
+      "risk_level": "LOW",
+      "requires_confirmation": false,
+      "impact_if_applied": "仅增加重复表述",
+      "impact_if_ignored": "现有 Context 已覆盖该事实",
+      "base_version": "1.0.0",
+      "content_ref": null
+    },
+    {
+      "proposal_id": "proposal_feedback_workspace",
+      "action": "WRITE_DRAFT",
+      "target_ref": "repo://context-workspace/drafts/product-work-feedback.md",
+      "item_id": "info_004",
+      "current_value": null,
+      "proposed_value": "保存反馈数据及来源负责人缺失标记",
+      "source_refs": ["src_feedback_202607"],
+      "relationship": "NEW",
+      "risk_level": "LOW",
+      "requires_confirmation": false,
+      "impact_if_applied": "保留可继续核验的数据线索",
+      "impact_if_ignored": "反馈统计无法在后续任务中追踪",
+      "base_version": null,
+      "content_ref": null
+    },
+    {
+      "proposal_id": "proposal_solution",
+      "action": "UPDATE_CONTEXT",
+      "target_ref": "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "item_id": "info_009",
+      "current_value": "需求整理默认采用无结果页备选方案，不建设规则映射能力",
+      "proposed_value": "本期采用维护规则配置，历史备选方案不进入本期",
+      "source_refs": ["src_meeting_20260801"],
+      "relationship": "SUPERSEDES",
+      "risk_level": "HIGH",
+      "requires_confirmation": true,
+      "impact_if_applied": "后续需求以维护规则作为本期已确认方案",
+      "impact_if_ignored": "旧方案会继续误导后续分析",
+      "base_version": "1.0.0",
+      "content_ref": "repo://evaluation/fixtures/proposed-context/solution.md"
+    },
+    {
+      "proposal_id": "proposal_search_boundary",
+      "action": "UPDATE_CONTEXT",
+      "target_ref": "repo://context-workspace/projects/product-work/context/business-rules/boundary.md",
+      "item_id": "info_010",
+      "current_value": "需求整理默认包含扩展能力能力",
+      "proposed_value": "本期不包含语义查询和扩展能力",
+      "source_refs": ["src_meeting_20260801"],
+      "relationship": "CONFLICT",
+      "risk_level": "HIGH",
+      "requires_confirmation": true,
+      "impact_if_applied": "后续本期任务不会擅自扩展到扩展能力",
+      "impact_if_ignored": "稳定 Context 与当前确认边界持续冲突",
+      "base_version": "1.0.0",
+      "content_ref": "repo://evaluation/fixtures/proposed-context/boundary.md"
+    },
+    {
+      "proposal_id": "proposal_rule_owner_question",
+      "action": "WRITE_WORKSPACE",
+      "target_ref": "repo://context-workspace/workspace/decisions/open-questions.md",
+      "item_id": "info_011",
+      "current_value": null,
+      "proposed_value": "待确认维护规则维护角色及审核流程",
+      "source_refs": ["src_meeting_20260801"],
+      "relationship": "NEW",
+      "risk_level": "MEDIUM",
+      "requires_confirmation": false,
+      "impact_if_applied": "后续 PRD 能识别后台权限和流程阻塞项",
+      "impact_if_ignored": "可能在未确定责任人的情况下起草错误流程",
+      "base_version": null,
+      "content_ref": null
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "conflict_solution_001",
+      "existing_ref": "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "incoming_item_id": "info_009",
+      "reason": "现有 Context 明确不建设规则映射，新确认结论采用维护规则",
+      "source_refs": ["src_history_20251015", "src_meeting_20260801"]
+    },
+    {
+      "conflict_id": "conflict_boundary_001",
+      "existing_ref": "repo://context-workspace/projects/product-work/context/business-rules/boundary.md",
+      "incoming_item_id": "info_010",
+      "reason": "现有 Context 默认包含扩展能力，新确认结论明确排除",
+      "source_refs": ["src_history_20251015", "src_meeting_20260801"]
+    }
+  ],
+  "stale_items": [
+    {
+      "target_ref": "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "reason": "2025 年方案已被 2026 年 8 月会议结论替代"
+    }
+  ],
+  "index_issues": [
+    {"issue": "MISSING_ENTRY", "target_ref": "repo://context-workspace/projects/product-work/context/product/current-state.md"},
+    {"issue": "MISSING_ENTRY", "target_ref": "repo://context-workspace/projects/product-work/context/product/solution.md"},
+    {"issue": "MISSING_ENTRY", "target_ref": "repo://context-workspace/projects/product-work/context/business-rules/boundary.md"}
+  ],
+  "auto_actions": ["proposal_feedback_workspace", "proposal_rule_owner_question"],
+  "remaining_questions": [
+    {
+      "question_id": "question_alias_owner",
+      "question": "维护规则由产品还是运营维护，新增、停用和审核分别由谁负责？",
+      "impact": "影响后台权限、操作流程和验收口径",
+      "source_refs": ["src_meeting_20260801"]
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
 import {
   validateAppliedReplan, validateChangeCancellation, validateReplanApproval,
+  hashReplanForApproval,
 } from "../scripts/lib/change-guards.js";
 import {
   createChangeSnapshot, restoreChangeSnapshot, sha256Buffer,
@@ -26,7 +27,7 @@ interface CaseResult { case_id: string; passed: boolean; detail: string }
 const results: CaseResult[] = [];
 const check = (caseId: string, passed: boolean, detail: string) => results.push({ case_id: caseId, passed, detail });
 
-const caseRoot = path.join(PROJECT_ROOT, "case-data/help-center-search/change");
+const caseRoot = path.join(PROJECT_ROOT, "evaluation/fixtures/change");
 const input = readJson<ChangeRequestInput>(path.join(caseRoot, "change-request.input.json"));
 const analysis = readJson<ChangeAnalysisOutput>(path.join(caseRoot, "expected-outputs/change-impact.analysis.json"));
 const replan = readJson<ReplanOutput>(path.join(caseRoot, "expected-outputs/change-impact.replan.json"));
@@ -59,21 +60,22 @@ try {
   writeJsonAtomic(analysisReportPath, analysis);
   check("CHG-06", hashesEqual(baselineHashes, artifactHashes(input, tempRoot)), "影响分析只写报告，未修改任何业务产物");
 
-  const replanErrors = validateReplan(analysis, replan, tempRoot);
-  check("CHG-07", replanErrors.length === 0 && replan.plan.steps[0]?.state === "PRD_DRAFTING_DETAILS" && !replan.plan.required_confirmations.includes("CP-P02"), replanErrors.join("; ") || "重规划沿用分析 hash，只安排必要步骤和确认点");
+  const tempReplan: ReplanOutput = { ...replan, analysis_sha256: sha256Buffer(fs.readFileSync(analysisReportPath)) };
+  const replanErrors = validateReplan(analysis, tempReplan, tempRoot);
+  check("CHG-07", replanErrors.length === 0 && tempReplan.plan.steps[0]?.state === "PRD_DRAFTING_DETAILS" && !tempReplan.plan.required_confirmations.includes("CP-P02"), replanErrors.join("; ") || "重规划沿用分析 hash，只安排必要步骤和确认点");
 
-  const planPath = path.join(tempRoot, "context-workspace/workspace/plans/help-center-search-replan.json");
-  writeJsonAtomic(planPath, replan);
-  const approval = makeConfirmation("APPROVED", "APPROVE_REPLAN", approvalPayload);
+  const planPath = path.join(tempRoot, "context-workspace/workspace/plans/product-work-replan.json");
+  writeJsonAtomic(planPath, tempReplan);
+  const approval = makeConfirmation("APPROVED", "APPROVE_REPLAN", { ...approvalPayload, approved_plan_sha256: hashReplanForApproval(tempReplan) });
   const noConfirmationErrors = validateReplanApproval(undefined, "eval-change", "PRD_DRAFTING_DETAILS", tempRoot);
   const wrongTargetErrors = validateReplanApproval(approval, "eval-change", "PRD_DRAFTING_CORE", tempRoot);
   const tamperedPlan: ReplanOutput = {
-    ...replan,
-    plan: { ...replan.plan, steps: replan.plan.steps.map((step, index) => index === 0 ? { ...step, action: "未确认的扩大范围" } : step) },
+    ...tempReplan,
+    plan: { ...tempReplan.plan, steps: tempReplan.plan.steps.map((step, index) => index === 0 ? { ...step, action: "未确认的扩大范围" } : step) },
   };
   writeJsonAtomic(planPath, tamperedPlan);
   const tamperedErrors = validateReplanApproval(approval, "eval-change", "PRD_DRAFTING_DETAILS", tempRoot);
-  writeJsonAtomic(planPath, replan);
+  writeJsonAtomic(planPath, tempReplan);
   writeJsonAtomic(analysisReportPath, { ...analysis, unaffected_items: [] });
   const tamperedAnalysisErrors = validateReplanApproval(approval, "eval-change", "PRD_DRAFTING_DETAILS", tempRoot);
   writeJsonAtomic(analysisReportPath, analysis);
@@ -123,7 +125,7 @@ try {
   };
   check("CHG-11", validateChangeAnalysis(input, unknownAnalysis, tempRoot).length === 0, "无法判断的变化不自动选择返回节点");
 
-  const prdPath = repoRefToPath("repo://context-workspace/workspace/prd/help-center-search.md", tempRoot);
+  const prdPath = repoRefToPath("repo://context-workspace/workspace/prd/product-work.md", tempRoot);
   fs.appendFileSync(prdPath, "\n未授权修改\n", "utf-8");
   const cancelled = makeConfirmation("CANCELLED", "CANCEL_CHANGE", {
     change_id: input.change_request.change_id,
@@ -139,7 +141,7 @@ try {
 
 const passed = results.filter((item) => item.passed).length;
 const report = {
-  evaluation_id: "change-branch-help-center-search",
+  evaluation_id: "change-branch-generic-fixture",
   eval_set_version: "0.4.0",
   git_commit: childProcess.execFileSync("git", ["rev-parse", "HEAD"], { cwd: PROJECT_ROOT, encoding: "utf-8" }).trim(),
   skill_versions: { "change-impact": "0.2.0" },
@@ -155,20 +157,30 @@ if (process.argv.includes("--write-result")) {
 if (passed !== results.length) process.exit(1);
 
 function seedTempRepository(root: string) {
-  for (const ref of input.artifact_refs) {
-    const source = repoRefToPath(ref, PROJECT_ROOT);
-    const target = repoRefToPath(ref, root);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(source, target);
+  const baselineFiles: Array<[string, string]> = [
+    ["evaluation/fixtures/prd/candidates/product-work.details.md", "context-workspace/workspace/prd/product-work.md"],
+    ["evaluation/fixtures/prd/expected-outputs/prd-review.output.json", "context-workspace/workspace/reports/prd-review.json"],
+    ["evaluation/fixtures/prd/decision-ledger.confirmed.json", "context-workspace/workspace/decisions/decision-ledger.json"],
+    ["evaluation/fixtures/seed-context/current-state.md", "context-workspace/projects/product-work/context/product/current-state.md"],
+    ["evaluation/fixtures/seed-context/solution.md", "context-workspace/projects/product-work/context/product/solution.md"],
+    ["evaluation/fixtures/seed-context/boundary.md", "context-workspace/projects/product-work/context/business-rules/boundary.md"],
+  ];
+  for (const [source, target] of baselineFiles) {
+    const targetPath = path.join(root, target);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(path.join(PROJECT_ROOT, source), targetPath);
   }
-  const candidateRef = "repo://case-data/help-center-search/change/candidates/help-center-search.revision-details.md";
+  const prdPath = path.join(root, "context-workspace/workspace/prd/product-work.md");
+  const prdBody = fs.readFileSync(prdPath, "utf-8");
+  fs.writeFileSync(prdPath, `---\nid: prd-product-work\nversion: 0.2.0\n---\n\n${prdBody.replace(/^---[\s\S]*?---\n\n/, "")}`, "utf-8");
+  const candidateRef = "repo://evaluation/fixtures/change/candidates/product-work.revision-details.md";
   const candidateTarget = repoRefToPath(candidateRef, root);
   fs.mkdirSync(path.dirname(candidateTarget), { recursive: true });
   fs.copyFileSync(repoRefToPath(candidateRef, PROJECT_ROOT), candidateTarget);
-  const indexRef = "repo://context-workspace/context/INDEX.md";
+  const indexRef = "repo://context-workspace/projects/product-work/context/INDEX.md";
   const indexTarget = repoRefToPath(indexRef, root);
   fs.mkdirSync(path.dirname(indexTarget), { recursive: true });
-  fs.copyFileSync(repoRefToPath(indexRef, PROJECT_ROOT), indexTarget);
+  fs.writeFileSync(indexTarget, "---\nversion: 0.1.1\nproject: product-work\n---\n\n# Context 索引\n", "utf-8");
 }
 
 function artifactHashes(changeInput: ChangeRequestInput, root: string): Record<string, string> {
@@ -195,7 +207,7 @@ function makeConfirmation(
 
 function makeState(currentState: TaskState["current_state"], replanCount: number): TaskState {
   return {
-    task_id: "eval-change", project_id: "help-center-search", session_id: "eval-session", task_mode: "CHANGE",
+    task_id: "eval-change", project_id: "product-work", session_id: "eval-session", task_mode: "CHANGE",
     current_state: currentState, previous_state: "REPLANNING", return_state: "DELIVERED",
     task_goal: "修改目标内容失效规则", completed_steps: [], pending_confirmation: null,
     material_version: "0.2.0", context_version: "0.1.1", decision_ledger_version: "0.2.0",

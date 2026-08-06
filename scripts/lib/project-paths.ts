@@ -1,13 +1,8 @@
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./config.js";
 
-const LEGACY_CASE_PROJECT = "help-center-search";
-
 export function contextRootPath(projectId?: string, root = PROJECT_ROOT): string {
-  if (!projectId || projectId === LEGACY_CASE_PROJECT) {
-    return path.join(root, "context-workspace/context");
-  }
-  return path.join(root, "context-workspace/projects", safeProjectSlug(projectId), "context");
+  return path.join(root, "context-workspace/projects", safeProjectSlug(projectId ?? "default-project"), "context");
 }
 
 export function contextIndexPath(projectId?: string, root = PROJECT_ROOT): string {
@@ -15,10 +10,7 @@ export function contextIndexPath(projectId?: string, root = PROJECT_ROOT): strin
 }
 
 export function contextIndexRef(projectId?: string): string {
-  if (!projectId || projectId === LEGACY_CASE_PROJECT) {
-    return "repo://context-workspace/context/INDEX.md";
-  }
-  return `repo://context-workspace/projects/${safeProjectSlug(projectId)}/context/INDEX.md`;
+  return `repo://context-workspace/projects/${safeProjectSlug(projectId ?? "default-project")}/context/INDEX.md`;
 }
 
 export function contextRootRef(projectId?: string): string {

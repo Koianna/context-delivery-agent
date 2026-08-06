@@ -1,0 +1,12 @@
+{
+  "request_meta": {"request_id": "req_prd_review_001", "requested_at": "2026-08-04T12:00:00+08:00"},
+  "prd_ref": "repo://context-workspace/workspace/prd/product-work.md",
+  "context_refs": [
+    "repo://context-workspace/projects/product-work/context/product/current-state.md",
+    "repo://context-workspace/projects/product-work/context/product/solution.md",
+    "repo://context-workspace/projects/product-work/context/business-rules/boundary.md"
+  ],
+  "decision_ledger_ref": "repo://evaluation/fixtures/prd/decision-ledger.confirmed.json",
+  "review_dimensions": ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"],
+  "previous_review_ref": null
+}

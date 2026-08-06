@@ -18,7 +18,7 @@ async function main() {
   }
 
   console.log("Context 工程与需求交付 Agent");
-  console.log("请直接描述目标，例如：只整理帮助中心搜索材料，不写 PRD。输入 exit 结束会话。\n");
+  console.log("请直接描述目标，例如：请整理这份会议记录，先不要写 PRD。输入 exit 结束会话。\n");
   const terminal = readline.createInterface({ input, output });
   while (true) {
     const message = (await terminal.question("你：")).trim();

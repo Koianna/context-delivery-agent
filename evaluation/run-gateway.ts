@@ -18,19 +18,23 @@ interface GatewayResponse {
 }
 
 const taskId = "gateway-eval-demo";
+const projectId = "evaluation-product";
 const requests = [
   {
     protocol_version: "0.1",
     request_id: "gateway_req_001",
     task_id: taskId,
+    project_id: projectId,
     session_id: "gateway_session_a",
-    message: "只整理帮助中心搜索材料，不写 PRD",
+    message: "整理并沉淀这份产品现状，先让我确认 Context 更新，不要写 PRD",
+    materials: [{ name: "产品现状.md", content: "当前系统现状：产品支持提交材料并查看处理结果。", source_type: "PRODUCT_DOC", source_owner: "产品团队", source_time: "2026-08-06T10:00:00+08:00", is_complete: true }],
     client: { id: "external-host-a", name: "宿主 A", version: "1.0.0" },
   },
   {
     protocol_version: "0.1",
     request_id: "gateway_req_002",
     task_id: taskId,
+    project_id: projectId,
     session_id: "gateway_session_b",
     message: "确认全部",
     client: { id: "external-host-b", name: "替换后的宿主 B", version: "2.0.0" },
@@ -43,7 +47,7 @@ const input = `${requests.map((request) => JSON.stringify(request)).join("\n")}\
 const output = childProcess.execFileSync(
   process.execPath,
   ["--import", "tsx", path.join(PROJECT_ROOT, "scripts/agent-gateway.ts")],
-  { cwd: PROJECT_ROOT, input, encoding: "utf-8", env: { ...process.env, AGENT_PROVIDER: "case" } }
+  { cwd: PROJECT_ROOT, input, encoding: "utf-8", env: { ...process.env } }
 );
 const responses = output.trim().split("\n").map((line) => JSON.parse(line) as GatewayResponse);
 const results = [
@@ -108,10 +112,11 @@ function clearAgentArtifacts(dynamicTaskId: string) {
   const changeId = `change-target-unavailable-${slug}`.slice(0, 80);
   for (const target of [
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", slug),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/projects/help-center-search/materials/structured-materials", `${slug}.md`),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `help-center-search-${slug}.md`),
+    path.join(PROJECT_ROOT, "context-workspace/drafts", projectId),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId, "materials"),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${slug}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `help-center-search-${slug}-replan.json`),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `${projectId}-${slug}-replan.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/snapshots", changeId),
   ]) {
     fs.rmSync(target, { recursive: true, force: true });

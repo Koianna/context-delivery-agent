@@ -31,7 +31,6 @@ import { recordPrdThinking } from "../record-prd-thinking.js";
 import { recordReplan } from "../record-replan.js";
 import { registerMaterials } from "../register-materials.js";
 import { restoreCancelledChange } from "../restore-change-snapshot.js";
-import { LocalCaseProvider } from "./local-case-provider.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
 import type {
   AgentArtifact,
@@ -89,7 +88,7 @@ export class AgentOrchestrator {
     return createTask({
       taskId: taskId ?? `agent-${Date.now()}`,
       sessionId,
-      projectId: projectId ?? (this.provider.id === "local-case" ? "help-center-search" : "default-project"),
+      projectId: projectId ?? "default-project",
       goal: message,
     });
   }
@@ -834,9 +833,7 @@ function isCancelTask(message: string): boolean {
 }
 
 function defaultProvider(): AgentProvider {
-  return process.env.AGENT_PROVIDER === "case"
-    ? new LocalCaseProvider()
-    : new WorkspaceProvider();
+  return new WorkspaceProvider();
 }
 
 function normalizeProjectId(value?: string): string {

@@ -1,0 +1,52 @@
+{
+  "review_id": "review-product-work-001",
+  "reviewed_prd_version": "0.2.0",
+  "issues": [
+    {
+      "issue_id": "issue_target_unavailable",
+      "severity": "P2",
+      "dimension": "COMPLETENESS",
+      "location": "8. 边界与异常",
+      "description": "PRD 限制不存在的目标表达不能启用，但未定义已经启用后目标内容项下线或标签删除时的运行规则",
+      "evidence": [
+        "目标正式项目词不存在时，配置不能进入启用状态"
+      ],
+      "impact": "存量映射规则可能继续指向失效内容，运营和测试无法判断预期行为",
+      "recommended_fix": "在发布前待办中明确目标内容失效后的停用、提示和责任人",
+      "requires_replan": false
+    },
+    {
+      "issue_id": "issue_query_set_owner",
+      "severity": "P2",
+      "dimension": "ACCEPTANCE",
+      "location": "9. 依赖与效果验证、11. 发布前待办",
+      "description": "典型查询集尚未给出具体条目、维护人和冻结时间",
+      "evidence": [
+        "产品与运营确认典型查询集条目和维护时间"
+      ],
+      "impact": "当前验收方法成立，但在查询集补齐前无法重复执行完整验收",
+      "recommended_fix": "开发联调前提交版本化查询集并记录产品、运营共同确认",
+      "requires_replan": false
+    }
+  ],
+  "summary": {
+    "p0_count": 0,
+    "p1_count": 0,
+    "p2_count": 2,
+    "recommendation": "PASS_WITH_NOTES"
+  },
+  "passed_dimensions": [
+    "FACT_STATUS",
+    "SCOPE",
+    "DEPENDENCY",
+    "CONSISTENCY",
+    "OVER_DESIGN"
+  ],
+  "unverifiable_items": [
+    {
+      "item": "生产无结果率和项目转化率",
+      "reason": "当前没有查询记录，PRD 已明确不作为本期量化承诺"
+    }
+  ],
+  "prd_sha256": "130a7987e1d14ac5d0fc6f8312147be1a826e87b632d6450bc2bdca9df917b56"
+}

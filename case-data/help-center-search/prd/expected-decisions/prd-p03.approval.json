@@ -1,9 +1,0 @@
-{
-  "confirmation_type": "REVIEW_DISPOSITION",
-  "resolution": "ACCEPT_AND_DELIVER",
-  "disposition": "ACCEPT_WITH_P2_NOTES",
-  "accepted_review_id": "review-help-center-search-001",
-  "review_summary": {"p0_count": 0, "p1_count": 0, "p2_count": 2, "recommendation": "PASS_WITH_NOTES"},
-  "accepted_p2_issue_ids": ["issue_target_unavailable", "issue_query_set_owner"],
-  "reason": "无 P0/P1 阻塞问题，P2 待办已进入发布前清单，允许交付当前版本"
-}

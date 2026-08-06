@@ -25,7 +25,7 @@ interface CaseResult { case_id: string; passed: boolean; detail: string }
 const results: CaseResult[] = [];
 const check = (caseId: string, passed: boolean, detail: string) => results.push({ case_id: caseId, passed, detail });
 
-const caseRoot = path.join(PROJECT_ROOT, "case-data/help-center-search/prd");
+const caseRoot = path.join(PROJECT_ROOT, "evaluation/fixtures/prd");
 const thinking = readJson<PrdThinkingOutput>(path.join(caseRoot, "expected-outputs/prd-thinking.output.json"));
 const ledger = readJson<{ decisions: Array<{ decision_id: string; status: string }> }>(path.join(caseRoot, "decision-ledger.confirmed.json"));
 const confirmedIds = ledger.decisions.filter((item) => item.status === "CONFIRMED").map((item) => item.decision_id);
@@ -34,8 +34,10 @@ const details = readJson<PrdWriteOutput>(path.join(caseRoot, "expected-outputs/p
 const p01Payload = readJson<Record<string, unknown>>(path.join(caseRoot, "expected-decisions/prd-p01.approval.json"));
 const p02Payload = readJson<Record<string, unknown>>(path.join(caseRoot, "expected-decisions/prd-p02.approval.json"));
 const p03Payload = readJson<Record<string, unknown>>(path.join(caseRoot, "expected-decisions/prd-p03.approval.json"));
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "prd-branch-eval-"));
+seedTempRepository(tempRoot);
 
-const thinkingErrors = validatePrdThinking(thinking);
+const thinkingErrors = validatePrdThinking(thinking, tempRoot);
 check("PRD-01", thinkingErrors.length === 0 && !(thinking as unknown as Record<string, unknown>).prd_artifact, thinkingErrors.join("; ") || "写前分析有来源且未输出 PRD 正文");
 
 const pendingBlocking = thinking.decision_ledger.filter((item) => item.is_blocking && item.status === "PENDING");
@@ -48,10 +50,8 @@ const invalidP01 = makeConfirmation(
 );
 check("PRD-03", validatePrdEntryConfirmation(invalidP01, "eval-prd").length > 0, "writable_status=false 时 CP-P01 拒绝准入");
 
-const coreContractErrors = validatePrdWrite(core, confirmedIds);
-const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "prd-branch-eval-"));
+const coreContractErrors = validatePrdWrite(core, confirmedIds, tempRoot);
 try {
-  seedTempRepository(tempRoot);
   const coreState = makeState("PRD_DRAFTING_CORE");
   const coreAuth = authorizePrdWrite(coreState, [validP01], core, tempRoot);
   check("PRD-04", validatePrdEntryConfirmation(validP01, "eval-prd").length === 0 && coreAuth.length === 0 && coreContractErrors.length === 0, coreAuth.join("; ") || "CP-P01 与 CORE 契约通过");
@@ -69,9 +69,10 @@ try {
   check("PRD-07", noP02.some((error) => error.includes("CP-P02")), "没有 CP-P02 时 DETAILS 写入被拒绝");
 
   const validP02 = makeConfirmation("SCOPE_AND_CORE_FLOW", "WAITING_SCOPE_CONFIRM", "APPROVE_CORE", p02Payload);
-  const detailsContractErrors = validatePrdWrite(details, confirmedIds);
+  const detailsContractErrors = validatePrdWrite(details, confirmedIds, tempRoot);
   const detailsAuth = authorizePrdWrite(detailsState, [validP01, validP02], details, tempRoot);
-  check("PRD-08", validateCoreConfirmation(validP02, "eval-prd").length === 0 && detailsAuth.length === 0 && detailsContractErrors.length === 0, detailsAuth.join("; ") || "CP-P02 与 DETAILS 契约通过");
+  const prd08Errors = [...validateCoreConfirmation(validP02, "eval-prd"), ...detailsAuth, ...detailsContractErrors];
+  check("PRD-08", prd08Errors.length === 0, prd08Errors.join("; ") || "CP-P02 与 DETAILS 契约通过");
 
   const detailsFirst = writePrdArtifactFile(details, tempRoot, "2026-08-04T11:50:00+08:00");
   const detailsSecond = writePrdArtifactFile(details, tempRoot, "2026-08-04T11:50:00+08:00");
@@ -116,7 +117,7 @@ try {
 
 const passed = results.filter((item) => item.passed).length;
 const report = {
-  evaluation_id: "prd-branch-help-center-search",
+  evaluation_id: "prd-branch-generic-fixture",
   eval_set_version: "0.3.0",
   git_commit: childProcess.execFileSync("git", ["rev-parse", "HEAD"], { cwd: PROJECT_ROOT, encoding: "utf-8" }).trim(),
   skill_versions: { "prd-thinking": "0.2.0", "prd-write": "0.2.0", "prd-review": "0.2.0" },
@@ -132,19 +133,36 @@ if (process.argv.includes("--write-result")) {
 if (passed !== results.length) process.exit(1);
 
 function seedTempRepository(root: string) {
-  for (const name of ["help-center-search.core.md", "help-center-search.details.md"]) {
+  for (const name of ["product-work.core.md", "product-work.details.md"]) {
     const source = path.join(caseRoot, "candidates", name);
-    const target = path.join(root, "case-data/help-center-search/prd/candidates", name);
+    const target = path.join(root, "evaluation/fixtures/prd/candidates", name);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, target);
   }
   fs.mkdirSync(path.join(root, "context-workspace/workspace/prd"), { recursive: true });
+  const refs = [
+    ["evaluation/fixtures/seed-context/current-state.md", "context-workspace/projects/product-work/context/product/current-state.md"],
+    ["evaluation/fixtures/seed-context/solution.md", "context-workspace/projects/product-work/context/product/solution.md"],
+    ["evaluation/fixtures/seed-context/boundary.md", "context-workspace/projects/product-work/context/business-rules/boundary.md"],
+    ["evaluation/fixtures/source-materials/用户反馈.md", "context-workspace/drafts/product-work/用户反馈.md"],
+  ];
+  for (const [source, target] of refs) {
+    const targetPath = path.join(root, target);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(path.join(PROJECT_ROOT, source), targetPath);
+  }
+  const decisionPath = path.join(root, "context-workspace/workspace/decisions/open-questions.md");
+  fs.mkdirSync(path.dirname(decisionPath), { recursive: true });
+  fs.writeFileSync(decisionPath, "# 待确认事项\n\n本夹具只验证来源引用存在性。\n", "utf-8");
+  const ledgerSource = path.join(root, "evaluation/fixtures/prd/decision-ledger.confirmed.json");
+  fs.mkdirSync(path.dirname(ledgerSource), { recursive: true });
+  fs.copyFileSync(path.join(PROJECT_ROOT, "evaluation/fixtures/prd/decision-ledger.confirmed.json"), ledgerSource);
 }
 
 function makeState(currentState: TaskState["current_state"]): TaskState {
   return {
-    task_id: "eval-prd", project_id: "help-center-search", session_id: "eval-session", task_mode: "PRD",
-    current_state: currentState, previous_state: null, return_state: null, task_goal: "准备搜索优化 PRD",
+    task_id: "eval-prd", project_id: "product-work", session_id: "eval-session", task_mode: "PRD",
+    current_state: currentState, previous_state: null, return_state: null, task_goal: "准备项目需求 PRD",
     completed_steps: [], pending_confirmation: null, material_version: "0.2.0", context_version: "0.1.1",
     decision_ledger_version: "0.2.0", prd_version: "0.0.0", plan_version: "0.1.0",
     latest_output_ref: null, retry_count: 0, replan_count: 0, error_info: null, git_commit: null,

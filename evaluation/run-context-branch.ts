@@ -19,7 +19,7 @@ function check(caseId: string, condition: boolean, detail: string) {
   results.push({ case_id: caseId, passed: condition, detail });
 }
 
-const caseRoot = path.join(PROJECT_ROOT, "case-data/help-center-search");
+const caseRoot = path.join(PROJECT_ROOT, "evaluation/fixtures");
 const input = readJson<MaterialIngestInput>(path.join(caseRoot, "material-ingest.input.json"));
 const material = readJson<MaterialIngestOutput>(path.join(caseRoot, "expected-outputs/material-ingest.output.json"));
 const analysis = readJson<ContextAnalysisOutput>(path.join(caseRoot, "expected-outputs/context-maintain.analysis.json"));
@@ -30,7 +30,7 @@ check("CTX-01", materialErrors.length === 0, materialErrors.join("; ") || "全�
 const analysisErrors = validateContextAnalysis(material, analysis);
 check("CTX-02", analysisErrors.length === 0, analysisErrors.join("; ") || "Context 分析契约通过校验");
 
-const feedbackItems = material.information_items.filter((item) => item.source_refs.includes("src_feedback_202607"));
+  const feedbackItems = material.information_items.filter((item) => item.source_refs.includes("src_feedback_202607"));
 check("CTX-03", feedbackItems.every((item) => item.target_layer === "DRAFTS"), "缺少来源负责人的反馈材料未提升可信层");
 
 const conflictIds = new Set((analysis.conflicts as Array<{ conflict_id: string }>).map((item) => item.conflict_id));
@@ -46,8 +46,8 @@ check("CTX-05", noUnconfirmedPromotion, "未确认信息没有稳定 Context 写
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "context-branch-eval-"));
 try {
   seedTempRepository(tempRoot);
-  const proposal = analysis.update_proposals.find((item) => item.proposal_id === "proposal_search_solution");
-  if (!proposal) throw new Error("缺少 proposal_search_solution");
+  const proposal = analysis.update_proposals.find((item) => item.proposal_id === "proposal_solution");
+  if (!proposal) throw new Error("缺少 proposal_solution");
   const state = makeTaskState("CONTEXT_MAINTAINING");
   const approved = makeConfirmation(proposal.proposal_id);
 
@@ -87,8 +87,8 @@ try {
   const retryAuthorization = authorizeContextWrite({ taskState: state, confirmations: [approved], proposal, root: tempRoot });
   check("CTX-10", first.status === "CREATED" && second.status === "UNCHANGED" && first.version === second.version && retryAuthorization.length === 0, "中断重试识别已落地内容，不创建新版本");
 
-  const firstIndex = updateIndex(tempRoot, "2026-08-04");
-  const secondIndex = updateIndex(tempRoot, "2026-08-04");
+  const firstIndex = updateIndex(tempRoot, "2026-08-04", "product-work");
+  const secondIndex = updateIndex(tempRoot, "2026-08-04", "product-work");
   check("CTX-11", firstIndex.entry_count === 3 && secondIndex.status === "UNCHANGED", "索引包含全部稳定 Context 且重复更新幂等");
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -97,7 +97,7 @@ try {
 const passed = results.filter((result) => result.passed).length;
 const commit = childProcess.execFileSync("git", ["rev-parse", "HEAD"], { cwd: PROJECT_ROOT, encoding: "utf-8" }).trim();
 const report = {
-  evaluation_id: "context-branch-help-center-search",
+  evaluation_id: "context-branch-generic-fixture",
   eval_set_version: "0.2.0",
   git_commit: commit,
   skill_versions: { "material-ingest": "0.2.0", "context-maintain": "0.2.0" },
@@ -114,11 +114,11 @@ if (passed !== results.length) process.exit(1);
 
 function seedTempRepository(root: string) {
   const mapping = [
-    ["seed-context/search-current-state.md", "context-workspace/context/product/search-current-state.md"],
-    ["seed-context/search-solution.md", "context-workspace/context/product/search-solution.md"],
-    ["seed-context/search-boundaries.md", "context-workspace/context/business-rules/search-boundaries.md"],
-    ["proposed-context/search-solution.md", "case-data/help-center-search/proposed-context/search-solution.md"],
-    ["proposed-context/search-boundaries.md", "case-data/help-center-search/proposed-context/search-boundaries.md"]
+    ["seed-context/current-state.md", "context-workspace/projects/product-work/context/product/current-state.md"],
+    ["seed-context/solution.md", "context-workspace/projects/product-work/context/product/solution.md"],
+    ["seed-context/boundary.md", "context-workspace/projects/product-work/context/business-rules/boundary.md"],
+    ["proposed-context/solution.md", "evaluation/fixtures/proposed-context/solution.md"],
+    ["proposed-context/boundary.md", "evaluation/fixtures/proposed-context/boundary.md"]
   ];
   for (const [from, to] of mapping) {
     const source = path.join(caseRoot, from);
@@ -126,13 +126,12 @@ function seedTempRepository(root: string) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, target);
   }
-  const index = fs.readFileSync(path.join(PROJECT_ROOT, "context-workspace/context/INDEX.md"), "utf-8");
-  writeTextAtomic(path.join(root, "context-workspace/context/INDEX.md"), index);
+  writeTextAtomic(path.join(root, "context-workspace/projects/product-work/context/INDEX.md"), "---\nversion: 0.1.0\nproject: product-work\n---\n\n# Context 索引\n");
 }
 
 function makeTaskState(currentState: TaskState["current_state"]): TaskState {
   return {
-    task_id: "eval-task", project_id: "help-center-search", session_id: "eval-session", task_mode: "CONTEXT",
+    task_id: "eval-task", project_id: "product-work", session_id: "eval-session", task_mode: "CONTEXT",
     current_state: currentState, previous_state: "WAITING_CONTEXT_CONFIRM", return_state: "CONTEXT_TASK_COMPLETED",
     task_goal: "整理材料", completed_steps: [], pending_confirmation: null, material_version: "0.2.0",
     context_version: "1.0.0", decision_ledger_version: "0.1.0", prd_version: "0.1.0", plan_version: "0.1.0",

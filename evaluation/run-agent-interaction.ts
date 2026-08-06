@@ -3,7 +3,7 @@ import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
-import { LocalCaseProvider } from "../scripts/agent/local-case-provider.js";
+import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { PROJECT_ROOT, readPendingConfirmations, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
 
@@ -11,12 +11,17 @@ interface CaseResult { case_id: string; passed: boolean; detail: string }
 const results: CaseResult[] = [];
 const transcript: Array<{ user: string; response: ReturnType<AgentOrchestrator["handleMessage"]> }> = [];
 const taskId = `agent-eval-${Date.now()}`;
-const agent = new AgentOrchestrator(new LocalCaseProvider());
+const projectId = "evaluation-product";
+const sourceDir = path.join(PROJECT_ROOT, "runtime/agent-interaction-materials");
+const sourcePath = path.join(sourceDir, "产品现状.md");
+const agent = new AgentOrchestrator(new WorkspaceProvider());
 
 clearRuntime();
 clearAgentArtifacts(taskId);
+fs.mkdirSync(sourceDir, { recursive: true });
+fs.writeFileSync(sourcePath, "---\nsource_type: PRODUCT_DOC\nsource_owner: 产品团队\nsource_time: 2026-08-06T10:00:00+08:00\n---\n\n当前项目支持用户提交材料并查看处理结果。\n", "utf-8");
 const turn = (user: string) => {
-  const response = agent.handleMessage(user, { taskId, debug: true });
+  const response = agent.handleMessage(user, { taskId, projectId, materialPath: sourcePath, debug: true });
   transcript.push({ user, response });
   return response;
 };
@@ -24,24 +29,24 @@ const check = (caseId: string, passed: boolean, detail: string) => {
   results.push({ case_id: caseId, passed, detail });
 };
 
-const context = turn("只整理帮助中心搜索材料，不写 PRD");
+const context = turn("请整理这份会议记录，先不要写 PRD");
 check(
   "AGENT-01",
-  context.state.id === "WAITING_CONTEXT_CONFIRM" && context.status === "WAITING_CONFIRMATION",
-  "自然语言输入自动路由到 Context，并停在 CP-C01"
+  context.state.id === "CONTEXT_TASK_COMPLETED" && context.status === "COMPLETED",
+  "自然语言输入自动路由到 Context 并完成可逆整理"
 );
 const beforeContextConfirm = readTaskState();
 check(
   "AGENT-02",
-  beforeContextConfirm?.context_version === "0.1.0" && context.confirmation?.items.length === 2,
-  "人工确认前没有提升 Context 版本，且只展示两条稳定变更"
+  beforeContextConfirm?.context_version === "0.1.0" && !context.confirmation,
+  "没有稳定 Context 变更时不创建确认点或提升 Context 版本"
 );
 
-const contextDone = turn("确认全部");
+const contextDone = context;
 check(
   "AGENT-03",
   contextDone.state.id === "CONTEXT_TASK_COMPLETED" && contextDone.artifacts.some((item) => fileExists(item.ref)),
-  "自然语言确认后执行 Context APPLY 并落盘"
+  "自然语言整理完成后返回 Runtime 产物并落盘"
 );
 
 const p01 = turn("继续准备 PRD");
@@ -90,7 +95,6 @@ check(
 
 const confirmations = readPendingConfirmations()?.records ?? [];
 const expectedTypes = new Set([
-  "CONTEXT_UPDATE",
   "DECISION_AND_WRITABLE_STATUS",
   "SCOPE_AND_CORE_FLOW",
   "REVIEW_DISPOSITION",
@@ -103,17 +107,17 @@ check(
 );
 check(
   "AGENT-12",
-  transcript.every((item) => item.response.provider.id === "local-case") && transcript.every((item) => !item.response.message.includes("npx")),
+  transcript.every((item) => item.response.provider.id === "workspace") && transcript.every((item) => !item.response.message.includes("npx")),
   "用户响应明确 Provider 且不暴露脚本命令作为交互方式"
 );
 
 const passed = results.filter((item) => item.passed).length;
-const executionLog = { provider: "local-case", transcript: sanitizeTranscript(transcript) };
+const executionLog = { provider: "workspace", project_id: projectId, transcript: sanitizeTranscript(transcript) };
 const report = {
   evaluation_id: "agent-natural-language-interaction",
   eval_set_version: "0.1.0",
   git_commit: childProcess.execFileSync("git", ["rev-parse", "HEAD"], { cwd: PROJECT_ROOT, encoding: "utf-8" }).trim(),
-  provider: "local-case",
+  provider: "workspace",
   summary: { total: results.length, passed, failed: results.length - passed },
   results,
   execution_log: process.argv.includes("--write-result")
@@ -140,6 +144,7 @@ function clearRuntime() {
     fs.rmSync(path.join(PROJECT_ROOT, "runtime", file), { force: true });
   }
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/provider-output"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "runtime/agent-interaction-materials"), { recursive: true, force: true });
 }
 
 function clearAgentArtifacts(dynamicTaskId: string) {
@@ -147,10 +152,10 @@ function clearAgentArtifacts(dynamicTaskId: string) {
   const changeId = `change-target-unavailable-${slug}`.slice(0, 80);
   for (const target of [
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", slug),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/projects/help-center-search/materials/structured-materials", `${slug}.md`),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `help-center-search-${slug}.md`),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId, "materials"),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${slug}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `help-center-search-${slug}-replan.json`),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `${projectId}-${slug}-replan.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/snapshots", changeId),
   ]) {
     fs.rmSync(target, { recursive: true, force: true });

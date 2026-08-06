@@ -1,0 +1,21 @@
+{
+  "request_meta": {"request_id": "req_prd_demo_001", "requested_at": "2026-08-04T11:00:00+08:00"},
+  "task_statement": "准备项目材料整理与交付 PRD",
+  "problem_statement": "部分用户使用口语词项目时无法命中已有内容项",
+  "context_refs": [
+    "repo://context-workspace/projects/product-work/context/product/current-state.md",
+    "repo://context-workspace/projects/product-work/context/product/solution.md",
+    "repo://context-workspace/projects/product-work/context/business-rules/boundary.md"
+  ],
+  "workspace_refs": [
+    "repo://context-workspace/workspace/decisions/open-questions.md",
+    "repo://context-workspace/workspace/reports/material-analysis.json"
+  ],
+  "historical_prd_refs": [],
+  "confirmed_constraints": [
+    "本期采用维护规则配置",
+    "本期不做语义查询和扩展能力"
+  ],
+  "previous_decision_ledger_ref": null,
+  "user_updates": []
+}

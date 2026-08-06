@@ -13,7 +13,7 @@ interface IndexEntry {
 }
 
 export function updateIndex(root = PROJECT_ROOT, updated = new Date().toISOString().slice(0, 10), project?: string) {
-  const projectName = project ?? "help-center-search";
+  const projectName = project ?? "default-project";
   const contextDir = contextRootPath(project, root);
   const indexPath = contextIndexPath(project, root);
   fs.mkdirSync(contextDir, { recursive: true });

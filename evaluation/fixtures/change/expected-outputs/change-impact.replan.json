@@ -1,0 +1,50 @@
+{
+  "mode": "REPLAN",
+  "change_id": "change-target-unavailable-001",
+  "analysis_ref": "repo://context-workspace/workspace/reports/change-impact.json",
+  "analysis_sha256": "e1ba04e9eca97be80d090fc18ed1d5777e9221e73baf8d2aa75d57e5defcbf22",
+  "snapshot_ref": "repo://context-workspace/workspace/snapshots/change-target-unavailable-001/manifest.json",
+  "plan": {
+    "plan_id": "replan-target-unavailable-001",
+    "version": "0.2.0",
+    "previous_version": "0.1.0",
+    "status": "DRAFT",
+    "recommended_return_state": "PRD_DRAFTING_DETAILS",
+    "steps": [
+      {
+        "step_id": "step-revise-details",
+        "state": "PRD_DRAFTING_DETAILS",
+        "action": "仅修订映射规则配置、权限、目标失效异常和对应验收项",
+        "input_refs": ["repo://context-workspace/workspace/prd/product-work.md", "repo://context-workspace/workspace/reports/change-impact.json"],
+        "depends_on": []
+      },
+      {
+        "step_id": "step-review-revision",
+        "state": "PRD_REVIEWING",
+        "action": "对修订版本执行独立审核",
+        "input_refs": ["repo://context-workspace/workspace/prd/product-work.md"],
+        "depends_on": ["step-revise-details"]
+      },
+      {
+        "step_id": "step-confirm-delivery",
+        "state": "WAITING_REVIEW_DECISION",
+        "action": "处理新审核问题并决定是否交付",
+        "input_refs": ["repo://context-workspace/workspace/reports/prd-review.json"],
+        "depends_on": ["step-review-revision"]
+      }
+    ],
+    "preserved_artifacts": [
+      "repo://context-workspace/workspace/decisions/decision-ledger.json",
+      "repo://context-workspace/projects/product-work/context/product/current-state.md",
+      "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "repo://context-workspace/projects/product-work/context/business-rules/boundary.md"
+    ],
+    "preserved_items": [
+      {"artifact_ref": "repo://context-workspace/workspace/prd/product-work.md", "locations": ["1. 背景与问题", "2. 产品目标", "3. 非目标", "4. 目标用户与场景", "5. 本期范围与核心流程"]}
+    ],
+    "deprecated_artifacts": ["repo://context-workspace/workspace/reports/prd-review.json"],
+    "required_confirmations": ["CP-R01", "CP-P03"]
+  },
+  "risks": ["若现有内容系统没有失效事件，需要先补充技术依赖确认"],
+  "open_questions": []
+}

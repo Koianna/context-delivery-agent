@@ -11,7 +11,7 @@ export function recordReplan(
   taskId: string,
   outputPath: string,
   root = PROJECT_ROOT,
-  planRef = "repo://context-workspace/workspace/plans/help-center-search-replan.json"
+  planRef = `repo://context-workspace/workspace/plans/${taskId}-replan.json`
 ) {
   const state = readTaskState();
   if (!state || state.task_id !== taskId) throw new Error(`任务 ${taskId} 不存在`);
