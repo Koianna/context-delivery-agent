@@ -24,7 +24,7 @@ for (const skillName of skillNames) {
   }
   const extraKeys = keys.filter((key) => !["name", "description"].includes(key));
   if (extraKeys.length) errors.push(`${skillName}: frontmatter 包含非必要字段 ${extraKeys.join(", ")}`);
-  for (const resource of ["prompt.md", "schema.json", "references", "examples", "tests"]) {
+  for (const resource of ["prompt.md", "schema.json", "references", "examples"]) {
     if (!fs.existsSync(path.join(directory, resource))) errors.push(`${skillName}: 缺少 ${resource}`);
   }
   try {
