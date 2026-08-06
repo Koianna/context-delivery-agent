@@ -9,12 +9,12 @@ import type {
   MaterialIngestOutput,
 } from "./lib/context-types.js";
 import { readJson, repoRefToPath } from "./lib/repository.js";
-import { contextRootRef } from "./lib/project-paths.js";
 
 const INFORMATION_TYPES = new Set(["USER_FEEDBACK", "OBSERVATION", "FACT", "DATA", "OPINION", "PROPOSAL", "CONFIRMED_DECISION", "OPEN_QUESTION", "DEPRECATED_CONTENT"]);
 const MATURITIES = new Set(["RAW", "UNCONFIRMED", "CONFIRMED", "SUPERSEDED", "ARCHIVED"]);
 const STABLE_ACTIONS = new Set(["PROMOTE_TO_CONTEXT", "UPDATE_CONTEXT", "MARK_SUPERSEDED", "ARCHIVE"]);
 const ACTIONS = new Set(["WRITE_DRAFT", "WRITE_WORKSPACE", ...STABLE_ACTIONS, "UPDATE_INDEX", "FIX_REFERENCE", "NO_ACTION"]);
+const STABLE_CONTEXT_REF = /^repo:\/\/context-workspace\/context\/[a-z0-9][a-z0-9_-]{0,63}\/(?:product|users|business-rules|glossary)\/.+$/;
 
 export function validateMaterialOutput(
   input: MaterialIngestInput,
@@ -116,8 +116,8 @@ export function validateContextAnalysis(
       if (!item || !["CONFIRMED", "SUPERSEDED", "ARCHIVED"].includes(item.maturity)) {
         errors.push(`${proposal.proposal_id} 使用未确认信息修改稳定 Context`);
       }
-      if (!proposal.target_ref?.startsWith("repo://context-workspace/projects/") || !proposal.target_ref.includes("/context/")) {
-        errors.push(`${proposal.proposal_id} 稳定写入目标不在 context/`);
+      if (!proposal.target_ref || !STABLE_CONTEXT_REF.test(proposal.target_ref)) {
+        errors.push(`${proposal.proposal_id} 稳定写入目标不在 context/<project_id>/`);
       }
       if (!proposal.base_version || !proposal.content_ref) {
         errors.push(`${proposal.proposal_id} 缺少 base_version 或 content_ref`);

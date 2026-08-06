@@ -43,7 +43,7 @@
     },
     {
       "item_id": "preserved-context",
-      "artifact_ref": "repo://context-workspace/projects/product-work/context/product/solution.md",
+      "artifact_ref": "repo://context-workspace/context/product-work/product/solution.md",
       "locations": ["全部"],
       "reason": "稳定方案仍是维护规则配置"
     }

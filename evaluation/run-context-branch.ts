@@ -114,9 +114,9 @@ if (passed !== results.length) process.exit(1);
 
 function seedTempRepository(root: string) {
   const mapping = [
-    ["seed-context/current-state.md", "context-workspace/projects/product-work/context/product/current-state.md"],
-    ["seed-context/solution.md", "context-workspace/projects/product-work/context/product/solution.md"],
-    ["seed-context/boundary.md", "context-workspace/projects/product-work/context/business-rules/boundary.md"],
+    ["seed-context/current-state.md", "context-workspace/context/product-work/product/current-state.md"],
+    ["seed-context/solution.md", "context-workspace/context/product-work/product/solution.md"],
+    ["seed-context/boundary.md", "context-workspace/context/product-work/business-rules/boundary.md"],
     ["proposed-context/solution.md", "evaluation/fixtures/proposed-context/solution.md"],
     ["proposed-context/boundary.md", "evaluation/fixtures/proposed-context/boundary.md"]
   ];
@@ -126,7 +126,7 @@ function seedTempRepository(root: string) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, target);
   }
-  writeTextAtomic(path.join(root, "context-workspace/projects/product-work/context/INDEX.md"), "---\nversion: 0.1.0\nproject: product-work\n---\n\n# Context 索引\n");
+  writeTextAtomic(path.join(root, "context-workspace/context/product-work/INDEX.md"), "---\nversion: 0.1.0\nproject: product-work\n---\n\n# Context 索引\n");
 }
 
 function makeTaskState(currentState: TaskState["current_state"]): TaskState {

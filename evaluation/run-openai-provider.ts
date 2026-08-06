@@ -122,7 +122,7 @@ async function main() {
     "整理并沉淀这份产品现状，不要写 PRD",
     { taskId, projectId, materialPath: sourceDir, debug: true },
   );
-  const stableContext = path.join(PROJECT_ROOT, "context-workspace/projects", projectId, "context/product");
+  const stableContext = path.join(PROJECT_ROOT, "context-workspace/context", projectId, "product");
   results.push(
     check("MODEL-06", response.provider.id === "openai" && response.state.id === "WAITING_CONTEXT_CONFIRM", "模型 Provider 结果通过 Runtime 并停在 CP-C01"),
     check("MODEL-07", response.confirmation?.items.length === 1 && response.artifacts.some((item) => item.label === "结构化整理稿"), "Runtime 返回模型生成的候选和可阅读整理稿"),
@@ -156,7 +156,7 @@ function clearRuntime(taskId: string, projectId: string): void {
     path.join(PROJECT_ROOT, "runtime/provider-output"),
     path.join(PROJECT_ROOT, "runtime/openai-provider-eval-materials"),
     path.join(PROJECT_ROOT, "context-workspace/drafts", projectId),
-    path.join(PROJECT_ROOT, "context-workspace/projects", projectId),
+    path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskId),
   ]) fs.rmSync(target, { recursive: true, force: true });

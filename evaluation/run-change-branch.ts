@@ -161,9 +161,9 @@ function seedTempRepository(root: string) {
     ["evaluation/fixtures/prd/candidates/product-work.details.md", "context-workspace/workspace/prd/product-work.md"],
     ["evaluation/fixtures/prd/expected-outputs/prd-review.output.json", "context-workspace/workspace/reports/prd-review.json"],
     ["evaluation/fixtures/prd/decision-ledger.confirmed.json", "context-workspace/workspace/decisions/decision-ledger.json"],
-    ["evaluation/fixtures/seed-context/current-state.md", "context-workspace/projects/product-work/context/product/current-state.md"],
-    ["evaluation/fixtures/seed-context/solution.md", "context-workspace/projects/product-work/context/product/solution.md"],
-    ["evaluation/fixtures/seed-context/boundary.md", "context-workspace/projects/product-work/context/business-rules/boundary.md"],
+    ["evaluation/fixtures/seed-context/current-state.md", "context-workspace/context/product-work/product/current-state.md"],
+    ["evaluation/fixtures/seed-context/solution.md", "context-workspace/context/product-work/product/solution.md"],
+    ["evaluation/fixtures/seed-context/boundary.md", "context-workspace/context/product-work/business-rules/boundary.md"],
   ];
   for (const [source, target] of baselineFiles) {
     const targetPath = path.join(root, target);
@@ -177,7 +177,7 @@ function seedTempRepository(root: string) {
   const candidateTarget = repoRefToPath(candidateRef, root);
   fs.mkdirSync(path.dirname(candidateTarget), { recursive: true });
   fs.copyFileSync(repoRefToPath(candidateRef, PROJECT_ROOT), candidateTarget);
-  const indexRef = "repo://context-workspace/projects/product-work/context/INDEX.md";
+  const indexRef = "repo://context-workspace/context/product-work/INDEX.md";
   const indexTarget = repoRefToPath(indexRef, root);
   fs.mkdirSync(path.dirname(indexTarget), { recursive: true });
   fs.writeFileSync(indexTarget, "---\nversion: 0.1.1\nproject: product-work\n---\n\n# Context 索引\n", "utf-8");

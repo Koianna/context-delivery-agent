@@ -7,7 +7,7 @@
     "structured_sections": ["background", "goal", "scope", "core-flow"],
     "markdown_ref": "repo://context-workspace/workspace/prd/example-project.md",
     "content_ref": "repo://runtime/provider-output/example-project/prd.core.md",
-    "source_refs": ["repo://context-workspace/projects/example-project/context/product/current-state.md"],
+    "source_refs": ["repo://context-workspace/context/example-project/product/current-state.md"],
     "decision_refs": ["decision_owner"]
   },
   "coverage": {"required_sections": ["background", "goal", "scope", "core-flow"], "covered_sections": ["background", "goal", "scope", "core-flow"], "missing_sections": []},

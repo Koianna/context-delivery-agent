@@ -3,7 +3,7 @@
   "update_proposals": [{
     "proposal_id": "proposal_001",
     "action": "UPDATE_CONTEXT",
-    "target_ref": "repo://context-workspace/projects/example-project/context/product/example-boundaries.md",
+    "target_ref": "repo://context-workspace/context/example-project/product/example-boundaries.md",
     "item_id": "info_001",
     "current_value": "当前范围包含示例能力",
     "proposed_value": "当前范围暂不包含该能力",

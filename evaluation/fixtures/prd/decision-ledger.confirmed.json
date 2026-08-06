@@ -5,8 +5,8 @@
   "created_by": "user",
   "created_at": "2026-08-04T11:20:00+08:00",
   "source_refs": [
-    "repo://context-workspace/projects/product-work/context/product/solution.md",
-    "repo://context-workspace/projects/product-work/context/business-rules/boundary.md",
+    "repo://context-workspace/context/product-work/product/solution.md",
+    "repo://context-workspace/context/product-work/business-rules/boundary.md",
     "repo://context-workspace/workspace/decisions/open-questions.md"
   ],
   "change_summary": "确认维护规则维护责任和无日志条件下的效果验证口径",

@@ -158,7 +158,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
   for (const target of [
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", slug),
     path.join(PROJECT_ROOT, "context-workspace/drafts", projectId),
-    path.join(PROJECT_ROOT, "context-workspace/projects", projectId),
+    path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId, "materials"),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${slug}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),

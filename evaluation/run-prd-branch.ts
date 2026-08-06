@@ -141,9 +141,9 @@ function seedTempRepository(root: string) {
   }
   fs.mkdirSync(path.join(root, "context-workspace/workspace/prd"), { recursive: true });
   const refs = [
-    ["evaluation/fixtures/seed-context/current-state.md", "context-workspace/projects/product-work/context/product/current-state.md"],
-    ["evaluation/fixtures/seed-context/solution.md", "context-workspace/projects/product-work/context/product/solution.md"],
-    ["evaluation/fixtures/seed-context/boundary.md", "context-workspace/projects/product-work/context/business-rules/boundary.md"],
+    ["evaluation/fixtures/seed-context/current-state.md", "context-workspace/context/product-work/product/current-state.md"],
+    ["evaluation/fixtures/seed-context/solution.md", "context-workspace/context/product-work/product/solution.md"],
+    ["evaluation/fixtures/seed-context/boundary.md", "context-workspace/context/product-work/business-rules/boundary.md"],
     ["evaluation/fixtures/source-materials/用户反馈.md", "context-workspace/drafts/product-work/用户反馈.md"],
   ];
   for (const [source, target] of refs) {

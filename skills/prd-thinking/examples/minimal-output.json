@@ -1,6 +1,6 @@
 {
   "background_card": {
-    "materials_read": ["repo://context-workspace/projects/example-project/context/product/current-state.md"],
+    "materials_read": ["repo://context-workspace/context/example-project/product/current-state.md"],
     "current_state": "示例产品提供基础信息检索",
     "problem": "用户难以快速找到目标信息",
     "target_users": ["需要查找产品信息的用户"],
@@ -11,7 +11,7 @@
     "confirmed_out_of_scope": ["超出本期目标的扩展能力"],
     "conflicts": [],
     "missing_information": ["别名维护责任"],
-    "source_refs": ["repo://context-workspace/projects/example-project/context/product/current-state.md"]
+    "source_refs": ["repo://context-workspace/context/example-project/product/current-state.md"]
   },
   "decision_ledger": [{
     "decision_id": "decision_owner",

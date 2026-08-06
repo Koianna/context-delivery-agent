@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { PROJECT_ROOT } from "./config.js";
 
 export function contextRootPath(projectId?: string, root = PROJECT_ROOT): string {
-  return path.join(root, "context-workspace/projects", safeProjectSlug(projectId ?? "default-project"), "context");
+  return path.join(root, "context-workspace/context", safeProjectSlug(projectId ?? "default-project"));
 }
 
 export function contextIndexPath(projectId?: string, root = PROJECT_ROOT): string {
@@ -10,7 +10,7 @@ export function contextIndexPath(projectId?: string, root = PROJECT_ROOT): strin
 }
 
 export function contextIndexRef(projectId?: string): string {
-  return `repo://context-workspace/projects/${safeProjectSlug(projectId ?? "default-project")}/context/INDEX.md`;
+  return `repo://context-workspace/context/${safeProjectSlug(projectId ?? "default-project")}/INDEX.md`;
 }
 
 export function contextRootRef(projectId?: string): string {

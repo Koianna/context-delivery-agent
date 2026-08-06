@@ -53,9 +53,9 @@ const contextPending = await contextAgent.handleMessage(
   "整理并沉淀这份产品现状，先让我确认 Context 更新，不要写 PRD",
   { taskId: "workspace-confirmed-context-demo", projectId: "account-settings", materialPath: confirmedSourceDir, debug: true }
 );
-const contextRef = "repo://context-workspace/projects/account-settings/context/product/item-1-src";
+const contextRef = "repo://context-workspace/context/account-settings/product/item-1-src";
 const contextCandidate = contextPending.confirmation?.items[0]?.content_ref;
-const contextRoot = path.join(PROJECT_ROOT, "context-workspace/projects/account-settings/context");
+const contextRoot = path.join(PROJECT_ROOT, "context-workspace/context/account-settings");
 results.push(
   check("WORKSPACE-06", contextPending.state.id === "WAITING_CONTEXT_CONFIRM" && contextPending.confirmation?.items.length === 1, "明确产品现状材料生成稳定 Context 候选并停在 CP-C01"),
   check("WORKSPACE-07", !fs.existsSync(contextRoot) || !fs.readdirSync(contextRoot, { recursive: true }).some((item) => String(item).endsWith(".md")), "CP-C01 前不写入项目稳定 Context"),
@@ -100,8 +100,8 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/workspace-provider-confirmed-materials"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/workspace-provider-paragraph-materials"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/projects/account-settings"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/projects/workspace-paragraph-eval"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/context/account-settings"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/context/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/account-settings"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-paragraph-eval"), { recursive: true, force: true });

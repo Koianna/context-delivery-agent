@@ -67,7 +67,7 @@
 - `AgentProvider` 负责材料理解和 Skill 结构化输出，不负责直接修改任务状态或业务产物。
 - 默认使用 `WorkspaceProvider` 处理当前 `project_id` 的真实材料；它必须保留原文、来源和不确定性。
 - 真实模型 Provider 可以替换生成层，但不得绕过既有状态机、确认点、Schema 校验和写入守卫。
-- 通用项目的稳定 Context 使用 `context-workspace/projects/<project_id>/context/`；明确事实或已确认决策只能先生成候选，经过 CP-C01 后才能创建或更新稳定文件。
+- 通用项目的稳定 Context 使用 `context-workspace/context/<project_id>/`；明确事实或已确认决策只能先生成候选，经过 CP-C01 后才能创建或更新稳定文件。
 
 ### Context 分支确定性校验
 
@@ -125,5 +125,5 @@
 - 原始材料登记在 `context-workspace/drafts/`。
 - 分析报告、Skill 中间输出和待确认建议保存在 `context-workspace/workspace/agent-runs/<task_id>/`，该目录属于可清理的运行记录，不纳入 Git。
 - Runtime 校验通过的可阅读整理稿发布到 `context-workspace/workspace/projects/<project_id>/materials/`，作为中可信度、可版本管理的业务产物；不得因此自动提升为稳定 Context。
-- 稳定业务 Context 只保存在 `context-workspace/projects/<project_id>/context/`。
+- 稳定业务 Context 只保存在 `context-workspace/context/<project_id>/`。
 - 会议记录等材料的可阅读整理稿由 Runtime 生成，默认位于 `workspace/projects/<project_id>/materials/meeting-notes/<task_id>.md`；通用材料位于 `workspace/projects/<project_id>/materials/structured-materials/<task_id>.md`。宿主只能引用和展示 Runtime 返回的这些文件。
