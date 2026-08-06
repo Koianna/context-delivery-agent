@@ -1,13 +1,13 @@
 {
   "prd_artifact": {
-    "artifact_id": "prd-help-center-search",
+    "artifact_id": "prd-example-project",
     "version": "0.1.0",
     "previous_version": null,
     "phase": "CORE",
     "structured_sections": ["background", "goal", "scope", "core-flow"],
-    "markdown_ref": "repo://context-workspace/workspace/prd/help-center-search.md",
-    "content_ref": "repo://case-data/help-center-search/prd/candidates/help-center-search.core.md",
-    "source_refs": ["repo://context-workspace/context/product/search-solution.md"],
+    "markdown_ref": "repo://context-workspace/workspace/prd/example-project.md",
+    "content_ref": "repo://runtime/provider-output/example-project/prd.core.md",
+    "source_refs": ["repo://context-workspace/projects/example-project/context/product/current-state.md"],
     "decision_refs": ["decision_owner"]
   },
   "coverage": {"required_sections": ["background", "goal", "scope", "core-flow"], "covered_sections": ["background", "goal", "scope", "core-flow"], "missing_sections": []},

@@ -1,8 +1,0 @@
-[
-  {
-    "case_id": "MI-01",
-    "input_ref": "repo://case-data/help-center-search/material-ingest.input.json",
-    "output_ref": "repo://case-data/help-center-search/expected-outputs/material-ingest.output.json",
-    "assertions": ["all_sources_registered", "quotes_exist_in_source", "missing_owner_stays_in_drafts", "summary_counts_match"]
-  }
-]

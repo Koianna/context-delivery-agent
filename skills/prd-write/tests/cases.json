@@ -1,4 +1,0 @@
-[
-  {"case_id": "PW-01", "output_ref": "repo://case-data/help-center-search/prd/expected-outputs/prd-write.core.output.json", "assertions": ["core_sections_complete", "no_details_before_cp_p02", "decision_refs_confirmed"]},
-  {"case_id": "PW-02", "output_ref": "repo://case-data/help-center-search/prd/expected-outputs/prd-write.details.output.json", "assertions": ["details_preserve_core", "acceptance_testable", "no_unsupported_claims", "stable_path"]}
-]

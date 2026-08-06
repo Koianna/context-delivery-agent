@@ -1,12 +1,12 @@
 {
-  "material_records": [{"source_id": "src_001", "topic": "帮助中心搜索", "processing_status": "PROCESSED", "missing_metadata": []}],
+  "material_records": [{"source_id": "src_001", "topic": "示例项目", "processing_status": "PROCESSED", "missing_metadata": []}],
   "information_items": [{
     "item_id": "info_001",
-    "content": "帮助中心当前按标题和标签匹配",
+    "content": "示例产品当前支持基础信息检索",
     "information_type": "FACT",
     "maturity": "CONFIRMED",
     "source_refs": ["src_001"],
-    "evidence": [{"source_id": "src_001", "location": "现状", "quote": "当前搜索范围为文章标题和标签"}],
+    "evidence": [{"source_id": "src_001", "location": "现状", "quote": "当前产品支持基础信息检索"}],
     "target_layer": "CONTEXT",
     "confidence": 0.99,
     "requires_confirmation": true
