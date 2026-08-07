@@ -50,7 +50,9 @@
         "impact_if_applied": {"type": "string"},
         "impact_if_ignored": {"type": "string"},
         "base_version": {"type": ["string", "null"]},
-        "content_ref": {"type": ["string", "null"]}
+        "content_ref": {"type": ["string", "null"]},
+        "workspace_ref": {"type": ["string", "null"]},
+        "section_titles": {"type": "array", "items": {"type": "string"}}
       }
     }
   }

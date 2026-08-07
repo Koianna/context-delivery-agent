@@ -87,6 +87,8 @@ export interface ContextProposal {
   impact_if_ignored: string;
   base_version?: string | null;
   content_ref?: string | null;
+  workspace_ref?: string | null;
+  section_titles?: string[];
 }
 
 export interface ContextAnalysisOutput {

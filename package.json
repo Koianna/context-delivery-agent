@@ -24,6 +24,7 @@
     "change:validate-replan": "node --import tsx scripts/validate-change-output.ts --mode REPLAN --analysis context-workspace/workspace/reports/change-impact.json --output evaluation/fixtures/change/expected-outputs/change-impact.replan.json",
     "skills:validate": "node --import tsx scripts/validate-skills.ts",
     "eval:context": "node --import tsx evaluation/run-context-branch.ts",
+    "eval:context-section-move": "node --import tsx evaluation/run-context-section-move.ts",
     "eval:prd": "node --import tsx evaluation/run-prd-branch.ts",
     "eval:change": "node --import tsx evaluation/run-change-branch.ts",
     "eval:agent": "node --import tsx evaluation/run-agent-interaction.ts",

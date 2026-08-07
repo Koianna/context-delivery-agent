@@ -20,6 +20,13 @@
 4. `requires_confirmation` 为 `true`；
 5. APPLY 前存在逐项批准的 CP-C01 记录。
 
+## 局部降级
+
+- 指定章节从稳定 Context 移到 workspace 时使用 `UPDATE_CONTEXT`，不能用 `ARCHIVE` 替代。
+- `content_ref` 保存删除指定章节后的稳定候选，`workspace_ref` 保存被移出的原章节，`section_titles` 记录章节标题。
+- 未指定章节必须保留；局部更新导致正文为空时停止执行，要求用户改用整文件归档。
+- `INDEX.md` 是派生索引，只能由 `update-index` 更新，不能成为人工撤销或局部更新 proposal。
+
 ## 风险
 
 - 改变产品范围、默认规则或后续 Agent 推理前提：`HIGH`。

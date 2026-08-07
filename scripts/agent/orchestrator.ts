@@ -20,7 +20,7 @@ import {
 import type { ContextAnalysisOutput, ContextProposal } from "../lib/context-types.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
 import type { ChangeAnalysisOutput } from "../lib/change-types.js";
-import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "../lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, readJson, renderFrontmatter, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import { loadLocalEnv } from "../lib/env.js";
 import { contextIndexRef, contextRootPath } from "../lib/project-paths.js";
 import { assertTransition } from "../lib/state-runtime.js";
@@ -279,32 +279,54 @@ export class AgentOrchestrator {
       throw new Error(`当前状态 ${state.current_state} 不能启动 Context 撤销`);
     }
     updateTask({ taskId: state.task_id, mode: "CONTEXT", goal: message });
-    assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "分析用户请求撤销的稳定 Context" });
+    assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "分析用户请求的稳定 Context 变更" });
     const targets = findContextTargets(state.project_id, message);
-    if (!targets.length) throw new Error("没有识别出要撤销的稳定 Context 文件，请提供文件名、item_id 或 proposal_id");
-    const proposals = targets.map((target) => buildArchiveProposal(state, target));
+    if (!targets.length) throw new Error("没有识别出要修改或撤销的稳定 Context 文件，请提供文件名、item_id 或 proposal_id");
+    const sectionMove = isSectionMoveToWorkspace(message);
+    const sectionMoves = sectionMove
+      ? targets.flatMap((target) => buildSectionMove(state, target, message))
+      : [];
+    if (sectionMove && !sectionMoves.length) {
+      throw new Error("已识别到局部移出请求，但没有定位到要移出的 Markdown 章节。请提供章节标题，例如“## 待确认事项”");
+    }
+    const proposals = sectionMove
+      ? sectionMoves.map((item) => item.proposal)
+      : targets.map((target) => buildArchiveProposal(state, target));
     const reportRef = this.provider.getContextReportRefs(state.task_id).contextReportRef;
     writeJsonAtomic(repoRefToPath(reportRef, PROJECT_ROOT), {
       action: "ANALYZE", update_proposals: proposals, conflicts: [], stale_items: [],
-      index_issues: [], auto_actions: [], remaining_questions: [],
+      index_issues: [], auto_actions: [],
+      remaining_questions: sectionMoves.map((item) => ({
+        question: `已从稳定 Context 候选中移出：${item.sectionTitles.join("、")}`,
+        workspace_ref: item.workspaceRef,
+        source_refs: item.proposal.source_refs,
+      })),
     });
     const confirmation = createConfirmation({
       taskId: state.task_id,
       type: "CONTEXT_UPDATE",
       state: "WAITING_CONTEXT_CONFIRM",
       sourceState: "CONTEXT_ANALYZING",
-      title: "确认撤销稳定 Context（归档，不删除原文件）",
+      title: sectionMove ? "确认稳定 Context 局部更新" : "确认撤销稳定 Context（归档，不删除原文件）",
       actions: ["APPROVE_ALL", "APPROVE_SELECTED", "DEFER_ALL", "REJECT_ALL"],
       items: proposals.map((proposal) => ({ ...proposal })),
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_CONTEXT_CONFIRM", reason: "稳定 Context 撤销需要 CP-C01 人工确认" });
+    assertTransition({ taskId: state.task_id, toState: "WAITING_CONTEXT_CONFIRM", reason: "稳定 Context 变更需要 CP-C01 人工确认" });
     return this.response({
-      message: `已找到 ${proposals.length} 条待撤销的稳定 Context。批准后将归档文件并从 INDEX 隐藏，不会直接删除业务文件。`,
+      message: sectionMove
+        ? `已生成 ${proposals.length} 条稳定 Context 局部更新建议。批准后只移出指定章节，其余内容和文件索引保持有效。`
+        : `已找到 ${proposals.length} 条待撤销的稳定 Context。批准后将归档文件并从 INDEX 隐藏，不会直接删除业务文件。`,
       status: "WAITING_CONFIRMATION",
-      skill: "context-maintain/APPLY",
-      artifacts: [{ ref: reportRef, label: "Context 撤销分析" }],
+      skill: "context-maintain/ANALYZE",
+      artifacts: [
+        { ref: reportRef, label: sectionMove ? "Context 局部更新分析" : "Context 撤销分析" },
+        ...sectionMoves.map((item) => ({ ref: item.workspaceRef, label: "移出的待确认内容" })),
+        ...sectionMoves.map((item) => ({ ref: item.candidateRef, label: "稳定 Context 更新候选" })),
+      ],
       confirmation,
-      nextSteps: ["回复“确认撤销 proposal-id”", "回复“暂不更新稳定 Context”", "回复“暂停”"],
+      nextSteps: sectionMove
+        ? ["回复“确认更新 proposal-id”", "回复“暂不更新稳定 Context”", "回复“暂停”"]
+        : ["回复“确认撤销 proposal-id”", "回复“暂不更新稳定 Context”", "回复“暂停”"],
       debug: options.debug,
     });
   }
@@ -466,6 +488,10 @@ export class AgentOrchestrator {
     const analysisPath = repoRefToPath(reportRefs.contextReportRef, PROJECT_ROOT);
     const selected = selectContextProposalIds(confirmation, message);
     const isRevoke = confirmation.items.some((item) => item.action === "ARCHIVE");
+    const workspaceRefs = confirmation.items
+      .map((item) => item.workspace_ref)
+      .filter((ref): ref is string => typeof ref === "string");
+    const isSectionMove = confirmation.items.some((item) => item.action === "UPDATE_CONTEXT" && typeof item.workspace_ref === "string");
     if (selected.mode === "DEFER" || selected.mode === "REJECT") {
       resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: selected.mode === "REJECT" ? "REJECT_ALL" : "DEFER_ALL" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "用户暂不更新稳定 Context" });
@@ -474,12 +500,15 @@ export class AgentOrchestrator {
       return this.response({
         message: isRevoke
           ? "已保留原稳定 Context 文件，本次没有执行撤销。"
-          : `材料、分析报告和整理稿已保留在 drafts/workspace；整理稿位置为 ${reportRefs.structuredMaterialRef}。按你的决定，本次没有更新稳定 Context。`,
+          : isSectionMove
+            ? "已保留原稳定 Context 不变；局部更新候选和移出内容仍保存在 workspace，未提升为稳定事实。"
+            : `材料、分析报告和整理稿已保留在 drafts/workspace；整理稿位置为 ${reportRefs.structuredMaterialRef}。按你的决定，本次没有更新稳定 Context。`,
         status: "COMPLETED",
         skill: "context-maintain",
         artifacts: [
           { ref: reportRefs.contextReportRef, label: "Context 分析报告" },
-          ...(!isRevoke ? [{ ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" }] : []),
+          ...workspaceRefs.map((ref) => ({ ref, label: "移出的待确认内容" })),
+          ...(!isRevoke && !isSectionMove ? [{ ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" }] : []),
         ],
         nextSteps: ["之后可说“继续准备 PRD”", "也可以补充新材料后重新分析"],
         debug: options.debug,
@@ -503,9 +532,9 @@ export class AgentOrchestrator {
     return this.response({
       message: [
         `已按你的决定处理 ${result.executed_actions.length + result.skipped_actions.length} 条稳定 Context 建议。`,
-        ...(isRevoke ? [] : [`整理稿位置为 ${reportRefs.structuredMaterialRef}。`]),
+        ...(isRevoke || isSectionMove ? [] : [`整理稿位置为 ${reportRefs.structuredMaterialRef}。`]),
         result.executed_actions.length
-          ? `${isRevoke ? "已归档" : "已更新"}：${result.executed_actions.join("、")}。`
+          ? `${isRevoke ? "已归档" : isSectionMove ? "已局部更新" : "已更新"}：${result.executed_actions.join("、")}。`
           : "候选内容与现有稳定 Context 一致，因此保持幂等，没有重复创建版本。",
         `仍有 ${result.health_check.remaining_issues.length} 个问题保留为待确认事项。`,
       ].join("\n"),
@@ -514,7 +543,8 @@ export class AgentOrchestrator {
       artifacts: [
         { ref: result.change_log_ref, label: isRevoke ? "Context 撤销记录" : "Context 变更记录" },
         { ref: contextIndexRef(state.project_id), label: "稳定 Context 索引" },
-        ...(!isRevoke ? [{ ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" }] : []),
+        ...workspaceRefs.map((ref) => ({ ref, label: "移出的待确认内容" })),
+        ...(!isRevoke && !isSectionMove ? [{ ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" }] : []),
       ],
       nextSteps: ["回复“继续准备 PRD”进入写前对齐", "回复新的材料整理任务"],
       debug: options.debug,
@@ -949,7 +979,7 @@ function instructionFor(status: AgentResponse["status"], state: StateId): string
 
 export function routeIntent(message: string, hasMaterialPath = false): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
-  if (/(撤销|回滚|取消提升|移除.*稳定\s*context|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
+  if (/(撤销|回滚|取消提升|移(?:出|除).*(?:稳定\s*)?(?:context|contact)|从.*(?:context|contact).*移(?:出|除)|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
   if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+))/i.test(message)) return "CONTEXT";
   if (/(修改|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
@@ -1045,22 +1075,39 @@ interface ContextTarget {
   document: ReturnType<typeof parseFrontmatter>;
 }
 
+interface MarkdownSection {
+  title: string;
+  level: number;
+  start: number;
+  end: number;
+  content: string;
+}
+
+interface ContextSectionMove {
+  proposal: ContextProposal;
+  workspaceRef: string;
+  candidateRef: string;
+  sectionTitles: string[];
+}
+
 function findContextTargets(projectId: string, message: string): ContextTarget[] {
   const root = contextRootPath(projectId);
   if (!fs.existsSync(root)) return [];
   const matches: ContextTarget[] = [];
+  const matchesAll = /(?:撤销|归档).{0,20}(?:全部|所有)(?:稳定\s*)?(?:context|文件)|(?:全部|所有)(?:稳定\s*)?(?:context|文件).{0,20}(?:撤销|归档)/i.test(message);
   const walk = (directory: string) => {
     for (const name of fs.readdirSync(directory)) {
       const filePath = path.join(directory, name);
       if (fs.statSync(filePath).isDirectory()) walk(filePath);
       else if (name.endsWith(".md")) {
+        if (name === "INDEX.md") continue;
         const document = parseFrontmatter(fs.readFileSync(filePath, "utf-8"));
         const ref = pathToRepoRef(filePath, PROJECT_ROOT);
         const itemIds = [...message.matchAll(/(?:proposal-|item-|revoke-)[a-z0-9-]+/gi)].map((match) => match[0]);
-        const targetTokens = [name, path.basename(name, ".md"), ref, String(document.metadata.id ?? "")];
+        const targetTokens = [name, path.basename(name, ".md"), ref, String(document.metadata.id ?? "")].filter(Boolean);
         const matchesExplicitTarget = targetTokens.some((token) => token && message.includes(token))
           || itemIds.some((token) => targetTokens.some((target) => target.includes(token) || token.includes(target)));
-        if (document.metadata.status !== "archived" && (matchesExplicitTarget || message.includes("全部"))) {
+        if (document.metadata.status !== "archived" && (matchesExplicitTarget || matchesAll)) {
           matches.push({ targetRef: ref, path: filePath, document });
         }
       }
@@ -1068,6 +1115,109 @@ function findContextTargets(projectId: string, message: string): ContextTarget[]
   };
   walk(root);
   return matches;
+}
+
+function isSectionMoveToWorkspace(message: string): boolean {
+  const hasSectionScope = /章节|一节|这部分|该部分|指定内容|以下内容|#{1,6}\s+[^\n]+/.test(message);
+  return /(移出|移除|转移|转存|挪到|放到|放入)/.test(message)
+    && hasSectionScope
+    && !/(整个文件|整份文件|全文|全部归档)/.test(message);
+}
+
+function buildSectionMove(state: TaskState, target: ContextTarget, message: string): ContextSectionMove[] {
+  const sections = parseMarkdownSections(target.document.body);
+  const requested = sections.filter((section) => isRequestedMoveSection(section, message));
+  if (!requested.length) return [];
+
+  const removedLines = new Set<number>();
+  for (const section of requested) {
+    for (let line = section.start; line < section.end; line += 1) removedLines.add(line);
+  }
+  const remainingBody = target.document.body
+    .split(/\r?\n/)
+    .filter((_line, index) => !removedLines.has(index))
+    .join("\n")
+    .trim();
+  if (!remainingBody) throw new Error(`局部移出会清空整个稳定 Context 文件，必须改用整文件归档: ${target.targetRef}`);
+
+  const id = String(target.document.metadata.id ?? path.basename(target.path, ".md"));
+  const version = String(target.document.metadata.version ?? "0.0.0");
+  const sourceRefs = Array.isArray(target.document.metadata.source_refs) ? target.document.metadata.source_refs : [];
+  if (!sourceRefs.length) throw new Error(`稳定 Context 缺少 source_refs，不能执行局部更新: ${target.targetRef}`);
+  const taskSlug = safeArtifactName(state.task_id);
+  const fileSlug = safeArtifactName(id);
+  const candidatePath = path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskSlug, "candidates", `context-update-${fileSlug}.md`);
+  const workspacePath = path.join(PROJECT_ROOT, "context-workspace/workspace/projects", state.project_id, "context-pending", taskSlug, `${fileSlug}.md`);
+  const candidateRef = pathToRepoRef(candidatePath, PROJECT_ROOT);
+  const workspaceRef = pathToRepoRef(workspacePath, PROJECT_ROOT);
+  const sectionTitles = requested.map((section) => section.title);
+  writeTextAtomic(candidatePath, renderFrontmatter(target.document.metadata, remainingBody));
+  writeTextAtomic(workspacePath, renderFrontmatter({
+    id: `pending-${fileSlug}-${taskSlug}`,
+    status: "pending",
+    source_ref: target.targetRef,
+    base_version: version,
+    section_titles: sectionTitles,
+  }, [
+    "# 从稳定 Context 移出的待确认内容",
+    "",
+    `- 原稳定文件：${target.targetRef}`,
+    `- 原版本：${version}`,
+    "- 当前层级：workspace（未确认内容）",
+    "",
+    ...requested.flatMap((section) => [section.content.trim(), ""]),
+  ].join("\n")));
+
+  return [{
+    proposal: {
+      proposal_id: `update-${id}-move-sections`,
+      action: "UPDATE_CONTEXT",
+      target_ref: target.targetRef,
+      item_id: id,
+      current_value: target.document.body,
+      proposed_value: remainingBody,
+      source_refs: sourceRefs,
+      relationship: "SUPERSEDES",
+      risk_level: "HIGH",
+      requires_confirmation: true,
+      impact_if_applied: `仅从稳定 Context 移出章节“${sectionTitles.join("、")}”，其余内容保持 active；移出内容保存在 workspace`,
+      impact_if_ignored: "保持当前稳定 Context 不变，workspace 中仅保留待确认候选",
+      base_version: version,
+      content_ref: candidateRef,
+      workspace_ref: workspaceRef,
+      section_titles: sectionTitles,
+    },
+    workspaceRef,
+    candidateRef,
+    sectionTitles,
+  }];
+}
+
+function parseMarkdownSections(body: string): MarkdownSection[] {
+  const lines = body.split(/\r?\n/);
+  const headings = lines.flatMap((line, index) => {
+    const match = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    return match ? [{ title: match[2].trim(), level: match[1].length, start: index }] : [];
+  });
+  return headings.map((heading, index) => {
+    const end = headings.slice(index + 1).find((candidate) => candidate.level <= heading.level)?.start ?? lines.length;
+    return { ...heading, end, content: lines.slice(heading.start, end).join("\n") };
+  });
+}
+
+function isRequestedMoveSection(section: MarkdownSection, message: string): boolean {
+  if (section.level === 1) return false;
+  const escaped = escapeRegExp(section.title);
+  const preservePattern = new RegExp(
+    `(?:保留|维持|保持|继续保留)\\s*(?:#{1,6}\\s*)?${escaped}|(?:#{1,6}\\s*)?${escaped}(?:部分|章节|一节)?\\s*(?:保留|维持|保持|不变|继续有效)`
+  );
+  if (preservePattern.test(message)) return false;
+  return message.includes(section.title) || message.includes(`${"#".repeat(section.level)} ${section.title}`);
+}
+
+function safeArtifactName(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "context-item";
 }
 
 function buildArchiveProposal(state: TaskState, target: ContextTarget): ContextProposal {

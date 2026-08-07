@@ -52,6 +52,12 @@ const cases = [
     expected: "CONTEXT",
     detail: "明确只整理优先于变更关键词",
   },
+  {
+    case_id: "CONFIRM-06",
+    actual: routeIntent("将 Context 文件中的待确认事项从 Contact 文件夹中移出，放到 workspace 中，其他内容保留"),
+    expected: "CONTEXT_REVOKE",
+    detail: "章节级移出请求直接进入受控 Context 更新分支，并兼容 Contact 拼写",
+  },
 ];
 
 const passed = cases.filter((item) => JSON.stringify(item.actual) === JSON.stringify(item.expected)).length;
