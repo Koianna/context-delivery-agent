@@ -7,7 +7,7 @@ import { PROJECT_ROOT } from "../lib/config.js";
 import { readIngestionMaterials, upsertMaterialIngestion } from "../lib/material-manifest.js";
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
-import { contextDocumentRef, contextIndexRef, contextIndexPath, contextRootPath, safeProjectSlug } from "../lib/project-paths.js";
+import { contextDocumentRef, contextIndexRef, contextIndexPath, safeProjectSlug } from "../lib/project-paths.js";
 import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
@@ -38,7 +38,6 @@ export class WorkspaceProvider implements AgentProvider {
     const materialOutputPath = path.join(outputDir, "material-ingest.output.json");
     const contextOutputPath = path.join(outputDir, "context-maintain.analysis.json");
     const sourceDir = this.prepareSources(materialPath, taskGoal, taskId);
-    this.ensureProjectContext();
     const input = this.buildMaterialInput(sourceDir, taskGoal, taskId);
     const materialOutput = this.buildMaterialOutput(input);
     const contextOutput = this.buildContextOutput(input, materialOutput);
@@ -348,23 +347,10 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  private ensureProjectContext() {
-    const root = contextRootPath(this.projectId, PROJECT_ROOT);
-    fs.mkdirSync(root, { recursive: true });
-    for (const group of ["product", "users", "business-rules", "glossary"]) fs.mkdirSync(path.join(root, group), { recursive: true });
-  }
-
-  private ensureProjectIndex() {
-    this.ensureProjectContext();
-    const indexPath = contextIndexPath(this.projectId, PROJECT_ROOT);
-    if (!fs.existsSync(indexPath)) {
-      writeTextAtomic(indexPath, renderFrontmatter({ version: "0.1.0", updated: new Date().toISOString().slice(0, 10), project: this.projectId }, "# Context 索引\n\n> 此索引由 `scripts/update-index.ts` 根据稳定 Context 文件生成。"));
-    }
-  }
-
   private ensurePrdSources(slug: string, base: string): string[] {
-    this.ensureProjectIndex();
-    const refs = [contextIndexRef(this.projectId)];
+    const refs = fs.existsSync(contextIndexPath(this.projectId, PROJECT_ROOT))
+      ? [contextIndexRef(this.projectId)]
+      : [];
     const report = repoRefToPath(`${base}/reports/material-analysis.json`, PROJECT_ROOT);
     if (!fs.existsSync(report)) writeJsonAtomic(report, { project_id: this.projectId, note: "通用项目尚未完成材料分析，当前以 Context 索引作为输入" });
     refs.push(pathToRepoRef(report, PROJECT_ROOT));

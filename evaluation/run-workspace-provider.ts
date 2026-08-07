@@ -6,6 +6,7 @@ import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
 import { registerMaterials } from "../scripts/register-materials.js";
+import { safeProjectSlug } from "../scripts/lib/project-paths.js";
 
 async function main() {
 const taskId = "workspace-phone-feedback-demo";
@@ -42,7 +43,15 @@ const results = [
   check("WORKSPACE-04C", repeatRegistration.status === "UNCHANGED" && manifest.records.length === 1 && manifest.records[0]?.draft_ref.includes(`/source-materials/${taskId}/`), "相同材料重复登记幂等，清单直接引用唯一原文"),
   check("WORKSPACE-04D", manifest.ingestions.some((item) => item.task_id === taskId && item.materials.some((material) => material.original_name === "用户反馈.txt")) && !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/source-materials", taskId, "ingest-manifest.json")), "接入元数据和登记记录合并到统一材料清单，且不再生成旧接入清单"),
   check("WORKSPACE-05", state?.project_id === "account-settings" && response.artifacts.some((item) => item.ref.includes("account-settings")), "产物按项目隔离并带有项目标识"),
+  check("WORKSPACE-04F", !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/workspace/plans")) && !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/workspace/snapshots")), "普通材料整理不会提前创建变更计划和快照目录"),
 ];
+results.push(check(
+  "WORKSPACE-04E",
+  ["manual-numbered-eval", "workspace-numbered-eval"].every((projectId) => {
+    try { safeProjectSlug(projectId); return false; } catch { return true; }
+  }),
+  "历史测试项目标识被保留，不能创建同名项目目录",
+));
 
 clear();
 const confirmedSourceDir = path.join(PROJECT_ROOT, "runtime/workspace-provider-confirmed-materials");
@@ -59,7 +68,7 @@ const contextCandidate = contextPending.confirmation?.items[0]?.content_ref;
 const contextRoot = path.join(PROJECT_ROOT, "context-workspace/context/account-settings");
 results.push(
   check("WORKSPACE-06", contextPending.state.id === "WAITING_CONTEXT_CONFIRM" && contextPending.confirmation?.items.length === 1, "明确产品现状材料生成稳定 Context 候选并停在 CP-C01"),
-  check("WORKSPACE-07", !fs.existsSync(contextRoot) || !fs.readdirSync(contextRoot, { recursive: true }).some((item) => String(item).endsWith(".md")), "CP-C01 前不写入项目稳定 Context"),
+  check("WORKSPACE-07", !fs.existsSync(contextRoot), "CP-C01 前不创建项目稳定 Context 目录"),
   check("WORKSPACE-08", typeof contextCandidate === "string" && contextCandidate.includes("runtime/provider-output"), "候选内容保存在可追踪的工作区产物中"),
 );
 const contextApplied = await contextAgent.handleMessage("确认全部", { taskId: "workspace-confirmed-context-demo", projectId: "account-settings", debug: true });
@@ -112,7 +121,7 @@ fs.writeFileSync(numberedSourcePath, [
 ].join("\n"), "utf-8");
 const numberedResponse = await new AgentOrchestrator(new WorkspaceProvider()).handleMessage(
   "整理这份会议记录，不写 PRD",
-  { taskId: "workspace-numbered-meeting-demo", projectId: "workspace-numbered-eval", materialPath: numberedSourceDir, debug: true },
+  { taskId: "workspace-format-meeting-demo", projectId: "workspace-format-eval", materialPath: numberedSourceDir, debug: true },
 );
 const numberedArtifact = numberedResponse.artifacts.find((item) => item.label === "结构化整理稿");
 const numberedPath = numberedArtifact ? repoRefToPath(numberedArtifact.ref, PROJECT_ROOT) : null;
@@ -141,12 +150,12 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/context/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/account-settings"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-paragraph-eval"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-numbered-eval"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-format-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-phone-feedback-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-confirmed-context-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-numbered-meeting-demo"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-format-meeting-demo"), { recursive: true, force: true });
 }
 
 main().catch((error) => {

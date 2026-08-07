@@ -3,6 +3,7 @@ import {
   writePendingConfirmations,
   writeTaskState,
 } from "./config.js";
+import { safeProjectSlug } from "./project-paths.js";
 import type { StateId, TaskState } from "./types.js";
 
 export interface CreateTaskInput {
@@ -28,10 +29,11 @@ export function createTask(input: CreateTaskInput): TaskState {
     throw new Error(`任务已存在: ${existing.task_id}, 当前状态: ${existing.current_state}`);
   }
 
+  const projectId = safeProjectSlug(input.projectId ?? "default-project");
   const now = new Date().toISOString();
   const state: TaskState = {
     task_id: input.taskId,
-    project_id: input.projectId ?? "default-project",
+    project_id: projectId,
     session_id: input.sessionId ?? `session_${Date.now()}`,
     task_mode: input.mode ?? null,
     current_state: "INITIALIZING",

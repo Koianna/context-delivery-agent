@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
 import { materialManifestPath, readMaterialManifest, type MaterialManifest } from "./lib/material-manifest.js";
+import { safeProjectSlug } from "./lib/project-paths.js";
 import type { MaterialIngestInput } from "./lib/context-types.js";
 import {
   incrementPatch,
@@ -18,6 +19,7 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projec
   const input = readJson<MaterialIngestInput>(inputPath);
   const allowed = new Set(input.analysis_scope.included_source_ids);
   const workspaceSlug = projectId ?? input.workspace_slug ?? input.project_id ?? "default-project";
+  safeProjectSlug(workspaceSlug);
   const targetDir = path.join(root, "context-workspace/drafts", safeSlug(workspaceSlug));
   const sourceRoot = path.join(targetDir, "source-materials");
   const manifestPath = materialManifestPath(workspaceSlug, root);

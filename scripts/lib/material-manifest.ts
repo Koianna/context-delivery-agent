@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { incrementPatch, pathToRepoRef, readJson, writeJsonAtomic } from "./repository.js";
 import { PROJECT_ROOT } from "./config.js";
+import { safeProjectSlug } from "./project-paths.js";
 
 export interface IngestionMaterialRecord {
   source_id?: string;
@@ -40,7 +41,7 @@ export interface MaterialManifest {
 }
 
 export function materialManifestPath(projectId: string, root = PROJECT_ROOT): string {
-  return path.join(root, "context-workspace/drafts", safeSlug(projectId), "material-manifest.json");
+  return path.join(root, "context-workspace/drafts", safeProjectSlug(projectId), "material-manifest.json");
 }
 
 export function readMaterialManifest(projectId: string, root = PROJECT_ROOT): {
@@ -53,10 +54,10 @@ export function readMaterialManifest(projectId: string, root = PROJECT_ROOT): {
   const isUnified = Array.isArray(raw.ingestions) && Array.isArray(raw.records);
   return {
     manifest: {
-      artifact_id: typeof raw.artifact_id === "string" ? raw.artifact_id : `material-manifest-${safeSlug(projectId)}`,
+      artifact_id: typeof raw.artifact_id === "string" ? raw.artifact_id : `material-manifest-${safeProjectSlug(projectId)}`,
       version: typeof raw.version === "string" ? raw.version : "0.2.0",
-      project_id: typeof raw.project_id === "string" ? raw.project_id : safeSlug(projectId),
-      topic: typeof raw.topic === "string" ? raw.topic : safeSlug(projectId),
+      project_id: typeof raw.project_id === "string" ? raw.project_id : safeProjectSlug(projectId),
+      topic: typeof raw.topic === "string" ? raw.topic : safeProjectSlug(projectId),
       ingestions: isUnified ? raw.ingestions as MaterialIngestionRecord[] : [],
       records: Array.isArray(raw.records) ? raw.records as MaterialManifestRecord[] : [],
     },
@@ -72,9 +73,9 @@ export function upsertMaterialIngestion(
 ): string {
   const current = readMaterialManifest(projectId, root);
   const manifest = current.manifest ?? {
-    artifact_id: `material-manifest-${safeSlug(projectId)}`,
+    artifact_id: `material-manifest-${safeProjectSlug(projectId)}`,
     version: "0.2.0",
-    project_id: safeSlug(projectId),
+    project_id: safeProjectSlug(projectId),
     topic,
     ingestions: [],
     records: [],
