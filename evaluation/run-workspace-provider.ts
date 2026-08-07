@@ -163,6 +163,21 @@ results.push(
   check("WORKSPACE-20", feedbackContent.includes(`[反馈1：夏天连衣裙](${feedbackSourceHref}#material-1)`) && feedbackContent.includes(`[反馈2：无线鼠标 静音](${feedbackSourceHref}#material-2)`) && feedbackContent.includes("用户 ID：u_8912；日期：2026-07-15；类型：用户反馈") && resolvedFeedbackSource === feedbackBundlePath && fs.existsSync(resolvedFeedbackSource) && !feedbackContent.includes("src-") && !feedbackContent.includes("](repo://"), "来源区名称不随外部简写漂移，且标准 Markdown 相对链接能解析到原文文件"),
   check("WORKSPACE-21", fs.existsSync(feedbackBundlePath) && [1, 2, 3, 4].every((index) => fs.readFileSync(feedbackBundlePath, "utf-8").includes(`<a id=\"material-${index}\"></a>`)), "任务级原文包为每条逻辑材料提供稳定定位锚点"),
 );
+
+clear();
+const blockedPrdTaskId = "workspace-prd-blocked-demo";
+const blockedPrd = await new AgentOrchestrator(new WorkspaceProvider()).handleMessage(
+  "根据当前 Context 生成 PRD",
+  { taskId: blockedPrdTaskId, projectId: "workspace-prd-blocked-eval", debug: true },
+);
+results.push(check(
+  "WORKSPACE-22",
+  blockedPrd.state.id === "EXECUTION_BLOCKED"
+    && blockedPrd.execution_status === "BLOCKED"
+    && blockedPrd.message.includes("真实模型 Provider")
+    && !fs.existsSync(path.join(PROJECT_ROOT, "runtime/provider-output", blockedPrdTaskId)),
+  "未启用真实模型时在写前阻止 PRD，不生成或审核占位骨架",
+));
 const passed = results.filter((item) => item.passed).length;
 console.log(JSON.stringify({ evaluation_id: "workspace-provider-generic-material", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));
 clear();

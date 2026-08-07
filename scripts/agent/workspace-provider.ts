@@ -21,6 +21,7 @@ import { writeStructuredMaterial } from "./structured-material.js";
 export class WorkspaceProvider implements AgentProvider {
   readonly id: string = "workspace";
   readonly label: string = "通用项目工作区 Provider";
+  readonly generationMode: AgentProvider["generationMode"] = "workspace";
   protected projectId = "default-project";
 
   setProjectId(projectId: string) {

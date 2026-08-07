@@ -84,6 +84,7 @@ export type ProviderResult<T> = T | Promise<T>;
 export interface AgentProvider {
   readonly id: string;
   readonly label: string;
+  readonly generationMode: "workspace" | "model";
   setProjectId?(projectId: string): void;
   getContextAssets(materialPath?: string, taskId?: string, taskGoal?: string): ProviderResult<{
     inputPath: string;

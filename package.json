@@ -9,6 +9,7 @@
     "gateway": "node --import tsx scripts/agent-gateway.ts",
     "gateway:jsonl": "node --import tsx scripts/agent-gateway.ts",
     "mcp": "node --import tsx scripts/agent-mcp.ts",
+    "model:check": "node --import tsx scripts/check-model-provider.ts",
     "state:transition": "node --import tsx scripts/transition-state.ts",
     "runtime:init": "node --import tsx scripts/get-state.ts --init",
     "context:register": "node --import tsx scripts/register-materials.ts --input evaluation/fixtures/material-ingest.input.json",

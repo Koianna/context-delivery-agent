@@ -22,6 +22,7 @@ import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "../lib/
 import type { ChangeAnalysisOutput } from "../lib/change-types.js";
 import { parseFrontmatter, pathToRepoRef, readJson, renderFrontmatter, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import { loadLocalEnv } from "../lib/env.js";
+import { inspectModelProviderConfig } from "../lib/model-provider-config.js";
 import { contextIndexRef, contextRootPath } from "../lib/project-paths.js";
 import { assertTransition } from "../lib/state-runtime.js";
 import { createTask, updateTask } from "../lib/task-runtime.js";
@@ -59,7 +60,13 @@ const WAITING_STATES = new Set<StateId>([
 ]);
 
 export class AgentOrchestrator {
-  constructor(private readonly provider: AgentProvider = defaultProvider()) {}
+  private readonly provider: AgentProvider;
+  private readonly usesRuntimeProviderConfig: boolean;
+
+  constructor(provider?: AgentProvider) {
+    this.usesRuntimeProviderConfig = provider === undefined;
+    this.provider = provider ?? defaultProvider();
+  }
 
   async handleMessage(message: string, options: HandleMessageOptions = {}): Promise<AgentResponse> {
     const normalized = message.trim();
@@ -336,6 +343,18 @@ export class AgentOrchestrator {
     message: string,
     options: HandleMessageOptions
   ): Promise<AgentResponse> {
+    const modelStatus = inspectModelProviderConfig();
+    const configurationIssues = this.usesRuntimeProviderConfig ? modelStatus.issues : [];
+    if (this.provider.generationMode !== "model" || configurationIssues.length) {
+      const detail = configurationIssues.length
+        ? configurationIssues.join("；")
+        : `当前 Provider“${this.provider.label}”不具备真实模型生成能力`;
+      throw new Error([
+        `生成 PRD 必须启用配置完整的真实模型 Provider：${detail}`,
+        "Runtime 已在写前停止，不会创建或审核包含“待补充”的占位 PRD。",
+        "请在项目根目录 .env 中配置 MODEL_PROVIDER、对应 API Key 和模型 ID，运行 npm run model:check 验证，重启 MCP/Gateway 后回复“重试”。",
+      ].join(" "));
+    }
     if (state.current_state === "INTENT_ROUTING") {
       updateTask({ taskId: state.task_id, mode: "PRD", goal: message });
       assertTransition({ taskId: state.task_id, toState: "PRD_THINKING", reason: "用户要求准备 PRD" });

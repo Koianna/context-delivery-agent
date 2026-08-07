@@ -52,6 +52,7 @@ interface ChangeModelOutput {
 export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
   readonly id: string;
   readonly label: string;
+  override readonly generationMode: AgentProvider["generationMode"] = "model";
 
   constructor(
     private readonly client: StructuredModelClient,

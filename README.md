@@ -83,7 +83,7 @@ npm run agent -- \
 
 `npm run agent` 是参考 CLI 适配器，不是项目唯一入口，也不是业务编排中心。`state:*`、`context:*`、`prd:*`、`change:*` 命令仍作为后台 Harness 与回归工具保留，不要求日常用户直接操作。Gateway 协议定义见 [`schemas/external-agent-gateway.schema.json`](schemas/external-agent-gateway.schema.json)。
 
-当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类、Context 候选和通用任务骨架。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。
+当前 Runtime 默认使用“通用项目工作区 Provider”，负责材料接入、来源保留、保守分类和 Context 候选。明确的产品现状、已确认决策和业务约束会生成 Context 候选，必须经过 CP-C01 后才写入稳定 Context；用户反馈和模糊信息保留在 drafts/workspace。该 Provider 不具备真实模型写作能力，用户要求生成 PRD 时 Runtime 会在写前阻塞，不再生成或审核包含“待补充”的通用骨架。
 
 ### 启用真实模型
 
@@ -94,6 +94,14 @@ MODEL_PROVIDER=openai
 OPENAI_API_KEY=你的 API Key
 OPENAI_MODEL=你的账号可用模型 ID
 ```
+
+配置后先检查，再重启 MCP、Gateway 或 CLI 进程：
+
+```bash
+npm run model:check
+```
+
+检查结果只显示 Provider、模型 ID、服务地址和 API Key 是否存在，不会输出密钥内容。只有检查通过的真实模型 Provider 才能进入 `prd-thinking → prd-write → prd-review`；配置缺失时任务进入可恢复阻塞，补齐配置并重启 Runtime 后可回复“重试”。
 
 当前内置三类协议适配：OpenAI Responses API、DeepSeek/Kimi 等常见的 OpenAI 兼容 Chat Completions API，以及 Claude 的 Anthropic Messages API。DeepSeek 示例：
 
@@ -113,7 +121,7 @@ Kimi 使用 `MODEL_PROVIDER=kimi`、`KIMI_API_KEY`、`KIMI_MODEL` 和 `KIMI_BASE
 npm run eval:model
 ```
 
-若密钥缺失、请求超时、API 返回错误、JSON 无法解析或模型输出未通过现有校验，Runtime 会停止本轮执行并进入可恢复阻塞，不会回退后静默写入业务产物。未设置真实模型 Provider 时继续使用本地 `WorkspaceProvider`。因此不能承诺“任意模型无条件可用”，但可以保证任何遵守该契约、能稳定输出所需 JSON 且通过本地校验的模型都不会破坏 Runtime 的控制边界；新增厂商只需新增协议客户端和 Provider 工厂路由。
+若密钥缺失、请求超时、API 返回错误、JSON 无法解析或模型输出未通过现有校验，Runtime 会停止本轮执行并进入可恢复阻塞，不会回退后静默写入业务产物。未设置真实模型 Provider 时，`WorkspaceProvider` 仍可整理材料和维护 Context，但不能生成 PRD。因此不能承诺“任意模型无条件可用”，但可以保证任何遵守该契约、能稳定输出所需 JSON 且通过本地校验的模型都不会破坏 Runtime 的控制边界；新增厂商只需新增协议客户端和 Provider 工厂路由。
 
 ## Runtime 业务编排中心
 

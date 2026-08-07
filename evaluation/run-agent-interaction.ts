@@ -8,13 +8,18 @@ import { PROJECT_ROOT, readPendingConfirmations, readTaskState } from "../script
 import { repoRefToPath } from "../scripts/lib/repository.js";
 
 interface CaseResult { case_id: string; passed: boolean; detail: string }
+class EvaluationModelProvider extends WorkspaceProvider {
+  override readonly id = "evaluation-model";
+  override readonly label = "状态机回归模型替身";
+  override readonly generationMode: "model" = "model";
+}
 const results: CaseResult[] = [];
 const transcript: Array<{ user: string; response: Awaited<ReturnType<AgentOrchestrator["handleMessage"]>> }> = [];
 const taskId = `agent-eval-${Date.now()}`;
 const projectId = "evaluation-product";
 const sourceDir = path.join(PROJECT_ROOT, "runtime/agent-interaction-materials");
 const sourcePath = path.join(sourceDir, "产品现状.md");
-const agent = new AgentOrchestrator(new WorkspaceProvider());
+const agent = new AgentOrchestrator(new EvaluationModelProvider());
 
 async function main() {
 clearRuntime();
@@ -111,17 +116,17 @@ check(
 );
 check(
   "AGENT-12",
-  transcript.every((item) => item.response.provider.id === "workspace") && transcript.every((item) => !item.response.message.includes("npx")),
+  transcript.every((item) => item.response.provider.id === "evaluation-model") && transcript.every((item) => !item.response.message.includes("npx")),
   "用户响应明确 Provider 且不暴露脚本命令作为交互方式"
 );
 
 const passed = results.filter((item) => item.passed).length;
-const executionLog = { provider: "workspace", project_id: projectId, transcript: sanitizeTranscript(transcript) };
+const executionLog = { provider: "evaluation-model", project_id: projectId, transcript: sanitizeTranscript(transcript) };
 const report = {
   evaluation_id: "agent-natural-language-interaction",
   eval_set_version: "0.1.0",
   git_commit: childProcess.execFileSync("git", ["rev-parse", "HEAD"], { cwd: PROJECT_ROOT, encoding: "utf-8" }).trim(),
-  provider: "workspace",
+  provider: "evaluation-model",
   summary: { total: results.length, passed, failed: results.length - passed },
   results,
   execution_log: process.argv.includes("--write-result")

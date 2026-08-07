@@ -10,6 +10,7 @@ import type { ModelJsonRequest, StructuredModelClient } from "../scripts/agent/m
 import { OpenAIProvider } from "../scripts/agent/openai-provider.js";
 import { SKILL_NAMES, SkillRuntime } from "../scripts/agent/skill-runtime.js";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
+import { inspectModelProviderConfig } from "../scripts/lib/model-provider-config.js";
 
 interface Result { case_id: string; passed: boolean; detail: string }
 
@@ -203,6 +204,19 @@ async function main() {
   );
   results.push(check("MODEL-09", blocked.state.id === "EXECUTION_BLOCKED" && blocked.execution_status === "BLOCKED" && blocked.message.includes("OPENAI_API_KEY"), "缺少密钥时 Runtime 进入可恢复阻塞状态"));
   clearRuntime(blockedTaskId, blockedProjectId);
+
+  const secret = "sk-eval-secret-value";
+  const configuredStatus = inspectModelProviderConfig({
+    MODEL_PROVIDER: "openai",
+    OPENAI_API_KEY: secret,
+    OPENAI_MODEL: "test-model",
+  });
+  const incompleteStatus = inspectModelProviderConfig({ MODEL_PROVIDER: "deepseek" });
+  results.push(
+    check("MODEL-21", configuredStatus.ready && configuredStatus.provider === "openai" && configuredStatus.model === "test-model", "模型配置检查识别已完整配置的真实 Provider"),
+    check("MODEL-22", !JSON.stringify(configuredStatus).includes(secret) && configuredStatus.api_key_configured, "模型配置检查只报告密钥是否存在，不泄露密钥内容"),
+    check("MODEL-23", !incompleteStatus.ready && incompleteStatus.issues.includes("缺少 DEEPSEEK_API_KEY") && incompleteStatus.issues.includes("缺少 DEEPSEEK_MODEL"), "模型配置检查准确列出缺失项"),
+  );
 
   const passed = results.filter((item) => item.passed).length;
   console.log(JSON.stringify({ evaluation_id: "openai-provider-offline", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));
