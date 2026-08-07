@@ -5,7 +5,7 @@ import { PROJECT_ROOT } from "../lib/config.js";
 import { readMaterialContent } from "../lib/material-bundle.js";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import { loadLocalEnv } from "../lib/env.js";
-import type { PrdReviewTemplate, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
+import type { ConfirmedDecisionLedger, PrdReviewTemplate, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
 import { parseFrontmatter, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
@@ -14,6 +14,7 @@ import type { StructuredModelClient } from "./model-client.js";
 import { SkillRuntime } from "./skill-runtime.js";
 import { renderSourceMaterialLines, renderUserFeedbackLines, writeStructuredMaterial } from "./structured-material.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
+import { validatePrdReviewDecisionLedger } from "../validate-prd-output.js";
 
 interface ContextModelOutput {
   information_items: MaterialIngestOutput["information_items"];
@@ -279,9 +280,14 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const details = readJson<PrdWriteOutput>(assets.detailsPath);
     const prdMarkdown = fs.readFileSync(repoRefToPath(details.prd_artifact.content_ref, PROJECT_ROOT), "utf-8");
     const persistedThinkingPath = repoRefToPath(this.getPrdReportRefs(taskId).thinkingRef, PROJECT_ROOT);
+    const reportRefs = this.getPrdReportRefs(taskId);
     const thinkingPath = fs.existsSync(assets.thinkingPath) ? assets.thinkingPath : persistedThinkingPath;
     if (!fs.existsSync(thinkingPath)) throw new Error("缺少已发布的 PRD 写前分析，不能执行独立审核");
     const thinking = readJson<PrdThinkingOutput>(thinkingPath);
+    const ledgerPath = repoRefToPath(reportRefs.ledgerRef, PROJECT_ROOT);
+    const ledgerErrors = validatePrdReviewDecisionLedger(details.prd_artifact.decision_refs, ledgerPath);
+    if (ledgerErrors.length) throw new Error(`PRD 审核前决策账本校验失败:\n${ledgerErrors.join("\n")}`);
+    const confirmedLedger = readJson<ConfirmedDecisionLedger>(ledgerPath);
     return await this.client.generateJson<PrdReviewModelOutput>({
       name: requestName,
       schema: PRD_REVIEW_SCHEMA,
@@ -289,7 +295,13 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
         [{ name: "prd-review", mode: "REVIEW" }],
         "以独立审核者身份只读审查完整 PRD DETAILS，核对写前分析与决策，只返回审核模板；PRD 正文哈希由 Runtime 计算。",
       ),
-      content: { project_id: this.projectId, prd_markdown: prdMarkdown, thinking },
+      content: {
+        project_id: this.projectId,
+        prd_markdown: prdMarkdown,
+        decision_ledger_ref: reportRefs.ledgerRef,
+        pre_confirmation_analysis: thinking,
+        confirmed_decision_ledger: confirmedLedger,
+      },
     });
   }
 }

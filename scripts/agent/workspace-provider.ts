@@ -76,6 +76,7 @@ export class WorkspaceProvider implements AgentProvider {
     const outputDir = this.outputDir(slug);
     const base = `repo://context-workspace/workspace/agent-runs/${slug}`;
     const prdRef = `repo://context-workspace/workspace/prd/${safeSlug(this.projectId)}-${slug}.md`;
+    const reportRefs = this.getPrdReportRefs(taskId);
     const sourceRefs = this.ensurePrdSources(slug, base);
     const decisionIds = ["decision_goal", "decision_scope"];
     const thinkingPath = path.join(outputDir, "prd-thinking.json");
@@ -157,6 +158,7 @@ export class WorkspaceProvider implements AgentProvider {
     if (phase === "THINKING") writeJsonAtomic(thinkingPath, thinking);
     if (phase === "CORE") {
       writeJsonAtomic(ledgerPath, ledger);
+      writeJsonAtomic(repoRefToPath(reportRefs.ledgerRef, PROJECT_ROOT), ledger);
       writeJsonAtomic(corePath, core);
     }
     if (phase === "DETAILS") {

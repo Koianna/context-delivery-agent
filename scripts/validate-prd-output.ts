@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "./lib/prd-types.js";
-import { parseFrontmatter, readJson, repoRefToPath } from "./lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath } from "./lib/repository.js";
 
 export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_ROOT): string[] {
   const errors: string[] = [];
@@ -93,6 +93,46 @@ export function validatePrdReview(
   return errors;
 }
 
+export function validatePrdReviewDecisionLedger(
+  decisionRefs: string[],
+  decisionLedgerPath: string,
+  root = PROJECT_ROOT
+): string[] {
+  const errors: string[] = [];
+  try {
+    if (!decisionRefs.length) errors.push("PRD 缺少决策引用，无法核对正式决策账本");
+
+    if (!fs.existsSync(decisionLedgerPath)) {
+      errors.push(`正式决策账本不存在: ${pathToRepoRef(decisionLedgerPath, root)}`);
+      return errors;
+    }
+    const ledger = readJson<{ decisions?: Array<{ decision_id?: string; status?: string }> }>(decisionLedgerPath);
+    const statusByDecision = new Map<string, string>();
+    for (const decision of ledger.decisions ?? []) {
+      if (typeof decision.decision_id !== "string" || !decision.decision_id) {
+        errors.push("正式决策账本存在缺失 decision_id 的记录");
+        continue;
+      }
+      if (statusByDecision.has(decision.decision_id)) {
+        errors.push(`正式决策账本存在重复 decision_id: ${decision.decision_id}`);
+        continue;
+      }
+      statusByDecision.set(decision.decision_id, typeof decision.status === "string" ? decision.status : "");
+    }
+    for (const decisionId of decisionRefs) {
+      const status = statusByDecision.get(decisionId);
+      if (!status) {
+        errors.push(`PRD 引用的决策未出现在正式决策账本: ${decisionId}`);
+      } else if (status !== "CONFIRMED") {
+        errors.push(`PRD 引用的决策尚未确认: ${decisionId}`);
+      }
+    }
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+  return errors;
+}
+
 function validateRepoRef(ref: string, errors: string[], root: string) {
   try {
     const file = repoRefToPath(ref, root);
@@ -125,6 +165,15 @@ function main() {
     const prdRef = argVal(args, "--prd-ref");
     if (!prdRef) throw new Error("prd-review 校验需要 --prd-ref");
     errors = validatePrdReview(readJson<PrdReviewOutput>(outputPath), prdRef);
+    const ledgerArg = argVal(args, "--decision-ledger");
+    if (ledgerArg) {
+      const ledgerPath = path.isAbsolute(ledgerArg) ? ledgerArg : path.join(PROJECT_ROOT, ledgerArg);
+      const prd = parseFrontmatter(fs.readFileSync(repoRefToPath(prdRef, PROJECT_ROOT), "utf-8"));
+      const decisionRefs = Array.isArray(prd.metadata.decision_refs)
+        ? prd.metadata.decision_refs.filter((value): value is string => typeof value === "string")
+        : [];
+      errors = errors.concat(validatePrdReviewDecisionLedger(decisionRefs, ledgerPath, PROJECT_ROOT));
+    }
   } else {
     throw new Error(`未知 Skill: ${skill}`);
   }

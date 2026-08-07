@@ -218,6 +218,8 @@ async function main() {
   const reviewRequest = prdRequests.find((item) => item.name === "prd_review");
   const revisionRequest = prdRequests.find((item) => item.name === "prd_revision");
   const revisionReviewRequest = prdRequests.find((item) => item.name === "prd_review_revision");
+  const reviewContent = reviewRequest?.content as { pre_confirmation_analysis?: { decision_ledger?: Array<{ status?: string }> }; confirmed_decision_ledger?: { decisions?: Array<{ status?: string }> } } | undefined;
+  const revisionReviewContent = revisionReviewRequest?.content as { pre_confirmation_analysis?: { decision_ledger?: Array<{ status?: string }> }; confirmed_decision_ledger?: { decisions?: Array<{ status?: string }> } } | undefined;
   const revisionContent = revisionRequest?.content as { current_prd_markdown?: string; current_review?: { review_id?: string }; revision_decisions?: string } | undefined;
   const revisionOutput = readJson<PrdWriteOutput>(revisionAssets.detailsPath);
   const reviewTemplate = JSON.parse(fs.readFileSync(revisionAssets.reviewTemplatePath, "utf-8")) as { review_id?: string; reviewed_prd_version?: string };
@@ -225,6 +227,8 @@ async function main() {
     check("MODEL-18", prdRequestNames.join(",") === "prd_thinking,prd_core,prd_details,prd_review,prd_revision,prd_review_revision", "PRD 初稿与审核修订分别调用模型并重新审核"),
     check("MODEL-19", detailsRequest?.instructions.includes("激活 Skill: prd-write / DETAILS") === true && !detailsRequest.instructions.includes("激活 Skill: prd-review"), "DETAILS 调用只由 prd-write Skill 驱动"),
     check("MODEL-20", reviewRequest?.instructions.includes("激活 Skill: prd-review / REVIEW") === true && revisionReviewRequest?.instructions.includes("激活 Skill: prd-review / REVIEW") === true, "初次审核和修订后审核都只由 prd-review Skill 驱动"),
+    check("MODEL-27", reviewContent?.pre_confirmation_analysis?.decision_ledger?.some((item) => item.status === "PENDING") === true && reviewContent?.confirmed_decision_ledger?.decisions?.every((item) => item.status === "CONFIRMED") === true, "初次审核同时携带写前分析与正式确认账本"),
+    check("MODEL-28", revisionReviewContent?.pre_confirmation_analysis?.decision_ledger?.some((item) => item.status === "PENDING") === true && revisionReviewContent?.confirmed_decision_ledger?.decisions?.every((item) => item.status === "CONFIRMED") === true, "审核修订后的复审同样携带写前分析与正式确认账本"),
     check("MODEL-24", revisionRequest?.instructions.includes("激活 Skill: prd-write / REVISION") === true && revisionContent?.current_prd_markdown?.includes("验收标准") === true && revisionContent.current_review?.review_id === "review-skill-driven" && revisionContent.revision_decisions === revisionMessage, "REVISION 模型输入包含当前 PRD、当前审核报告和用户修订决定"),
     check("MODEL-25", revisionOutput.prd_artifact.version === "0.2.1" && revisionOutput.prd_artifact.previous_version === "0.2.0" && reviewTemplate.reviewed_prd_version === "0.2.1", "审核修订递增到 0.2.1 且重新审核同一版本"),
     check("MODEL-26", fs.existsSync(revisionAssets.detailsPath) && revisionRequest !== undefined, "Provider 中间缓存清理后仍可依据已发布 PRD 和报告恢复 REVISION"),

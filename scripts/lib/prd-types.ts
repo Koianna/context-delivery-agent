@@ -23,6 +23,19 @@ export interface PrdThinkingOutput {
   };
 }
 
+export interface DecisionLedgerEntry {
+  decision_id: string;
+  status: "CONFIRMED" | "PENDING" | "BLOCKED" | "SUPERSEDED";
+  [key: string]: unknown;
+}
+
+export interface ConfirmedDecisionLedger {
+  artifact_id: string;
+  version: string;
+  decisions: DecisionLedgerEntry[];
+  [key: string]: unknown;
+}
+
 export interface PrdArtifactDescriptor {
   artifact_id: string;
   version: string;
