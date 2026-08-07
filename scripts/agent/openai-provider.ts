@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ChangeAnalysisOutput, ChangeType } from "../lib/change-types.js";
 import { PROJECT_ROOT } from "../lib/config.js";
+import { readMaterialContent } from "../lib/material-bundle.js";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import { loadLocalEnv } from "../lib/env.js";
 import type { PrdReviewTemplate, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
@@ -81,7 +82,7 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const input = readJson<MaterialIngestInput>(assets.inputPath);
     const sources = input.materials.map((material) => ({
       ...material,
-      content: fs.readFileSync(repoRefToPath(material.content_ref, PROJECT_ROOT), "utf-8"),
+      content: readMaterialContent(material, PROJECT_ROOT),
     }));
     const generated = await this.client.generateJson<ContextModelOutput>({
       name: "context_analysis",

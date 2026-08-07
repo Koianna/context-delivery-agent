@@ -138,12 +138,12 @@ export function findDuplicateMaterials(
   });
 }
 
-export function readIngestionMaterials(
+export function readIngestionMaterialList(
   projectId: string,
   taskId: string,
   sourceDir: string,
   root = PROJECT_ROOT,
-): Record<string, IngestionMaterialRecord> {
+): IngestionMaterialRecord[] {
   const unified = readMaterialManifest(projectId, root).manifest?.ingestions.find((item) => item.task_id === taskId);
   const legacyPath = path.join(sourceDir, "ingest-manifest.json");
   const legacy = !unified && fs.existsSync(legacyPath)
@@ -158,9 +158,9 @@ export function readIngestionMaterials(
       materials: legacy,
     }, projectId, root);
   }
-  return Object.fromEntries(materials
-    .filter((item) => typeof item.stored_name === "string" && typeof item.original_name === "string")
-    .map((item) => [item.stored_name, item]));
+  return materials.filter((item) =>
+    typeof item.stored_name === "string" && typeof item.original_name === "string"
+  );
 }
 
 function safeSlug(value: string): string {

@@ -2,6 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
+import { readMaterialContent } from "./lib/material-bundle.js";
 import type {
   ContextAnalysisOutput,
   InformationItem,
@@ -84,7 +85,7 @@ function validateInformationItem(
       errors.push(`${item.item_id} 证据来源未登记: ${evidence.source_id}`);
       continue;
     }
-    const content = fs.readFileSync(repoRefToPath(source.content_ref, root), "utf-8");
+    const content = readMaterialContent(source, root);
     if (!content.includes(evidence.quote)) errors.push(`${item.item_id} 的 quote 未出现在来源中`);
   }
   if (item.target_layer === "CONTEXT" && !item.requires_confirmation) {

@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
+import { readMaterialContent } from "./lib/material-bundle.js";
 import { materialManifestPath, readMaterialManifest, type DuplicateMaterialRecord, type MaterialManifest } from "./lib/material-manifest.js";
 import { safeProjectSlug } from "./lib/project-paths.js";
 import type { MaterialIngestInput } from "./lib/context-types.js";
@@ -32,7 +33,7 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projec
     }
     const sourcePath = repoRefToPath(material.content_ref, root);
     if (!fs.existsSync(sourcePath)) throw new Error(`材料不存在: ${material.content_ref}`);
-    const content = fs.readFileSync(sourcePath, "utf-8");
+    const content = readMaterialContent(material, root);
     const declaredSourceId = content.match(/(?:^|\n)source_id:\s*([^\s]+)\s*(?:\n|$)/)?.[1];
     if (declaredSourceId && declaredSourceId !== material.source_id) {
       throw new Error(`材料 source_id 与清单不一致: ${material.source_id}`);

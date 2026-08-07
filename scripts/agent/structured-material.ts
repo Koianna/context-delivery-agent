@@ -1,6 +1,6 @@
-import * as fs from "node:fs";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
-import { pathToRepoRef, repoRefToPath, writeTextAtomic } from "../lib/repository.js";
+import { readMaterialContent } from "../lib/material-bundle.js";
+import { pathToRepoRef, writeTextAtomic } from "../lib/repository.js";
 
 interface MaterialSegment {
   speaker: string | null;
@@ -25,8 +25,7 @@ export function writeStructuredMaterial(
   }
 
   for (const material of input.materials) {
-    const materialPath = repoRefToPath(material.content_ref, root);
-    const content = fs.readFileSync(materialPath, "utf-8");
+    const content = readMaterialContent(material, root);
     const segments = parseMaterialSegments(content, isMeeting);
 
     for (const segment of segments) {

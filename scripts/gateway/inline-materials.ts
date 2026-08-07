@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import { sha256Buffer } from "../lib/change-snapshot.js";
 import { PROJECT_ROOT } from "../lib/config.js";
+import { MATERIAL_BUNDLE_FILE, writeMaterialBundle, type MaterialBundleEntry } from "../lib/material-bundle.js";
 import { upsertMaterialIngestion, type IngestionMaterialRecord } from "../lib/material-manifest.js";
 import { safeProjectSlug } from "../lib/project-paths.js";
-import { writeTextAtomic } from "../lib/repository.js";
 import type { ExternalAgentMaterial } from "./types.js";
 
 export const INLINE_MATERIAL_MAX_BYTES = 200_000;
@@ -34,7 +34,7 @@ export function writeInlineMaterials(
     "source-materials",
     task,
   );
-  const manifest = materials.map((material, index) => {
+  const entries: MaterialBundleEntry[] = materials.map((material, index) => {
     if (!material.name.trim()) throw new InlineMaterialError("INVALID_TOOL_INPUT", `第 ${index + 1} 份材料缺少 name`);
     if (!material.content.trim()) throw new InlineMaterialError("INVALID_TOOL_INPUT", `材料 ${material.name} 的 content 不能为空`);
     const bytes = Buffer.byteLength(material.content, "utf8");
@@ -45,34 +45,29 @@ export function writeInlineMaterials(
     if (totalBytes > INLINE_MATERIAL_TOTAL_MAX_BYTES) {
       throw new InlineMaterialError("MATERIAL_TOO_LARGE", `本次内联材料总量超过 ${INLINE_MATERIAL_TOTAL_MAX_BYTES} 字节限制`);
     }
-    const storedName = `${String(index + 1).padStart(3, "0")}-${safeFileName(material.name)}`;
-    const filePath = path.join(targetDir, storedName);
-    writeTextAtomic(filePath, material.content);
     return {
       source_id: `src-${sha256Buffer(Buffer.from(material.content, "utf8")).slice(0, 10)}`,
       original_name: material.name,
-      stored_name: storedName,
+      stored_name: MATERIAL_BUNDLE_FILE,
       source_type: material.source_type ?? null,
       source_owner: material.source_owner ?? null,
       source_time: material.source_time ?? null,
       is_complete: material.is_complete ?? true,
       content_bytes: bytes,
+      content: material.content,
     };
   });
+  writeMaterialBundle(path.join(targetDir, MATERIAL_BUNDLE_FILE), entries);
   upsertMaterialIngestion(project, {
     task_id: taskId,
     task_goal: taskGoal,
     updated_at: new Date().toISOString(),
-    materials: manifest as IngestionMaterialRecord[],
+    materials: entries.map(({ content: _content, ...manifest }) => ({
+      ...manifest,
+      stored_name: MATERIAL_BUNDLE_FILE,
+    })) as IngestionMaterialRecord[],
   });
   return targetDir;
-}
-
-function safeFileName(value: string): string {
-  const base = path.basename(value.trim()).replace(/[\\/]/g, "-");
-  const normalized = base.replace(/[^a-zA-Z0-9\u4e00-\u9fff._-]+/g, "-");
-  if (!normalized || normalized === "." || normalized === "..") return "material.md";
-  return /\.(md|markdown|txt|json)$/i.test(normalized) ? normalized : `${normalized}.md`;
 }
 
 function safeSlug(value: string): string {

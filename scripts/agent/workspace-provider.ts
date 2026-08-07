@@ -4,7 +4,8 @@ import { hashReplanForApproval } from "../lib/change-guards.js";
 import { sha256Buffer } from "../lib/change-snapshot.js";
 import type { ChangeAnalysisOutput, ChangeRequestInput, ReplanOutput } from "../lib/change-types.js";
 import { PROJECT_ROOT } from "../lib/config.js";
-import { readIngestionMaterials, upsertMaterialIngestion } from "../lib/material-manifest.js";
+import { MATERIAL_BUNDLE_FILE, readMaterialBundle, readMaterialContent, writeMaterialBundle, type MaterialBundleEntry } from "../lib/material-bundle.js";
+import { readIngestionMaterialList, upsertMaterialIngestion } from "../lib/material-manifest.js";
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
 import { contextDocumentRef, contextIndexRef, contextIndexPath, safeProjectSlug } from "../lib/project-paths.js";
@@ -244,49 +245,70 @@ export class WorkspaceProvider implements AgentProvider {
       ? fs.readdirSync(resolved).map((name) => path.join(resolved, name)).filter(isSupportedFile)
       : [resolved];
     if (!files.length) throw new Error("材料目录中没有 Markdown、纯文本或 JSON 文件");
-    for (const source of files) {
-      const target = path.join(projectDir, path.basename(source));
-      writeTextAtomic(target, fs.readFileSync(source, "utf-8"));
-    }
+    const entries: MaterialBundleEntry[] = files.map((source) => {
+      const content = fs.readFileSync(source, "utf-8");
+      const metadata = parseFrontmatter(content).metadata;
+      return {
+        source_id: `src-${sha256Buffer(content).slice(0, 10)}`,
+        original_name: path.basename(source),
+        stored_name: MATERIAL_BUNDLE_FILE,
+        source_type: typeof metadata.source_type === "string" ? metadata.source_type : null,
+        source_owner: typeof metadata.source_owner === "string" ? metadata.source_owner : null,
+        source_time: typeof metadata.source_time === "string" ? metadata.source_time : null,
+        is_complete: true,
+        content_bytes: Buffer.byteLength(content, "utf-8"),
+        content,
+      };
+    });
+    writeMaterialBundle(path.join(projectDir, MATERIAL_BUNDLE_FILE), entries);
     upsertMaterialIngestion(this.projectId, {
       task_id: taskId,
       task_goal: taskGoal,
       updated_at: new Date().toISOString(),
-      materials: files.map((source) => ({
-        source_id: `src-${sha256Buffer(fs.readFileSync(source)).slice(0, 10)}`,
-        original_name: path.basename(source),
-        stored_name: path.basename(source),
-        source_type: null,
-        source_owner: null,
-        source_time: null,
-        is_complete: true,
-      })),
+      materials: entries.map(({ content: _content, ...entry }) => entry),
     }, this.projectId);
     return projectDir;
   }
 
   private buildMaterialInput(sourceDir: string, taskGoal: string, taskId: string): MaterialIngestInput {
-    const inlineMetadata = readIngestionMaterials(this.projectId, taskId, sourceDir, PROJECT_ROOT);
+    const ingestionMaterials = readIngestionMaterialList(this.projectId, taskId, sourceDir, PROJECT_ROOT);
+    if (ingestionMaterials.length) {
+      const materials = ingestionMaterials.map((ingestion) => {
+        const filePath = path.join(sourceDir, ingestion.stored_name);
+        if (!fs.existsSync(filePath)) throw new Error(`已登记材料文件不存在: ${filePath}`);
+        const content = readMaterialBundle(filePath, ingestion.source_id);
+        const metadata = parseFrontmatter(content).metadata;
+        const sourceId = ingestion.source_id ?? `src-${sha256Buffer(content).slice(0, 10)}`;
+        const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : ingestion.source_owner ?? "user-provided";
+        const sourceTime = typeof metadata.source_time === "string" && metadata.source_time
+          ? metadata.source_time
+          : ingestion.source_time ?? new Date(fs.statSync(filePath).mtimeMs).toISOString();
+        const sourceType = typeof metadata.source_type === "string" && metadata.source_type
+          ? metadata.source_type
+          : ingestion.source_type ?? extensionType(ingestion.original_name);
+        return { source_id: sourceId, name: ingestion.original_name, source_type: sourceType, source_owner: sourceOwner, source_time: sourceTime, content_ref: pathToRepoRef(filePath, PROJECT_ROOT), is_complete: ingestion.is_complete };
+      });
+      return { task_goal: taskGoal, project_id: this.projectId, workspace_slug: this.projectId, analysis_scope: { topic: this.projectId, included_source_ids: materials.map((item) => item.source_id) }, materials };
+    }
     const files = fs.readdirSync(sourceDir).filter((name) => isSupportedFile(path.join(sourceDir, name))).sort();
     const materials = files.map((name) => {
       const filePath = path.join(sourceDir, name);
       const content = fs.readFileSync(filePath, "utf-8");
       const sourceId = `src-${sha256Buffer(content).slice(0, 10)}`;
       const metadata = parseFrontmatter(content).metadata;
-      const inline = inlineMetadata[name];
-      const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : inline?.source_owner ?? "user-provided";
+      const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : "user-provided";
       const sourceTime = typeof metadata.source_time === "string" && metadata.source_time
         ? metadata.source_time
-        : inline?.source_time ?? new Date(fs.statSync(filePath).mtimeMs).toISOString();
-      const sourceType = typeof metadata.source_type === "string" && metadata.source_type ? metadata.source_type : inline?.source_type ?? extensionType(name);
-      return { source_id: sourceId, name: inline?.original_name ?? name, source_type: sourceType, source_owner: sourceOwner, source_time: sourceTime, content_ref: pathToRepoRef(filePath, PROJECT_ROOT), is_complete: inline?.is_complete ?? true };
+        : new Date(fs.statSync(filePath).mtimeMs).toISOString();
+      const sourceType = typeof metadata.source_type === "string" && metadata.source_type ? metadata.source_type : extensionType(name);
+      return { source_id: sourceId, name, source_type: sourceType, source_owner: sourceOwner, source_time: sourceTime, content_ref: pathToRepoRef(filePath, PROJECT_ROOT), is_complete: true };
     });
     return { task_goal: taskGoal, project_id: this.projectId, workspace_slug: this.projectId, analysis_scope: { topic: this.projectId, included_source_ids: materials.map((item) => item.source_id) }, materials };
   }
 
   private buildMaterialOutput(input: MaterialIngestInput): MaterialIngestOutput {
     const information_items = input.materials.map((material, index) => {
-      const content = fs.readFileSync(repoRefToPath(material.content_ref, PROJECT_ROOT), "utf-8").trim();
+      const content = readMaterialContent(material, PROJECT_ROOT).trim();
       const quote = content.slice(0, 240) || "（空材料）";
       const text = `${material.name}\n${content}`;
       const isFeedback = /反馈|用户|抱怨|不用了|希望|建议|问题|诉求/i.test(text);

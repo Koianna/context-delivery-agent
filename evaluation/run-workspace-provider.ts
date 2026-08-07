@@ -33,6 +33,7 @@ const structuredMaterialPath = structuredMaterial ? repoRefToPath(structuredMate
 const structuredMaterialContent = structuredMaterialPath && fs.existsSync(structuredMaterialPath) ? fs.readFileSync(structuredMaterialPath, "utf-8") : "";
 const repeatRegistration = registerMaterials(path.join(PROJECT_ROOT, "runtime/provider-output", taskId, "material-ingest.input.json"));
 const manifest = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/material-manifest.json"), "utf-8")) as { records: Array<{ draft_ref: string }>; ingestions: Array<{ task_id: string; materials: Array<{ original_name: string }> }> };
+const taskSourceMarkdown = fs.readdirSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/source-materials", taskId)).filter((name) => /\.md$/i.test(name));
 const results = [
   check("WORKSPACE-01", response.provider.id === "workspace", "未指定案例时使用通用项目工作区 Provider"),
   check("WORKSPACE-02", response.state.id === "CONTEXT_TASK_COMPLETED" && response.status === "COMPLETED", "通用材料整理完成，不进入 PRD 生成"),
@@ -42,6 +43,7 @@ const results = [
   check("WORKSPACE-04B", !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/用户反馈.txt")) && response.artifacts.some((item) => item.label === "材料登记清单"), "原文只保留在 source-materials 中，不在 drafts 根目录生成重复副本"),
   check("WORKSPACE-04C", repeatRegistration.status === "UNCHANGED" && manifest.records.length === 1 && manifest.records[0]?.draft_ref.includes(`/source-materials/${taskId}/`), "相同材料重复登记幂等，清单直接引用唯一原文"),
   check("WORKSPACE-04D", manifest.ingestions.some((item) => item.task_id === taskId && item.materials.some((material) => material.original_name === "用户反馈.txt")) && !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/source-materials", taskId, "ingest-manifest.json")), "接入元数据和登记记录合并到统一材料清单，且不再生成旧接入清单"),
+  check("WORKSPACE-04G", taskSourceMarkdown.length === 1 && taskSourceMarkdown[0] === "materials.md", "本地路径材料也统一保存为单个任务级 Markdown 原文包"),
   check("WORKSPACE-05", state?.project_id === "account-settings" && response.artifacts.some((item) => item.ref.includes("account-settings")), "产物按项目隔离并带有项目标识"),
   check("WORKSPACE-04F", !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/workspace/plans")) && !fs.existsSync(path.join(PROJECT_ROOT, "context-workspace/workspace/snapshots")), "普通材料整理不会提前创建变更计划和快照目录"),
 ];
@@ -152,6 +154,7 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-format-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-paragraph-eval"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-format-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-phone-feedback-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-confirmed-context-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo"), { recursive: true, force: true });
