@@ -1,9 +1,15 @@
-import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
+import type { MaterialIngestInput, MaterialIngestOutput, MaterialInput } from "../lib/context-types.js";
 import { readMaterialContent } from "../lib/material-bundle.js";
-import { pathToRepoRef, writeTextAtomic } from "../lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, writeTextAtomic } from "../lib/repository.js";
 
 interface MaterialSegment {
   speaker: string | null;
+  content: string;
+}
+
+interface UserFeedbackEntry {
+  userId: string | null;
+  time: string | null;
   content: string;
 }
 
@@ -24,8 +30,14 @@ export function writeStructuredMaterial(
     sections.set(key, []);
   }
 
-  for (const material of input.materials) {
+  for (const [index, material] of input.materials.entries()) {
     const content = readMaterialContent(material, root);
+    if (isUserFeedbackMaterial(material)) {
+      const feedback = parseUserFeedbackEntries(content, material.source_owner);
+      sections.get("用户反馈")?.push(...feedback.map(formatUserFeedback));
+      sections.get("来源材料")?.push(formatSourceMaterial(material, index, content));
+      continue;
+    }
     const segments = parseMaterialSegments(content, isMeeting);
 
     for (const segment of segments) {
@@ -34,7 +46,7 @@ export function writeStructuredMaterial(
       sections.get(category)?.push(entry);
     }
 
-    sections.get("来源材料")?.push(`${material.name}（${material.source_id}，${material.source_type}）`);
+    sections.get("来源材料")?.push(formatSourceMaterial(material, index, content));
   }
 
   const body = [
@@ -64,6 +76,106 @@ export function writeStructuredMaterial(
   ].join("\n");
   writeTextAtomic(targetPath, body);
   return pathToRepoRef(targetPath, root);
+}
+
+export function renderUserFeedbackLines(input: MaterialIngestInput, root: string): string[] {
+  return input.materials.flatMap((material) => {
+    if (!isUserFeedbackMaterial(material)) return [];
+    return parseUserFeedbackEntries(readMaterialContent(material, root), material.source_owner).map(formatUserFeedback);
+  });
+}
+
+export function renderSourceMaterialLines(input: MaterialIngestInput, root: string): string[] {
+  return input.materials.map((material, index) =>
+    formatSourceMaterial(material, index, readMaterialContent(material, root))
+  );
+}
+
+function isUserFeedbackMaterial(material: MaterialInput): boolean {
+  return /USER_FEEDBACK|用户反馈|反馈汇总/i.test(`${material.source_type} ${material.name}`);
+}
+
+function parseUserFeedbackEntries(content: string, fallbackUserId: string | null): UserFeedbackEntry[] {
+  const lines = parseFrontmatter(content).body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^#{1,6}\s*(?:用户反馈汇总|反馈\s*\d+)/i.test(line) && !/^反馈\s*\d+$/i.test(line));
+  const entries: UserFeedbackEntry[] = [];
+  let current: UserFeedbackEntry | null = null;
+
+  const flush = () => {
+    if (current?.content) entries.push(current);
+    current = null;
+  };
+  for (const line of lines) {
+    const userId = line.match(/^[-*]?\s*用户\s*ID\s*[：:]\s*(.+)$/i)?.[1]?.trim();
+    if (userId) {
+      flush();
+      current = { userId, time: null, content: "" };
+      continue;
+    }
+    const time = line.match(/^[-*]?\s*时间\s*[：:]\s*(.+)$/)?.[1]?.trim();
+    if (time) {
+      current ??= { userId: fallbackUserId, time: null, content: "" };
+      current.time = time;
+      continue;
+    }
+    const feedbackContent = line.match(/^[-*]?\s*内容\s*[：:]\s*(.*)$/)?.[1]?.trim();
+    if (feedbackContent !== undefined) {
+      current ??= { userId: fallbackUserId, time: null, content: "" };
+      current.content = feedbackContent;
+      continue;
+    }
+    if (current?.content) current.content = `${current.content} ${line}`;
+  }
+  flush();
+
+  if (entries.length) return entries;
+  const fallbackContent = lines
+    .filter((line) => !/^[-*]?\s*(?:用户\s*ID|时间)\s*[：:]/i.test(line))
+    .map((line) => line.replace(/^[-*]?\s*内容\s*[：:]\s*/, ""))
+    .join(" ")
+    .trim();
+  return fallbackContent ? [{ userId: fallbackUserId, time: null, content: fallbackContent }] : [];
+}
+
+function formatUserFeedback(entry: UserFeedbackEntry): string {
+  const content = compactFeedback(entry.content);
+  return entry.userId ? `用户 ID：${entry.userId}：${content}` : `用户反馈：${content}`;
+}
+
+function formatSourceMaterial(material: MaterialInput, index: number, content: string): string {
+  const anchor = material.content_ref.endsWith("/materials.md") ? `#material-${index + 1}` : "";
+  const feedbackEntries = isUserFeedbackMaterial(material) ? parseUserFeedbackEntries(content, material.source_owner) : [];
+  const feedbackUsers = unique(feedbackEntries.flatMap((entry) => entry.userId ? [entry.userId] : []));
+  const feedbackTimes = unique(feedbackEntries.flatMap((entry) => entry.time ? [entry.time] : [])).sort();
+  const ownerDetail = feedbackUsers.length === 1
+    ? `用户 ID：${feedbackUsers[0]}`
+    : feedbackUsers.length > 1
+      ? `用户：${feedbackUsers.join("、")}`
+      : material.source_owner ? `${isUserFeedbackMaterial(material) ? "用户 ID" : "提供方"}：${material.source_owner}` : null;
+  const timeDetail = feedbackTimes.length === 1
+    ? `日期：${feedbackTimes[0]}`
+    : feedbackTimes.length > 1
+      ? `日期：${feedbackTimes[0]} 至 ${feedbackTimes[feedbackTimes.length - 1]}`
+      : material.source_time ? `日期：${material.source_time}` : null;
+  const details = [
+    ownerDetail,
+    timeDetail,
+    `类型：${sourceTypeLabel(material.source_type)}`,
+  ].filter((item): item is string => item !== null);
+  return `[${material.name}](${material.content_ref}${anchor})（${details.join("；")}）`;
+}
+
+function sourceTypeLabel(sourceType: string): string {
+  const labels: Record<string, string> = {
+    USER_FEEDBACK: "用户反馈",
+    MEETING_NOTE: "会议记录",
+    PRODUCT_DOC: "产品文档",
+    BUSINESS_RULE: "业务规则",
+    DECISION: "决策记录",
+  };
+  return labels[sourceType.toUpperCase()] ?? sourceType;
 }
 
 function parseMaterialSegments(content: string, isMeeting: boolean): MaterialSegment[] {
@@ -179,6 +291,14 @@ function compact(value: string): string {
     .replace(/\s+/g, " ")
     .replace(/[。！？；!?;]+$/u, "")
     .slice(0, 220);
+}
+
+function compactFeedback(value: string): string {
+  return value
+    .replace(/^[-*]\s*/, "")
+    .replace(/\s+/g, " ")
+    .replace(/[。！？；!?;]+$/u, "")
+    .trim();
 }
 
 function unique(lines: string[]): string[] {

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
+import { writeInlineMaterials } from "../scripts/gateway/inline-materials.js";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
 import { registerMaterials } from "../scripts/register-materials.js";
@@ -133,6 +134,33 @@ results.push(
   check("WORKSPACE-16", numberedContent.includes("搜索召回阶段增加同义词扩展：品牌别名、品类俗称、常见错别字") && numberedContent.includes("用户/客服反馈：运营团队要求保留手动干预搜索结果排序的能力") && numberedContent.includes("用户/客服反馈：决定将搜索日志保留期从 30 天延长到 90 天"), "整理稿去除正文有序列表序号且保留完整内容"),
   check("WORKSPACE-17", !/[-*] .*：\s*\d+[.)、]/u.test(numberedContent) && !numberedContent.includes("2. 搜") && !numberedContent.includes("3. 运营") && !numberedContent.includes("4. 决定"), "字段值和分类条目不再混入有序列表序号"),
 );
+
+clear();
+const feedbackTaskId = "workspace-feedback-format-demo";
+const feedbackProjectId = "workspace-feedback-format-eval";
+const feedbackGoal = "帮我整理一下这份用户反馈";
+const feedbackSourceDir = writeInlineMaterials([
+  { name: "反馈1_夏天连衣裙.md", content: "用户 ID：u_8912\n时间：2026-07-15\n内容：搜 \"夏天连衣裙\" 出来一堆冬装，排序完全不看季节，能不能改改？", source_type: "USER_FEEDBACK", source_owner: "u_8912", source_time: "2026-07-15" },
+  { name: "反馈2_无线鼠标静音.md", content: "用户 ID：u_4521\n时间：2026-07-22\n内容：我搜的是 \"无线鼠标 静音\"，第一个结果是有线鼠标，第二个是机械键盘，无语了。", source_type: "USER_FEEDBACK", source_owner: "u_4521", source_time: "2026-07-22" },
+  { name: "反馈3_拼音识别.md", content: "用户 ID：u_6733\n时间：2026-07-28\n内容：搜索框输入拼音 \"pingguo\" 希望能识别出 \"苹果\"，我现在每次都要切换到中文输入法再打一遍。", source_type: "USER_FEEDBACK", source_owner: "u_6733", source_time: "2026-07-28" },
+  { name: "反馈4_加载速度.md", content: "用户 ID：u_9012\n时间：2026-07-30\n内容：搜索结果加载太慢了，搜一个词要等 5 秒以上，跟竞品比完全不行。", source_type: "USER_FEEDBACK", source_owner: "u_9012", source_time: "2026-07-30" },
+], feedbackProjectId, feedbackTaskId, feedbackGoal);
+const feedbackResponse = await new AgentOrchestrator(new WorkspaceProvider()).handleMessage(feedbackGoal, {
+  taskId: feedbackTaskId,
+  projectId: feedbackProjectId,
+  materialPath: feedbackSourceDir,
+  debug: true,
+});
+const feedbackArtifact = feedbackResponse.artifacts.find((item) => item.label === "结构化整理稿");
+const feedbackArtifactPath = feedbackArtifact ? repoRefToPath(feedbackArtifact.ref, PROJECT_ROOT) : null;
+const feedbackContent = feedbackArtifactPath && fs.existsSync(feedbackArtifactPath) ? fs.readFileSync(feedbackArtifactPath, "utf-8") : "";
+const feedbackBundlePath = path.join(feedbackSourceDir, "materials.md");
+results.push(
+  check("WORKSPACE-18", ["u_8912", "u_4521", "u_6733", "u_9012"].every((id) => feedbackContent.includes(`用户 ID：${id}：`)) && feedbackContent.includes("用户 ID：u_6733：搜索框输入拼音 \"pingguo\" 希望能识别出 \"苹果\""), "用户反馈按完整记录输出，用户 ID 与反馈正文保持在同一行"),
+  check("WORKSPACE-19", !feedbackContent.includes("用户/客服反馈：用户 ID") && !feedbackContent.includes("方案建议：内容：搜") && !feedbackContent.includes("## 背景与事实\n\n- 时间："), "用户反馈字段不会被拆散或误分到背景和方案"),
+  check("WORKSPACE-20", feedbackContent.includes(`[反馈1_夏天连衣裙.md](repo://context-workspace/drafts/${feedbackProjectId}/source-materials/${feedbackTaskId}/materials.md#material-1)`) && feedbackContent.includes("用户 ID：u_8912；日期：2026-07-15；类型：用户反馈") && !feedbackContent.includes("src-"), "来源区使用可读元数据和可定位的原文链接，不暴露内部来源 ID"),
+  check("WORKSPACE-21", fs.existsSync(feedbackBundlePath) && [1, 2, 3, 4].every((index) => fs.readFileSync(feedbackBundlePath, "utf-8").includes(`<a id=\"material-${index}\"></a>`)), "任务级原文包为每条逻辑材料提供稳定定位锚点"),
+);
 const passed = results.filter((item) => item.passed).length;
 console.log(JSON.stringify({ evaluation_id: "workspace-provider-generic-material", summary: { total: results.length, passed, failed: results.length - passed }, results }, null, 2));
 clear();
@@ -155,10 +183,13 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-format-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-format-eval"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-feedback-format-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-phone-feedback-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-confirmed-context-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-format-meeting-demo"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-feedback-format-eval"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-feedback-format-demo"), { recursive: true, force: true });
 }
 
 main().catch((error) => {

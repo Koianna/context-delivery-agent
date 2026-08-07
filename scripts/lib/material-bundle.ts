@@ -10,7 +10,8 @@ export interface MaterialBundleEntry extends IngestionMaterialRecord {
 }
 
 export function writeMaterialBundle(filePath: string, entries: MaterialBundleEntry[]): void {
-  const content = entries.map((entry) => [
+  const content = entries.map((entry, index) => [
+    `<a id="material-${index + 1}"></a>`,
     `<!-- context-material: ${entry.source_id ?? "unknown"} -->`,
     entry.content,
     "<!-- context-material-end -->",

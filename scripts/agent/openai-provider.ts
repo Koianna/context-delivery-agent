@@ -12,6 +12,7 @@ import type { AgentProvider, ChangeAnalysisAssets, PrdProviderAssets, PrdProvide
 import { OpenAIResponsesClient } from "./openai-client.js";
 import type { StructuredModelClient } from "./model-client.js";
 import { SkillRuntime } from "./skill-runtime.js";
+import { renderSourceMaterialLines, renderUserFeedbackLines, writeStructuredMaterial } from "./structured-material.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
 
 interface ContextModelOutput {
@@ -89,7 +90,7 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
       schema: contextResponseSchema(this.skills.load("material-ingest").schema),
       instructions: this.skills.buildInstructions(
         [{ name: "material-ingest", mode: "ANALYZE" }, { name: "context-maintain", mode: "ANALYZE" }],
-        "从原始材料提取可追溯信息单元，识别冲突和待确认问题，并生成一份中文可阅读整理稿。Runtime 会统计材料处理记录并根据信息单元构建 Context proposal。",
+        "从原始材料提取可追溯信息单元，识别冲突和待确认问题，并生成一份中文可阅读整理稿。用户反馈必须按完整记录表达，不能把用户 ID、时间和反馈正文拆成独立反馈。Runtime 会统计材料处理记录并根据信息单元构建 Context proposal。",
       ),
       content: { task_goal: taskGoal, project_id: this.projectId, sources },
     });
@@ -108,7 +109,11 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
       remaining_questions: generated.remaining_questions,
     });
     const artifactRef = this.publishedStructuredMaterialRef(taskId, path.basename(assets.structuredMaterialPath));
-    writeTextAtomic(assets.structuredMaterialPath, ensureStructuredMaterial(generated.structured_markdown, input, artifactRef));
+    if (renderUserFeedbackLines(input, PROJECT_ROOT).length) {
+      writeStructuredMaterial(input, materialOutput, assets.structuredMaterialPath, PROJECT_ROOT, artifactRef);
+    } else {
+      writeTextAtomic(assets.structuredMaterialPath, ensureStructuredMaterial(generated.structured_markdown, input, artifactRef));
+    }
     return assets;
   }
 
@@ -347,8 +352,20 @@ function withPrdFrontmatter(markdown: string, projectId: string, version: string
 
 function ensureStructuredMaterial(markdown: string, input: MaterialIngestInput, artifactRef: string): string {
   const body = markdown.trim();
-  const heading = body.startsWith("# ") ? body : `# 结构化材料整理稿\n\n${body}`;
-  return `${heading}\n\n## 原文保留说明\n\n原始材料已由 Runtime 登记到 \`context-workspace/drafts/\`。本整理稿不替换原文，也不把未确认内容当作产品决策。\n\n- 任务目标：${input.task_goal}\n- 产物引用：${artifactRef}\n`;
+  let normalized = body.startsWith("# ") ? body : `# 结构化材料整理稿\n\n${body}`;
+  const feedbackLines = renderUserFeedbackLines(input, PROJECT_ROOT);
+  if (feedbackLines.length) normalized = replaceMarkdownSection(normalized, "用户反馈", feedbackLines);
+  normalized = replaceMarkdownSection(normalized, "来源材料", renderSourceMaterialLines(input, PROJECT_ROOT));
+  return `${normalized}\n\n## 原文保留说明\n\n原始材料已由 Runtime 登记到 \`context-workspace/drafts/\`。本整理稿不替换原文，也不把未确认内容当作产品决策。\n\n- 任务目标：${input.task_goal}\n- 产物引用：${artifactRef}\n`;
+}
+
+function replaceMarkdownSection(markdown: string, heading: string, lines: string[]): string {
+  const replacement = `## ${heading}\n\n${lines.map((line) => `- ${line}`).join("\n")}`;
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?:^|\\n)## ${escaped}\\s*\\n[\\s\\S]*?(?=\\n## |$)`);
+  return pattern.test(markdown)
+    ? markdown.replace(pattern, (match) => `${match.startsWith("\n") ? "\n" : ""}${replacement}`)
+    : `${markdown}\n\n${replacement}`;
 }
 
 function readArtifactContents(refs: string[]): Array<{ ref: string; content: string }> {
