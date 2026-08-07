@@ -13,15 +13,16 @@ import {
   getActiveConfirmation,
   loadStates,
   PROJECT_ROOT,
+  readPendingConfirmations,
   readTaskState,
   writeTaskState,
 } from "../lib/config.js";
-import type { ContextAnalysisOutput } from "../lib/context-types.js";
+import type { ContextAnalysisOutput, ContextProposal } from "../lib/context-types.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
 import type { ChangeAnalysisOutput } from "../lib/change-types.js";
-import { readJson, repoRefToPath } from "../lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic } from "../lib/repository.js";
 import { loadLocalEnv } from "../lib/env.js";
-import { contextIndexRef } from "../lib/project-paths.js";
+import { contextIndexRef, contextRootPath } from "../lib/project-paths.js";
 import { assertTransition } from "../lib/state-runtime.js";
 import { createTask, updateTask } from "../lib/task-runtime.js";
 import type { ConfirmationRecord, StateId, TaskState } from "../lib/types.js";
@@ -67,6 +68,9 @@ export class AgentOrchestrator {
       if (options.taskId && state && state.task_id !== options.taskId) {
         throw new Error(`当前运行任务是 ${state.task_id}，不是 ${options.taskId}`);
       }
+      if (state && options.projectId && options.projectId.trim().toLowerCase() !== state.project_id) {
+        throw new Error(`当前运行任务属于项目 ${state.project_id}，不能用项目 ${options.projectId} 继续执行`);
+      }
       if (!state) state = this.initializeTask(normalized, options.taskId, options.sessionId, options.projectId);
       this.provider.setProjectId?.(options.projectId ?? state.project_id);
 
@@ -81,7 +85,7 @@ export class AgentOrchestrator {
         return await this.handleWaitingState(state, normalized, options);
       }
 
-      const intent = routeIntent(normalized);
+      const intent = routeIntent(normalized, Boolean(options.materialPath ?? extractExistingPath(normalized)));
       if (intent === "CONTINUE") return await this.continueCurrent(state, options);
       if (intent === "UNKNOWN") return this.requestIntentClarification(state, normalized, options);
       return await this.startIntent(state, intent, normalized, options);
@@ -107,6 +111,7 @@ export class AgentOrchestrator {
   ): Promise<AgentResponse> {
     state = this.moveToRouting(state);
     if (intent === "CONTEXT") return await this.startContext(state, message, options);
+    if (intent === "CONTEXT_REVOKE") return await this.startContextRevoke(state, message, options);
     if (intent === "PRD") return await this.startPrd(state, message, options);
     return await this.startChange(state, message, options);
   }
@@ -146,7 +151,10 @@ export class AgentOrchestrator {
       structuredMaterialRef: reportRefs.structuredMaterialRef,
     });
     const analysis = readJson<ContextAnalysisOutput>(assets.contextOutputPath);
-    const confirmableProposals = analysis.update_proposals.filter((proposal) => proposal.requires_confirmation);
+    const confirmableProposals = analysis.update_proposals
+      .filter((proposal) => proposal.requires_confirmation)
+      .filter((proposal) => !isProposalAlreadyApplied(proposal, PROJECT_ROOT))
+      .filter((proposal) => !wasProposalDeferred(state.task_id, proposal) || /(确认|批准|同意|更新|提升)/.test(message));
     if (confirmableProposals.length === 0) {
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_MAINTAINING", reason: "本次仅产生可逆整理结果，无稳定 Context 写入" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "通用材料整理完成" });
@@ -198,7 +206,46 @@ export class AgentOrchestrator {
         ...(recorded.structured_material_ref ? [{ ref: recorded.structured_material_ref, label: "结构化整理稿" }] : []),
       ],
       confirmation,
-      nextSteps: ["回复“确认全部”", "回复“只确认方案”或“只确认边界”", "回复“暂不更新稳定 Context”"],
+      nextSteps: ["回复“确认全部”", "回复“只确认 proposal-id-1，其他暂不更新”", "回复“暂不更新稳定 Context”"],
+      debug: options.debug,
+    });
+  }
+
+  private async startContextRevoke(
+    state: TaskState,
+    message: string,
+    options: HandleMessageOptions,
+  ): Promise<AgentResponse> {
+    if (state.current_state !== "INTENT_ROUTING") {
+      throw new Error(`当前状态 ${state.current_state} 不能启动 Context 撤销`);
+    }
+    updateTask({ taskId: state.task_id, mode: "CONTEXT", goal: message });
+    assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "分析用户请求撤销的稳定 Context" });
+    const targets = findContextTargets(state.project_id, message);
+    if (!targets.length) throw new Error("没有识别出要撤销的稳定 Context 文件，请提供文件名、item_id 或 proposal_id");
+    const proposals = targets.map((target) => buildArchiveProposal(state, target));
+    const reportRef = this.provider.getContextReportRefs(state.task_id).contextReportRef;
+    writeJsonAtomic(repoRefToPath(reportRef, PROJECT_ROOT), {
+      action: "ANALYZE", update_proposals: proposals, conflicts: [], stale_items: [],
+      index_issues: [], auto_actions: [], remaining_questions: [],
+    });
+    const confirmation = createConfirmation({
+      taskId: state.task_id,
+      type: "CONTEXT_UPDATE",
+      state: "WAITING_CONTEXT_CONFIRM",
+      sourceState: "CONTEXT_ANALYZING",
+      title: "确认撤销稳定 Context（归档，不删除原文件）",
+      actions: ["APPROVE_ALL", "APPROVE_SELECTED", "DEFER_ALL", "REJECT_ALL"],
+      items: proposals.map((proposal) => ({ ...proposal })),
+    });
+    assertTransition({ taskId: state.task_id, toState: "WAITING_CONTEXT_CONFIRM", reason: "稳定 Context 撤销需要 CP-C01 人工确认" });
+    return this.response({
+      message: `已找到 ${proposals.length} 条待撤销的稳定 Context。批准后将归档文件并从 INDEX 隐藏，不会直接删除业务文件。`,
+      status: "WAITING_CONFIRMATION",
+      skill: "context-maintain/APPLY",
+      artifacts: [{ ref: reportRef, label: "Context 撤销分析" }],
+      confirmation,
+      nextSteps: ["回复“确认撤销 proposal-id”", "回复“暂不更新稳定 Context”", "回复“暂停”"],
       debug: options.debug,
     });
   }
@@ -321,6 +368,10 @@ export class AgentOrchestrator {
     const confirmation = getActiveConfirmation(state.task_id, state.current_state);
     if (!confirmation) throw new Error(`等待状态 ${state.current_state} 缺少待确认记录`);
     if (state.current_state === "WAITING_INTENT_CLARIFICATION") {
+      const clarifiedIntent = routeIntent(message, Boolean(options.materialPath ?? extractExistingPath(message)));
+      if (["UNKNOWN", "CONTINUE"].includes(clarifiedIntent)) {
+        return this.confirmationReminder(confirmation, options);
+      }
       resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "CONFIRM" });
       assertTransition({ taskId: state.task_id, toState: "INTENT_ROUTING", reason: "用户补充了任务意图" });
       return await this.handleMessage(message, { ...options, taskId: state.task_id });
@@ -352,18 +403,21 @@ export class AgentOrchestrator {
     const reportRefs = this.provider.getContextReportRefs(state.task_id);
     const analysisPath = repoRefToPath(reportRefs.contextReportRef, PROJECT_ROOT);
     const selected = selectContextProposalIds(confirmation, message);
-    if (selected.mode === "DEFER") {
-      resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "DEFER_ALL" });
+    const isRevoke = confirmation.items.some((item) => item.action === "ARCHIVE");
+    if (selected.mode === "DEFER" || selected.mode === "REJECT") {
+      resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: selected.mode === "REJECT" ? "REJECT_ALL" : "DEFER_ALL" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "用户暂不更新稳定 Context" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_MAINTAINING", reason: "仅保留可逆分析产物" });
       assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "材料整理完成，稳定 Context 未变更" });
       return this.response({
-        message: `材料、分析报告和整理稿已保留在 drafts/workspace；整理稿位置为 ${reportRefs.structuredMaterialRef}。按你的决定，本次没有更新稳定 Context。`,
+        message: isRevoke
+          ? "已保留原稳定 Context 文件，本次没有执行撤销。"
+          : `材料、分析报告和整理稿已保留在 drafts/workspace；整理稿位置为 ${reportRefs.structuredMaterialRef}。按你的决定，本次没有更新稳定 Context。`,
         status: "COMPLETED",
         skill: "context-maintain",
         artifacts: [
           { ref: reportRefs.contextReportRef, label: "Context 分析报告" },
-          { ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" },
+          ...(!isRevoke ? [{ ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" }] : []),
         ],
         nextSteps: ["之后可说“继续准备 PRD”", "也可以补充新材料后重新分析"],
         debug: options.debug,
@@ -374,6 +428,7 @@ export class AgentOrchestrator {
       confirmationId: confirmation.confirmation_id,
       resolution: selected.ids.length === confirmation.items.length ? "APPROVE_ALL" : "APPROVE_SELECTED",
       selectedIds: selected.ids,
+      rejectedIds: selected.rejectedIds,
     });
     assertTransition({ taskId: state.task_id, toState: "CONTEXT_MAINTAINING", reason: "执行用户批准的稳定 Context 更新" });
     const result = applyContextActions(
@@ -386,18 +441,18 @@ export class AgentOrchestrator {
     return this.response({
       message: [
         `已按你的决定处理 ${result.executed_actions.length + result.skipped_actions.length} 条稳定 Context 建议。`,
-        `整理稿位置为 ${reportRefs.structuredMaterialRef}。`,
+        ...(isRevoke ? [] : [`整理稿位置为 ${reportRefs.structuredMaterialRef}。`]),
         result.executed_actions.length
-          ? `已更新：${result.executed_actions.join("、")}。`
+          ? `${isRevoke ? "已归档" : "已更新"}：${result.executed_actions.join("、")}。`
           : "候选内容与现有稳定 Context 一致，因此保持幂等，没有重复创建版本。",
         `仍有 ${result.health_check.remaining_issues.length} 个问题保留为待确认事项。`,
       ].join("\n"),
       status: "COMPLETED",
       skill: "context-maintain/APPLY",
       artifacts: [
-        { ref: result.change_log_ref, label: "Context 变更记录" },
+        { ref: result.change_log_ref, label: isRevoke ? "Context 撤销记录" : "Context 变更记录" },
         { ref: contextIndexRef(state.project_id), label: "稳定 Context 索引" },
-        { ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" },
+        ...(!isRevoke ? [{ ref: reportRefs.structuredMaterialRef, label: "结构化整理稿" }] : []),
       ],
       nextSteps: ["回复“继续准备 PRD”进入写前对齐", "回复新的材料整理任务"],
       debug: options.debug,
@@ -718,7 +773,7 @@ export class AgentOrchestrator {
     if (state && executionStates.has(state.current_state)) {
       assertTransition({ taskId: state.task_id, toState: "EXECUTION_BLOCKED", reason: message, operator: "SYSTEM" });
       const blockedState = requireState(state.task_id);
-      blockedState.previous_state = "INTENT_ROUTING";
+      blockedState.previous_state = state.current_state;
       blockedState.error_info = message;
       writeTaskState(blockedState);
     }
@@ -801,40 +856,148 @@ function instructionFor(status: AgentResponse["status"], state: StateId): string
   return "Runtime 正在处理。不得绕过 Runtime 执行业务 Skill 或写入业务文件。";
 }
 
-function routeIntent(message: string): AgentIntent {
+export function routeIntent(message: string, hasMaterialPath = false): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
-  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈)/i.test(message)) return "CONTEXT";
+  if (/(撤销|回滚|取消提升|移除.*稳定\s*context|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
+  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+))/i.test(message)) return "CONTEXT";
   if (/(修改|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
+  if (hasMaterialPath) return "CONTEXT";
   return "UNKNOWN";
 }
 
-function selectContextProposalIds(
+export function selectContextProposalIds(
   confirmation: ConfirmationRecord,
   message: string
-): { mode: "APPROVE" | "DEFER"; ids: string[] } {
-  if (/(暂不|先不|不更新|延后|忽略)/.test(message)) return { mode: "DEFER", ids: [] };
+): { mode: "APPROVE" | "DEFER" | "REJECT"; ids: string[]; rejectedIds: string[] } {
+  const hasPositive = /(确认|批准|同意|采纳|提升|撤销|归档)/.test(message);
+  const hasNegative = /(暂不|先不|不更新|延后|忽略|拒绝|不(?:要|予以)?(?:撤销|归档))/.test(message);
+  const rejectedIds = new Set<string>();
+  const deferredIds = new Set<string>();
+  for (const [index, item] of confirmation.items.entries()) {
+    const id = item.proposal_id;
+    if (typeof id !== "string") continue;
+    const aliases = [id, item.item_id, item.target_ref, item.proposed_value]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .map(escapeRegExp);
+    const aliasPattern = aliases.join("|");
+    const itemPattern = `(?:${aliasPattern}|第\\s*${index + 1}\\s*(?:条|项))`;
+    if (new RegExp(`拒绝[^。；;，,\\n]{0,100}${itemPattern}|${itemPattern}[^。；;，,\\n]{0,100}拒绝`).test(message)) rejectedIds.add(id);
+    if (new RegExp(`(?:暂不|先不|不更新|延后|忽略)[^。；;，,\\n]{0,100}${itemPattern}|${itemPattern}[^。；;，,\\n]{0,100}(?:暂不|先不|不更新|延后|忽略)`).test(message)) deferredIds.add(id);
+  }
+  if (!hasPositive && hasNegative && rejectedIds.size === 0) return { mode: "DEFER", ids: [], rejectedIds: [] };
+  if (!hasPositive && rejectedIds.size === confirmation.items.length) return { mode: "REJECT", ids: [], rejectedIds: [...rejectedIds] };
   if (/(全部|都确认|全确认)/.test(message)) {
-    return { mode: "APPROVE", ids: proposalIds(confirmation.items) };
+    const ids = proposalIds(confirmation.items).filter((id) => !deferredIds.has(id) && !rejectedIds.has(id));
+    if (ids.length) return { mode: "APPROVE", ids, rejectedIds: [...rejectedIds] };
   }
   const selected: string[] = [];
   for (const [index, item] of confirmation.items.entries()) {
     const id = item.proposal_id;
     const text = `${item.proposed_value ?? ""} ${item.target_ref ?? ""} ${item.item_id ?? ""}`;
     if (typeof id !== "string") continue;
-    if (message.includes(id) || new RegExp(`第\\s*${index + 1}\\s*(条|项)`).test(message)) selected.push(id);
+    if (deferredIds.has(id) || rejectedIds.has(id)) continue;
+    const aliases = [id, item.item_id, item.target_ref, item.proposed_value]
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+    if (aliases.some((alias) => message.includes(alias)) || new RegExp(`第\\s*${index + 1}\\s*(条|项)`).test(message)) selected.push(id);
     if (/(方案|提议|解决方案)/.test(message) && /(solution|proposal|方案|提议)/i.test(text)) selected.push(id);
     if (/(边界|范围|约束|规则)/.test(message) && /(boundary|scope|constraint|rule|边界|范围|约束|规则)/i.test(text)) selected.push(id);
   }
-  if (!selected.length && confirmation.items.length === 1 && /(确认|批准|同意|采纳)/.test(message)) {
-    return { mode: "APPROVE", ids: proposalIds(confirmation.items) };
+  if (!selected.length && confirmation.items.length === 1 && hasPositive && !hasNegative) {
+    return { mode: "APPROVE", ids: proposalIds(confirmation.items), rejectedIds: [] };
   }
-  if (!selected.length) throw new Error("没有识别出你批准的具体 Context 建议，请回复“确认全部”、按编号确认，或“暂不更新”");
-  return { mode: "APPROVE", ids: [...new Set(selected)] };
+  if (!selected.length) throw new Error("没有识别出你批准的具体 Context 建议。请提供 proposal_id 或编号，并明确其他建议暂不更新");
+  return { mode: "APPROVE", ids: [...new Set(selected)], rejectedIds: [...rejectedIds] };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function proposalIds(items: ConfirmationRecord["items"]): string[] {
   return items.map((item) => item.proposal_id).filter((id): id is string => typeof id === "string");
+}
+
+function isProposalAlreadyApplied(proposal: ContextProposal, root: string): boolean {
+  if (!proposal.target_ref) return false;
+  try {
+    const targetPath = repoRefToPath(proposal.target_ref, root);
+    if (!fs.existsSync(targetPath)) return false;
+    const current = parseFrontmatter(fs.readFileSync(targetPath, "utf-8"));
+    const candidate = proposal.content_ref && fs.existsSync(repoRefToPath(proposal.content_ref, root))
+      ? parseFrontmatter(fs.readFileSync(repoRefToPath(proposal.content_ref, root), "utf-8"))
+      : null;
+    return current.metadata.status === "archived" || (candidate !== null && current.body.trim() === candidate.body.trim());
+  } catch {
+    return false;
+  }
+}
+
+function wasProposalDeferred(taskId: string, proposal: ContextProposal): boolean {
+  const pending = readPendingConfirmations();
+  if (!pending || pending.task_id !== taskId) return false;
+  return pending.records.some((record) =>
+    record.confirmation_type === "CONTEXT_UPDATE" &&
+    record.items.some((item) => {
+      if (!["DEFERRED", "REJECTED"].includes(item.approval_status ?? "") && !["DEFERRED", "REJECTED"].includes(record.status)) return false;
+      if (item.proposal_id === proposal.proposal_id) return true;
+      const previousValue = item.proposed_value;
+      return typeof previousValue === "string" && previousValue === proposal.proposed_value
+        && JSON.stringify(item.source_refs ?? []) === JSON.stringify(proposal.source_refs);
+    })
+  );
+}
+
+interface ContextTarget {
+  targetRef: string;
+  path: string;
+  document: ReturnType<typeof parseFrontmatter>;
+}
+
+function findContextTargets(projectId: string, message: string): ContextTarget[] {
+  const root = contextRootPath(projectId);
+  if (!fs.existsSync(root)) return [];
+  const matches: ContextTarget[] = [];
+  const walk = (directory: string) => {
+    for (const name of fs.readdirSync(directory)) {
+      const filePath = path.join(directory, name);
+      if (fs.statSync(filePath).isDirectory()) walk(filePath);
+      else if (name.endsWith(".md")) {
+        const document = parseFrontmatter(fs.readFileSync(filePath, "utf-8"));
+        const ref = pathToRepoRef(filePath, PROJECT_ROOT);
+        const itemIds = [...message.matchAll(/(?:proposal-|item-|revoke-)[a-z0-9-]+/gi)].map((match) => match[0]);
+        const targetTokens = [name, path.basename(name, ".md"), ref, String(document.metadata.id ?? "")];
+        const matchesExplicitTarget = targetTokens.some((token) => token && message.includes(token))
+          || itemIds.some((token) => targetTokens.some((target) => target.includes(token) || token.includes(target)));
+        if (document.metadata.status !== "archived" && (matchesExplicitTarget || message.includes("全部"))) {
+          matches.push({ targetRef: ref, path: filePath, document });
+        }
+      }
+    }
+  };
+  walk(root);
+  return matches;
+}
+
+function buildArchiveProposal(state: TaskState, target: ContextTarget): ContextProposal {
+  const id = String(target.document.metadata.id ?? path.basename(target.path, ".md"));
+  const version = String(target.document.metadata.version ?? "0.0.0");
+  return {
+    proposal_id: `revoke-${id}`,
+    action: "ARCHIVE",
+    target_ref: target.targetRef,
+    item_id: id,
+    current_value: target.document.body,
+    proposed_value: "归档稳定 Context 文件并从索引隐藏",
+    source_refs: Array.isArray(target.document.metadata.source_refs) ? target.document.metadata.source_refs : [],
+    relationship: "SUPERSEDES",
+    risk_level: "HIGH",
+    requires_confirmation: true,
+    impact_if_applied: "文件保留但标记为 archived，后续 Context 索引不再展示",
+    impact_if_ignored: "保持当前稳定 Context 不变",
+    base_version: version,
+    content_ref: target.targetRef,
+  };
 }
 
 function humanActions(confirmation: ConfirmationRecord): string[] {

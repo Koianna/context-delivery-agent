@@ -8,7 +8,7 @@ import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput }
 import { authorizeContextWrite } from "../scripts/lib/context-write.js";
 import type { ConfirmationRecord, TaskState } from "../scripts/lib/types.js";
 import { createVersion } from "../scripts/create-version.js";
-import { readJson, writeTextAtomic } from "../scripts/lib/repository.js";
+import { parseFrontmatter, readJson, writeTextAtomic } from "../scripts/lib/repository.js";
 import { updateIndex } from "../scripts/update-index.js";
 import { validateContextAnalysis, validateMaterialOutput } from "../scripts/validate-skill-output.js";
 
@@ -90,6 +90,14 @@ try {
   const firstIndex = updateIndex(tempRoot, "2026-08-04", "product-work");
   const secondIndex = updateIndex(tempRoot, "2026-08-04", "product-work");
   check("CTX-11", firstIndex.entry_count === 3 && secondIndex.status === "UNCHANGED", "索引包含全部稳定 Context 且重复更新幂等");
+
+  const archived = createVersion({
+    targetRef: proposal.target_ref!, contentRef: proposal.target_ref!, expectedVersion: first.version,
+    sourceRefs: proposal.source_refs, confirmedAt: "2026-08-04T11:00:00+08:00", action: "ARCHIVE", root: tempRoot,
+  });
+  const archivedIndex = updateIndex(tempRoot, "2026-08-04", "product-work");
+  const archivedDocument = parseFrontmatter(fs.readFileSync(path.join(tempRoot, "context-workspace/context/product-work/product/solution.md"), "utf-8"));
+  check("CTX-12", archived.status === "CREATED" && archivedIndex.entry_count === 2 && archivedDocument.metadata.status === "archived", "归档稳定 Context 后保留文件并从索引隐藏");
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 }

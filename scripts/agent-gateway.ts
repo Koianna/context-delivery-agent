@@ -7,6 +7,7 @@ import type {
   ExternalAgentRequest,
   ExternalAgentResponse,
 } from "./gateway/types.js";
+import type { TaskState } from "./lib/types.js";
 import { runtimeSummary } from "./gateway/types.js";
 import { InlineMaterialError, writeInlineMaterials } from "./gateway/inline-materials.js";
 
@@ -30,7 +31,8 @@ async function handleLine(line: string): Promise<ExternalAgentResponse> {
     return errorResponse("unknown", "INVALID_JSON", "输入不是合法 JSON");
   }
 
-  const validation = validateRequest(raw);
+  const current = readTaskState();
+  const validation = validateRequest(raw, current);
   if (!validation.ok) {
     const requestId = isRecord(raw) && typeof raw.request_id === "string"
       ? raw.request_id
@@ -40,8 +42,9 @@ async function handleLine(line: string): Promise<ExternalAgentResponse> {
 
   const request = validation.request;
   try {
-    const taskId = request.task_id ?? `agent-${Date.now()}`;
-    const projectId = request.project_id?.toLowerCase();
+    const current = readTaskState();
+    const taskId = request.task_id ?? (current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state) ? current.task_id : undefined) ?? `agent-${Date.now()}`;
+    const projectId = request.project_id?.toLowerCase() ?? (current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state) ? current.project_id : undefined);
     const inlineMaterialPath = request.materials?.length
       ? writeInlineMaterials(request.materials, projectId ?? "default-project", taskId, request.message)
       : undefined;
@@ -83,7 +86,7 @@ async function handleLine(line: string): Promise<ExternalAgentResponse> {
   }
 }
 
-function validateRequest(raw: unknown):
+function validateRequest(raw: unknown, current: TaskState | null):
   | { ok: true; request: ExternalAgentRequest }
   | { ok: false; error: string } {
   if (!isRecord(raw)) return { ok: false, error: "请求必须是 JSON 对象" };
@@ -133,7 +136,7 @@ function validateRequest(raw: unknown):
   if (raw.debug !== undefined && typeof raw.debug !== "boolean") {
     return { ok: false, error: "debug 必须是布尔值" };
   }
-  if (raw.task_id === undefined && raw.material_path === undefined && raw.materials === undefined) {
+  if (raw.task_id === undefined && raw.material_path === undefined && raw.materials === undefined && !current) {
     return { ok: false, error: "新任务必须提供 material_path 或 materials" };
   }
   if (raw.client !== undefined) {

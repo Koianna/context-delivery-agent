@@ -15,6 +15,7 @@ export interface CreateVersionInput {
   expectedVersion: string;
   sourceRefs: string[];
   confirmedAt: string;
+  action?: "ARCHIVE";
   root?: string;
 }
 
@@ -55,6 +56,22 @@ export function createVersion(input: CreateVersionInput): CreateVersionResult {
   const candidate = parseFrontmatter(fs.readFileSync(candidatePath, "utf-8"));
   const currentVersion = current.metadata.version;
   if (typeof currentVersion !== "string") throw new Error(`目标缺少 version: ${input.targetRef}`);
+  if (input.action === "ARCHIVE") {
+    if (current.metadata.status === "archived") {
+      return { status: "UNCHANGED", target_ref: input.targetRef, previous_version: currentVersion, version: currentVersion };
+    }
+    if (currentVersion !== input.expectedVersion) {
+      throw new Error(`基线版本冲突: 期望 ${input.expectedVersion}, 当前 ${currentVersion}`);
+    }
+    writeTextAtomic(targetPath, renderFrontmatter({
+      ...current.metadata,
+      version: incrementPatch(currentVersion),
+      status: "archived",
+      archived_by: "user",
+      archived_at: input.confirmedAt,
+    }, current.body));
+    return { status: "CREATED", target_ref: input.targetRef, previous_version: currentVersion, version: incrementPatch(currentVersion) };
+  }
   if (current.body.trim() === candidate.body.trim()) {
     return { status: "UNCHANGED", target_ref: input.targetRef, previous_version: currentVersion, version: currentVersion };
   }

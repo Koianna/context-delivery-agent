@@ -33,6 +33,7 @@ export interface ResolveConfirmationInput {
   confirmationId: string;
   resolution: string;
   selectedIds?: string[];
+  rejectedIds?: string[];
   operator?: Operator;
 }
 
@@ -111,6 +112,7 @@ export function resolveConfirmation(input: ResolveConfirmationInput): Confirmati
   }
 
   const selectedIds = input.selectedIds ?? [];
+  const rejectedIds = input.rejectedIds ?? [];
   if (input.resolution === "APPROVE_SELECTED" && selectedIds.length === 0) {
     throw new Error("APPROVE_SELECTED 必须指定 proposal_id");
   }
@@ -123,13 +125,17 @@ export function resolveConfirmation(input: ResolveConfirmationInput): Confirmati
   if (unknownIds.length) {
     throw new Error(`选中项包含确认记录中不存在的 proposal_id: ${unknownIds.join(", ")}`);
   }
+  const unknownRejectedIds = rejectedIds.filter((id) => !knownIds.has(id));
+  if (unknownRejectedIds.length) {
+    throw new Error(`拒绝项包含确认记录中不存在的 proposal_id: ${unknownRejectedIds.join(", ")}`);
+  }
 
   const status = resolutionStatus(input.resolution);
   const resolved: ConfirmationRecord = {
     ...record,
     items: record.items.map((item) => ({
       ...item,
-      approval_status: itemDecision(input.resolution, item.proposal_id, selectedIds),
+      approval_status: itemDecision(input.resolution, item.proposal_id, selectedIds, rejectedIds),
     })),
     status,
     resolved_by: input.operator ?? "USER",
@@ -159,6 +165,7 @@ export function resolveConfirmation(input: ResolveConfirmationInput): Confirmati
       status,
       resolution: input.resolution,
       selected_proposal_ids: selectedIds,
+      rejected_proposal_ids: rejectedIds,
     },
   });
   return resolved;
@@ -185,7 +192,8 @@ function resolutionStatus(resolution: string): ConfirmationStatus {
 function itemDecision(
   resolution: string,
   proposalId: string | undefined,
-  selectedIds: string[]
+  selectedIds: string[],
+  rejectedIds: string[]
 ): ConfirmationItem["approval_status"] {
   if ([
     "APPROVE_ALL", "APPROVE", "CONFIRM", "CONFIRM_WRITABLE", "APPROVE_CORE",
@@ -193,6 +201,7 @@ function itemDecision(
     "REVISE_REPLAN",
   ].includes(resolution)) return "APPROVED";
   if (resolution === "APPROVE_SELECTED") {
+    if (proposalId && rejectedIds.includes(proposalId)) return "REJECTED";
     return proposalId && selectedIds.includes(proposalId) ? "APPROVED" : "DEFERRED";
   }
   if (["DEFER", "DEFER_ALL"].includes(resolution)) return "DEFERRED";

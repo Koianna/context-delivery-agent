@@ -108,6 +108,7 @@ function executeProposal(proposal: ContextProposal, confirmedAt: string, root: s
     expectedVersion: proposal.base_version,
     sourceRefs: proposal.source_refs,
     confirmedAt,
+    action: proposal.action === "ARCHIVE" ? "ARCHIVE" : undefined,
     root,
   });
 }

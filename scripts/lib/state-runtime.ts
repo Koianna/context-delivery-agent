@@ -136,9 +136,9 @@ function validateTransitionGuards(state: TaskState, to: StateId): string[] {
       "WAITING_CONTEXT_CONFIRM",
       "CONTEXT_UPDATE"
     );
-    if (!confirmation || confirmation.status !== "APPROVED") {
+    if (!confirmation || !["APPROVED", "DEFERRED", "REJECTED"].includes(confirmation.status)) {
       errors.push("CP-C01 尚未批准");
-    } else if (!confirmation.items.some((item) => item.approval_status === "APPROVED")) {
+    } else if (confirmation.status === "APPROVED" && !confirmation.items.some((item) => item.approval_status === "APPROVED")) {
       errors.push("CP-C01 没有逐项批准的 proposal");
     }
   }

@@ -42,7 +42,9 @@ function printResponse(response: AgentResponse) {
     console.log(`\n需要你判断：${response.confirmation.title}`);
     response.confirmation.items.forEach((item, index) => {
       const value = item.proposed_value ?? item.question ?? item.reason ?? item.change_id ?? "请查看确认项";
-      console.log(`${index + 1}. ${String(value)}`);
+      const ids = [item.proposal_id, item.item_id].filter((value): value is string => typeof value === "string");
+      const id = ids.length ? ` [${ids.join(" / ")}]` : "";
+      console.log(`${index + 1}.${id} ${String(value)}`);
     });
   }
   if (response.next_steps.length) {

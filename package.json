@@ -30,6 +30,7 @@
     "eval:gateway": "node --import tsx evaluation/run-gateway.ts",
     "eval:mcp": "node --import tsx evaluation/run-mcp.ts",
     "eval:workspace": "node --import tsx evaluation/run-workspace-provider.ts",
+    "eval:confirmation": "node --import tsx evaluation/run-confirmation-parser.ts",
     "eval:model": "node --import tsx evaluation/run-openai-provider.ts",
     "typecheck": "tsc --noEmit",
     "eval:run": "node --import tsx evaluation/run.ts"

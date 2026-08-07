@@ -31,6 +31,7 @@ export function updateIndex(root = PROJECT_ROOT, updated = new Date().toISOStrin
     for (const name of fs.readdirSync(directory).filter((item) => item.endsWith(".md")).sort()) {
       const filePath = path.join(directory, name);
       const document = parseFrontmatter(fs.readFileSync(filePath, "utf-8"));
+      if (document.metadata.status === "archived") continue;
       const title = document.body.match(/^#\s+(.+)$/m)?.[1] ?? name;
       groups[group].push({
         relativePath: `${group}/${name}`,

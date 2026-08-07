@@ -3,6 +3,7 @@ import * as readline from "node:readline";
 import { stdin as input, stdout as output } from "node:process";
 import { AgentOrchestrator } from "./agent/orchestrator.js";
 import { readTaskState } from "./lib/config.js";
+import type { TaskState } from "./lib/types.js";
 import { InlineMaterialError, writeInlineMaterials } from "./gateway/inline-materials.js";
 import type { ExternalAgentMaterial } from "./gateway/types.js";
 
@@ -66,11 +67,11 @@ async function callTool(id: JsonRpcId, params: unknown): Promise<unknown> {
     return toolError(id, "INVALID_TOOL_INPUT", "tools/call 必须调用 context_delivery，并提供 arguments 对象");
   }
   const args = params.arguments;
-  const validation = validateArguments(args);
+  const current = readTaskState();
+  const validation = validateArguments(args, current);
   if (!validation.ok) return toolError(id, "INVALID_TOOL_INPUT", validation.error);
 
-  const current = readTaskState();
-  const taskId = args.task_id ?? `agent-${Date.now()}`;
+  const taskId = args.task_id ?? (current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state) ? current.task_id : undefined) ?? `agent-${Date.now()}`;
   const projectId = args.project_id ?? current?.project_id ?? "default-project";
   const inlinePath = args.materials?.length
     ? writeInlineMaterials(args.materials, projectId, taskId, args.message)
@@ -131,7 +132,7 @@ function toolDefinition() {
   };
 }
 
-function validateArguments(value: Record<string, unknown>): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+function validateArguments(value: Record<string, unknown>, current: TaskState | null): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
   if (typeof value.message !== "string" || !value.message.trim()) return { ok: false, error: "message 必须是非空字符串" };
   for (const field of ["project_id", "task_id", "session_id", "material_path"] as const) {
     if (value[field] !== undefined && typeof value[field] !== "string") return { ok: false, error: `${field} 必须是字符串` };
@@ -147,7 +148,7 @@ function validateArguments(value: Record<string, unknown>): { ok: true; value: R
       if (item.is_complete !== undefined && typeof item.is_complete !== "boolean") return { ok: false, error: `materials[${index}].is_complete 必须是布尔值` };
     }
   }
-  if (value.material_path === undefined && value.materials === undefined && !value.task_id) {
+  if (value.material_path === undefined && value.materials === undefined && !value.task_id && !current) {
     return { ok: false, error: "新任务必须提供 material_path 或 materials；继续已有任务请提供 task_id" };
   }
   return { ok: true, value };
