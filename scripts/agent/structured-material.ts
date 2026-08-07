@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import type { MaterialIngestInput, MaterialIngestOutput, MaterialInput } from "../lib/context-types.js";
 import { readMaterialContent } from "../lib/material-bundle.js";
 import { parseFrontmatter, pathToRepoRef, writeTextAtomic } from "../lib/repository.js";
@@ -35,7 +36,7 @@ export function writeStructuredMaterial(
     if (isUserFeedbackMaterial(material)) {
       const feedback = parseUserFeedbackEntries(content, material.source_owner);
       sections.get("用户反馈")?.push(...feedback.map(formatUserFeedback));
-      sections.get("来源材料")?.push(formatSourceMaterial(material, index, content));
+      sections.get("来源材料")?.push(formatSourceMaterial(material, index, content, artifactRef));
       continue;
     }
     const segments = parseMaterialSegments(content, isMeeting);
@@ -46,7 +47,7 @@ export function writeStructuredMaterial(
       sections.get(category)?.push(entry);
     }
 
-    sections.get("来源材料")?.push(formatSourceMaterial(material, index, content));
+    sections.get("来源材料")?.push(formatSourceMaterial(material, index, content, artifactRef));
   }
 
   const body = [
@@ -85,9 +86,9 @@ export function renderUserFeedbackLines(input: MaterialIngestInput, root: string
   });
 }
 
-export function renderSourceMaterialLines(input: MaterialIngestInput, root: string): string[] {
+export function renderSourceMaterialLines(input: MaterialIngestInput, root: string, artifactRef: string): string[] {
   return input.materials.map((material, index) =>
-    formatSourceMaterial(material, index, readMaterialContent(material, root))
+    formatSourceMaterial(material, index, readMaterialContent(material, root), artifactRef)
   );
 }
 
@@ -144,7 +145,7 @@ function formatUserFeedback(entry: UserFeedbackEntry): string {
   return entry.userId ? `用户 ID：${entry.userId}：${content}` : `用户反馈：${content}`;
 }
 
-function formatSourceMaterial(material: MaterialInput, index: number, content: string): string {
+function formatSourceMaterial(material: MaterialInput, index: number, content: string, artifactRef: string): string {
   const anchor = material.content_ref.endsWith("/materials.md") ? `#material-${index + 1}` : "";
   const feedbackEntries = isUserFeedbackMaterial(material) ? parseUserFeedbackEntries(content, material.source_owner) : [];
   const feedbackUsers = unique(feedbackEntries.flatMap((entry) => entry.userId ? [entry.userId] : []));
@@ -164,7 +165,41 @@ function formatSourceMaterial(material: MaterialInput, index: number, content: s
     timeDetail,
     `类型：${sourceTypeLabel(material.source_type)}`,
   ].filter((item): item is string => item !== null);
-  return `[${material.name}](${material.content_ref}${anchor})（${details.join("；")}）`;
+  const displayName = sourceDisplayName(material, index, feedbackEntries);
+  const href = markdownSourceHref(material.content_ref, artifactRef, anchor);
+  return `[${escapeMarkdownLabel(displayName)}](${href})（${details.join("；")}）`;
+}
+
+function sourceDisplayName(material: MaterialInput, index: number, feedbackEntries: UserFeedbackEntry[]): string {
+  const name = material.name.trim();
+  const genericFeedbackName = name.match(/^(?:用户)?反馈\s*(\d+)(?=$|[_.：:\-\s])/i);
+  if (!isUserFeedbackMaterial(material) || !genericFeedbackName) return name;
+  const sequence = genericFeedbackName[1] ?? String(index + 1);
+  const summary = feedbackSummary(feedbackEntries[0]?.content ?? "");
+  return summary ? `反馈${sequence}：${summary}` : `反馈${sequence}`;
+}
+
+function feedbackSummary(content: string): string {
+  const normalized = compactFeedback(content);
+  const quoted = normalized.match(/["“]([^"”]{1,30})["”]/u)?.[1]?.trim();
+  if (quoted) return /拼音/.test(normalized) ? `拼音 ${quoted}` : quoted;
+  const firstClause = normalized
+    .split(/[，。！？；,.!?;]/u)[0]
+    .replace(/^(?:用户反馈|内容)\s*[：:]\s*/u, "")
+    .trim();
+  return firstClause.length > 24 ? `${firstClause.slice(0, 24)}...` : firstClause;
+}
+
+function markdownSourceHref(sourceRef: string, artifactRef: string, anchor: string): string {
+  if (!sourceRef.startsWith("repo://") || !artifactRef.startsWith("repo://")) return `${sourceRef}${anchor}`;
+  const sourcePath = sourceRef.slice("repo://".length);
+  const artifactPath = artifactRef.slice("repo://".length);
+  const relative = path.posix.relative(path.posix.dirname(artifactPath), sourcePath);
+  return `${relative || path.posix.basename(sourcePath)}${anchor}`;
+}
+
+function escapeMarkdownLabel(value: string): string {
+  return value.replace(/([\\[\]])/g, "\\$1");
 }
 
 function sourceTypeLabel(sourceType: string): string {

@@ -140,10 +140,10 @@ const feedbackTaskId = "workspace-feedback-format-demo";
 const feedbackProjectId = "workspace-feedback-format-eval";
 const feedbackGoal = "帮我整理一下这份用户反馈";
 const feedbackSourceDir = writeInlineMaterials([
-  { name: "反馈1_夏天连衣裙.md", content: "用户 ID：u_8912\n时间：2026-07-15\n内容：搜 \"夏天连衣裙\" 出来一堆冬装，排序完全不看季节，能不能改改？", source_type: "USER_FEEDBACK", source_owner: "u_8912", source_time: "2026-07-15" },
+  { name: "反馈1", content: "用户 ID：u_8912\n时间：2026-07-15\n内容：搜 \"夏天连衣裙\" 出来一堆冬装，排序完全不看季节，能不能改改？", source_type: "USER_FEEDBACK", source_owner: "u_8912", source_time: "2026-07-15" },
   { name: "反馈2_无线鼠标静音.md", content: "用户 ID：u_4521\n时间：2026-07-22\n内容：我搜的是 \"无线鼠标 静音\"，第一个结果是有线鼠标，第二个是机械键盘，无语了。", source_type: "USER_FEEDBACK", source_owner: "u_4521", source_time: "2026-07-22" },
-  { name: "反馈3_拼音识别.md", content: "用户 ID：u_6733\n时间：2026-07-28\n内容：搜索框输入拼音 \"pingguo\" 希望能识别出 \"苹果\"，我现在每次都要切换到中文输入法再打一遍。", source_type: "USER_FEEDBACK", source_owner: "u_6733", source_time: "2026-07-28" },
-  { name: "反馈4_加载速度.md", content: "用户 ID：u_9012\n时间：2026-07-30\n内容：搜索结果加载太慢了，搜一个词要等 5 秒以上，跟竞品比完全不行。", source_type: "USER_FEEDBACK", source_owner: "u_9012", source_time: "2026-07-30" },
+  { name: "反馈3", content: "用户 ID：u_6733\n时间：2026-07-28\n内容：搜索框输入拼音 \"pingguo\" 希望能识别出 \"苹果\"，我现在每次都要切换到中文输入法再打一遍。", source_type: "USER_FEEDBACK", source_owner: "u_6733", source_time: "2026-07-28" },
+  { name: "反馈4", content: "用户 ID：u_9012\n时间：2026-07-30\n内容：搜索结果加载太慢了，搜一个词要等 5 秒以上，跟竞品比完全不行。", source_type: "USER_FEEDBACK", source_owner: "u_9012", source_time: "2026-07-30" },
 ], feedbackProjectId, feedbackTaskId, feedbackGoal);
 const feedbackResponse = await new AgentOrchestrator(new WorkspaceProvider()).handleMessage(feedbackGoal, {
   taskId: feedbackTaskId,
@@ -155,10 +155,12 @@ const feedbackArtifact = feedbackResponse.artifacts.find((item) => item.label ==
 const feedbackArtifactPath = feedbackArtifact ? repoRefToPath(feedbackArtifact.ref, PROJECT_ROOT) : null;
 const feedbackContent = feedbackArtifactPath && fs.existsSync(feedbackArtifactPath) ? fs.readFileSync(feedbackArtifactPath, "utf-8") : "";
 const feedbackBundlePath = path.join(feedbackSourceDir, "materials.md");
+const feedbackSourceHref = `../../../../../drafts/${feedbackProjectId}/source-materials/${feedbackTaskId}/materials.md`;
+const resolvedFeedbackSource = feedbackArtifactPath ? path.resolve(path.dirname(feedbackArtifactPath), feedbackSourceHref) : null;
 results.push(
   check("WORKSPACE-18", ["u_8912", "u_4521", "u_6733", "u_9012"].every((id) => feedbackContent.includes(`用户 ID：${id}：`)) && feedbackContent.includes("用户 ID：u_6733：搜索框输入拼音 \"pingguo\" 希望能识别出 \"苹果\""), "用户反馈按完整记录输出，用户 ID 与反馈正文保持在同一行"),
   check("WORKSPACE-19", !feedbackContent.includes("用户/客服反馈：用户 ID") && !feedbackContent.includes("方案建议：内容：搜") && !feedbackContent.includes("## 背景与事实\n\n- 时间："), "用户反馈字段不会被拆散或误分到背景和方案"),
-  check("WORKSPACE-20", feedbackContent.includes(`[反馈1_夏天连衣裙.md](repo://context-workspace/drafts/${feedbackProjectId}/source-materials/${feedbackTaskId}/materials.md#material-1)`) && feedbackContent.includes("用户 ID：u_8912；日期：2026-07-15；类型：用户反馈") && !feedbackContent.includes("src-"), "来源区使用可读元数据和可定位的原文链接，不暴露内部来源 ID"),
+  check("WORKSPACE-20", feedbackContent.includes(`[反馈1：夏天连衣裙](${feedbackSourceHref}#material-1)`) && feedbackContent.includes(`[反馈2：无线鼠标 静音](${feedbackSourceHref}#material-2)`) && feedbackContent.includes("用户 ID：u_8912；日期：2026-07-15；类型：用户反馈") && resolvedFeedbackSource === feedbackBundlePath && fs.existsSync(resolvedFeedbackSource) && !feedbackContent.includes("src-") && !feedbackContent.includes("](repo://"), "来源区名称不随外部简写漂移，且标准 Markdown 相对链接能解析到原文文件"),
   check("WORKSPACE-21", fs.existsSync(feedbackBundlePath) && [1, 2, 3, 4].every((index) => fs.readFileSync(feedbackBundlePath, "utf-8").includes(`<a id=\"material-${index}\"></a>`)), "任务级原文包为每条逻辑材料提供稳定定位锚点"),
 );
 const passed = results.filter((item) => item.passed).length;

@@ -355,7 +355,7 @@ function ensureStructuredMaterial(markdown: string, input: MaterialIngestInput, 
   let normalized = body.startsWith("# ") ? body : `# 结构化材料整理稿\n\n${body}`;
   const feedbackLines = renderUserFeedbackLines(input, PROJECT_ROOT);
   if (feedbackLines.length) normalized = replaceMarkdownSection(normalized, "用户反馈", feedbackLines);
-  normalized = replaceMarkdownSection(normalized, "来源材料", renderSourceMaterialLines(input, PROJECT_ROOT));
+  normalized = replaceMarkdownSection(normalized, "来源材料", renderSourceMaterialLines(input, PROJECT_ROOT, artifactRef));
   return `${normalized}\n\n## 原文保留说明\n\n原始材料已由 Runtime 登记到 \`context-workspace/drafts/\`。本整理稿不替换原文，也不把未确认内容当作产品决策。\n\n- 任务目标：${input.task_goal}\n- 产物引用：${artifactRef}\n`;
 }
 
