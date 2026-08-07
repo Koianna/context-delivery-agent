@@ -75,7 +75,7 @@ const contextApplied = await contextAgent.handleMessage("确认全部", { taskId
 const contextIndexPath = path.join(contextRoot, "INDEX.md");
 results.push(
   check("WORKSPACE-09", contextApplied.state.id === "CONTEXT_TASK_COMPLETED" && contextApplied.status === "COMPLETED", "CP-C01 后完成 Context 维护任务"),
-  check("WORKSPACE-10", fs.existsSync(contextIndexPath) && fs.readFileSync(contextIndexPath, "utf-8").includes("产品现状候选") && fs.readdirSync(path.join(contextRoot, "product")).some((item) => item.endsWith(".md")), "批准后创建稳定 Context 并更新项目索引"),
+  check("WORKSPACE-10", fs.existsSync(contextIndexPath) && fs.readFileSync(contextIndexPath, "utf-8").includes("产品现状候选") && fs.readdirSync(path.join(contextRoot, "product")).some((item) => item.endsWith(".md")) && !["users", "business-rules", "glossary"].some((group) => fs.existsSync(path.join(contextRoot, group))), "批准后仅创建实际使用的稳定 Context 分类目录并更新项目索引"),
   check("WORKSPACE-11", contextApplied.execution_status === "COMPLETED" && contextApplied.artifacts.some((item) => item.label === "结构化整理稿" && item.ref.includes("context-workspace/")), "确认后仍返回 Runtime 生成的整理稿"),
 );
 

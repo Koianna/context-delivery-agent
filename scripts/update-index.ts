@@ -16,10 +16,6 @@ export function updateIndex(root = PROJECT_ROOT, updated = new Date().toISOStrin
   const projectName = project ?? "default-project";
   const contextDir = contextRootPath(project, root);
   const indexPath = contextIndexPath(project, root);
-  fs.mkdirSync(contextDir, { recursive: true });
-  for (const group of ["product", "users", "business-rules", "glossary"]) {
-    fs.mkdirSync(path.join(contextDir, group), { recursive: true });
-  }
   if (!fs.existsSync(indexPath)) {
     writeTextAtomic(indexPath, renderFrontmatter({ version: "0.1.0", updated, project: projectName }, "# Context 索引\n\n> 此索引由 `scripts/update-index.ts` 根据稳定 Context 文件生成。"));
   }
