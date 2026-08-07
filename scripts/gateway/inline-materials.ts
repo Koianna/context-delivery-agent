@@ -1,8 +1,9 @@
 import * as path from "node:path";
 import { sha256Buffer } from "../lib/change-snapshot.js";
 import { PROJECT_ROOT } from "../lib/config.js";
+import { upsertMaterialIngestion, type IngestionMaterialRecord } from "../lib/material-manifest.js";
 import { safeProjectSlug } from "../lib/project-paths.js";
-import { writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { writeTextAtomic } from "../lib/repository.js";
 import type { ExternalAgentMaterial } from "./types.js";
 
 export const INLINE_MATERIAL_MAX_BYTES = 200_000;
@@ -19,6 +20,7 @@ export function writeInlineMaterials(
   materials: ExternalAgentMaterial[],
   projectId: string,
   taskId: string,
+  taskGoal = "",
   root = PROJECT_ROOT,
 ): string {
   if (!materials.length) throw new InlineMaterialError("INVALID_TOOL_INPUT", "materials 不能为空");
@@ -57,10 +59,11 @@ export function writeInlineMaterials(
       content_bytes: bytes,
     };
   });
-  writeJsonAtomic(path.join(targetDir, "ingest-manifest.json"), {
-    project_id: project,
+  upsertMaterialIngestion(project, {
     task_id: taskId,
-    materials: manifest,
+    task_goal: taskGoal,
+    updated_at: new Date().toISOString(),
+    materials: manifest as IngestionMaterialRecord[],
   });
   return targetDir;
 }

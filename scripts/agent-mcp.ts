@@ -73,7 +73,7 @@ async function callTool(id: JsonRpcId, params: unknown): Promise<unknown> {
   const taskId = args.task_id ?? `agent-${Date.now()}`;
   const projectId = args.project_id ?? current?.project_id ?? "default-project";
   const inlinePath = args.materials?.length
-    ? writeInlineMaterials(args.materials, projectId, taskId)
+    ? writeInlineMaterials(args.materials, projectId, taskId, args.message)
     : undefined;
   const response = await agent.handleMessage(args.message, {
     taskId,

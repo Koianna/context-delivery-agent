@@ -39,11 +39,16 @@ const first = structured(messages[2]);
 const second = structured(messages[3]);
 const draftRoot = path.join(PROJECT_ROOT, "context-workspace/drafts", projectId);
 const sourceFound = findText(draftRoot, sourceText);
+const unifiedManifestPath = path.join(draftRoot, "material-manifest.json");
+const unifiedManifest = fs.existsSync(unifiedManifestPath)
+  ? JSON.parse(fs.readFileSync(unifiedManifestPath, "utf-8")) as { ingestions?: Array<{ task_id?: string; task_goal?: string; materials?: Array<{ original_name?: string }> }> }
+  : null;
 const results = [
   check("MCP-01", messages[0]?.result?.serverInfo?.name === "context-delivery-agent", "MCP Server 可初始化"),
   check("MCP-02", messages[1]?.result?.tools?.some((tool) => tool.name === "context_delivery") === true, "MCP 暴露 context_delivery 工具"),
   check("MCP-03", first?.state?.id === "WAITING_CONTEXT_CONFIRM", "自然语言整理请求进入 Context 分支并停在 CP-C01，而不是 PRD 分支"),
   check("MCP-04", first?.skill?.includes("material-ingest") === true && sourceFound, "工具调用执行材料登记并保留原文到 drafts"),
+  check("MCP-04B", unifiedManifest?.ingestions?.some((item) => item.task_id === taskId && item.task_goal === "请整理这份会议记录，先不要写 PRD" && item.materials?.some((material) => material.original_name === "会议记录.md")) === true && !fs.existsSync(path.join(draftRoot, "source-materials", taskId, "ingest-manifest.json")), "内联材料接入信息合并到项目级材料清单"),
   check("MCP-04A", first?.execution_authority === "RUNTIME_ONLY" && first?.execution_status === "WAITING_USER_CONFIRMATION" && first?.artifacts?.some((item) => item.label === "结构化整理稿" && item.ref?.includes(`context-workspace/workspace/projects/${projectId}/materials/meeting-notes/`) && item.ref?.endsWith(`${taskId}.md`)) === true, "等待确认时返回 Runtime 发布的项目级会议整理稿"),
   check("MCP-05", second?.task_id === taskId && second?.state?.id === "CONTEXT_TASK_COMPLETED", "确认轮次复用同一 task_id 并由 Runtime 处理"),
 ];

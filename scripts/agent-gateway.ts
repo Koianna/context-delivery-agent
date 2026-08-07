@@ -43,7 +43,7 @@ async function handleLine(line: string): Promise<ExternalAgentResponse> {
     const taskId = request.task_id ?? `agent-${Date.now()}`;
     const projectId = request.project_id?.toLowerCase();
     const inlineMaterialPath = request.materials?.length
-      ? writeInlineMaterials(request.materials, projectId ?? "default-project", taskId)
+      ? writeInlineMaterials(request.materials, projectId ?? "default-project", taskId, request.message)
       : undefined;
     const response = await agent.handleMessage(request.message, {
       taskId,

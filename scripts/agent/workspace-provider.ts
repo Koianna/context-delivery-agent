@@ -4,6 +4,7 @@ import { hashReplanForApproval } from "../lib/change-guards.js";
 import { sha256Buffer } from "../lib/change-snapshot.js";
 import type { ChangeAnalysisOutput, ChangeRequestInput, ReplanOutput } from "../lib/change-types.js";
 import { PROJECT_ROOT } from "../lib/config.js";
+import { readIngestionMaterials, upsertMaterialIngestion } from "../lib/material-manifest.js";
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
 import { contextDocumentRef, contextIndexRef, contextIndexPath, contextRootPath, safeProjectSlug } from "../lib/project-paths.js";
@@ -38,7 +39,7 @@ export class WorkspaceProvider implements AgentProvider {
     const contextOutputPath = path.join(outputDir, "context-maintain.analysis.json");
     const sourceDir = this.prepareSources(materialPath, taskGoal, taskId);
     this.ensureProjectContext();
-    const input = this.buildMaterialInput(sourceDir, taskGoal);
+    const input = this.buildMaterialInput(sourceDir, taskGoal, taskId);
     const materialOutput = this.buildMaterialOutput(input);
     const contextOutput = this.buildContextOutput(input, materialOutput);
     writeJsonAtomic(inputPath, input);
@@ -246,12 +247,24 @@ export class WorkspaceProvider implements AgentProvider {
       const target = path.join(projectDir, path.basename(source));
       writeTextAtomic(target, fs.readFileSync(source, "utf-8"));
     }
-    writeJsonAtomic(path.join(projectDir, "ingest-manifest.json"), { project_id: this.projectId, task_id: taskId, task_goal: taskGoal, updated_at: new Date().toISOString() });
+    upsertMaterialIngestion(this.projectId, {
+      task_id: taskId,
+      task_goal: taskGoal,
+      updated_at: new Date().toISOString(),
+      materials: files.map((source) => ({
+        original_name: path.basename(source),
+        stored_name: path.basename(source),
+        source_type: null,
+        source_owner: null,
+        source_time: null,
+        is_complete: true,
+      })),
+    }, this.projectId);
     return projectDir;
   }
 
-  private buildMaterialInput(sourceDir: string, taskGoal: string): MaterialIngestInput {
-    const inlineMetadata = readInlineMetadata(sourceDir);
+  private buildMaterialInput(sourceDir: string, taskGoal: string, taskId: string): MaterialIngestInput {
+    const inlineMetadata = readIngestionMaterials(this.projectId, taskId, sourceDir, PROJECT_ROOT);
     const files = fs.readdirSync(sourceDir).filter((name) => isSupportedFile(path.join(sourceDir, name))).sort();
     const materials = files.map((name) => {
       const filePath = path.join(sourceDir, name);
@@ -382,37 +395,13 @@ export class WorkspaceProvider implements AgentProvider {
   }
 }
 
-function readInlineMetadata(sourceDir: string): Record<string, {
-  original_name: string;
-  source_type: string | null;
-  source_owner: string | null;
-  source_time: string | null;
-  is_complete: boolean;
-}> {
-  const metadataPath = [
-    path.join(sourceDir, "ingest-manifest.json"),
-    path.join(sourceDir, ".inline-materials.json"),
-  ].find((candidate) => fs.existsSync(candidate));
-  if (!metadataPath) return {};
-  const raw = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as { materials?: Array<Record<string, unknown>> };
-  return Object.fromEntries((raw.materials ?? []).flatMap((item) => {
-    if (typeof item.stored_name !== "string" || typeof item.original_name !== "string") return [];
-    return [[item.stored_name, {
-      original_name: item.original_name,
-      source_type: typeof item.source_type === "string" ? item.source_type : null,
-      source_owner: typeof item.source_owner === "string" ? item.source_owner : null,
-      source_time: typeof item.source_time === "string" ? item.source_time : null,
-      is_complete: item.is_complete !== false,
-    }]];
-  }));
-}
-
 function isSupportedFile(filePath: string): boolean {
   const name = path.basename(filePath);
   return fs.statSync(filePath).isFile()
     && /\.(md|markdown|txt|json)$/i.test(filePath)
     && !name.startsWith(".")
-    && name !== "ingest-manifest.json";
+    && name !== "ingest-manifest.json"
+    && name !== "material-manifest.json";
 }
 function extensionType(name: string): string { return path.extname(name).toLowerCase() === ".json" ? "JSON" : "TEXT"; }
 function safeSlug(value: string): string { const normalized = value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff-]+/g, "-").replace(/^-+|-+$/g, ""); return normalized || "default-project"; }

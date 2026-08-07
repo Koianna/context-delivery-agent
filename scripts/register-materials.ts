@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
+import { materialManifestPath, readMaterialManifest, type MaterialManifest } from "./lib/material-manifest.js";
 import type { MaterialIngestInput } from "./lib/context-types.js";
 import {
   incrementPatch,
@@ -13,33 +14,15 @@ import {
   writeTextAtomic,
 } from "./lib/repository.js";
 
-interface MaterialManifestRecord {
-  source_id: string;
-  original_ref: string;
-  draft_ref: string;
-  sha256: string;
-  missing_metadata: string[];
-  registered_at: string;
-}
-
-interface MaterialManifest {
-  artifact_id: string;
-  version: string;
-  task_goal: string;
-  topic: string;
-  records: MaterialManifestRecord[];
-}
-
 export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projectId?: string) {
   const input = readJson<MaterialIngestInput>(inputPath);
   const allowed = new Set(input.analysis_scope.included_source_ids);
   const workspaceSlug = projectId ?? input.workspace_slug ?? input.project_id ?? "default-project";
   const targetDir = path.join(root, "context-workspace/drafts", safeSlug(workspaceSlug));
   const sourceRoot = path.join(targetDir, "source-materials");
-  const manifestPath = path.join(targetDir, "material-manifest.json");
-  const existing = fs.existsSync(manifestPath)
-    ? readJson<MaterialManifest>(manifestPath)
-    : null;
+  const manifestPath = materialManifestPath(workspaceSlug, root);
+  const existingResult = readMaterialManifest(workspaceSlug, root);
+  const existing = existingResult.manifest;
 
   const incomingRecords = input.materials.map((material) => {
     if (!allowed.has(material.source_id)) {
@@ -95,14 +78,15 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projec
     }
   }
 
-  const manifest = {
+  const manifest: MaterialManifest = {
     artifact_id: `material-manifest-${safeSlug(workspaceSlug)}`,
-    version: existing && changed ? incrementPatch(existing.version) : existing?.version ?? "0.1.0",
-    task_goal: input.task_goal,
+    version: existing && (changed || existingResult.wasLegacy) ? incrementPatch(existing.version) : existing?.version ?? "0.2.0",
+    project_id: safeSlug(workspaceSlug),
     topic: input.analysis_scope.topic,
+    ingestions: existing?.ingestions ?? [],
     records,
   };
-  if (!existing || changed) writeJsonAtomic(manifestPath, manifest);
+  if (!existing || changed || existingResult.wasLegacy) writeJsonAtomic(manifestPath, manifest);
   return {
     manifest_ref: pathToRepoRef(manifestPath, root),
     records: incomingRecords,

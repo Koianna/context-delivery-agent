@@ -71,25 +71,19 @@ function parseMaterialSegments(content: string, isMeeting: boolean): MaterialSeg
   const cleanLines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !/source_id:|^---$/.test(line));
+    .filter((line) => line && !/source_id:|^---$/.test(line) && !/^#{1,6}\s/.test(line));
   if (!cleanLines.length) return [];
 
-  const hasSpeakerMarkers = isMeeting && cleanLines.some((line) => looksLikeSpeakerLine(line));
-  if (!hasSpeakerMarkers) {
-    return splitIntoSegments(cleanLines.join(" "), null);
-  }
-
   const blocks: MaterialSegment[] = [];
-  const normalized = cleanLines.join(" ");
-  const marker = /([^：:，。！？；\s]{1,12})[：:]\s*/gu;
-  const matches = [...normalized.matchAll(marker)];
-  for (const [index, match] of matches.entries()) {
-    const start = (match.index ?? 0) + match[0].length;
-    const end = index + 1 < matches.length ? (matches[index + 1].index ?? normalized.length) : normalized.length;
-    const contentPart = normalized.slice(start, end).trim();
-    if (contentPart) blocks.push(...splitIntoSegments(contentPart, match[1]));
+  for (const line of cleanLines) {
+    const speakerMatch = isMeeting ? line.match(/^([^：:]{1,20})[：:]\s*(.*)$/u) : null;
+    const speaker = speakerMatch && looksLikeSpeakerLine(line) ? speakerMatch[1].trim() : null;
+    const contentPart = speakerMatch && speaker ? speakerMatch[2].trim() : line;
+    for (const item of splitNumberedItems(contentPart)) {
+      blocks.push(...splitIntoSegments(item, speaker));
+    }
   }
-  return blocks.length ? blocks : splitIntoSegments(normalized, null);
+  return blocks.length ? blocks : splitIntoSegments(cleanLines.join(" "), null);
 }
 
 function looksLikeSpeakerLine(line: string): boolean {
@@ -105,6 +99,22 @@ function splitIntoSegments(content: string, speaker: string | null): MaterialSeg
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => ({ speaker, content: part }));
+}
+
+function splitNumberedItems(content: string): string[] {
+  const normalized = content.trim();
+  if (!normalized) return [];
+  const matches = [...normalized.matchAll(/(?:^|\s)(\d+)[.)、]\s*/gu)];
+  if (!matches.length) return [normalized];
+
+  const items: string[] = [];
+  for (const [index, match] of matches.entries()) {
+    const start = (match.index ?? 0) + match[0].length;
+    const end = index + 1 < matches.length ? (matches[index + 1].index ?? normalized.length) : normalized.length;
+    const item = normalized.slice(start, end).trim();
+    if (item) items.push(item);
+  }
+  return items;
 }
 
 function classifySegment(segment: MaterialSegment): string {
@@ -166,6 +176,7 @@ function summarizeSegment(segment: MaterialSegment, category: string): string {
 function compact(value: string): string {
   return value
     .replace(/^[-*]\s*/, "")
+    .replace(/^\d+[.)、]\s*/, "")
     .replace(/\s+/g, " ")
     .replace(/[。！？；!?;]+$/u, "")
     .slice(0, 220);
