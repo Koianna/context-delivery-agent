@@ -3,6 +3,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 const taskId = "mcp-inline-material-demo";
 const projectId = "mcp-inline-demo";
@@ -33,6 +36,7 @@ const output = execFileSync(process.execPath, ["--import", "tsx", path.join(PROJ
   cwd: PROJECT_ROOT,
   input: requests.map((request) => JSON.stringify(request)).join("\n") + "\n",
   encoding: "utf-8",
+  env: { ...process.env, MODEL_PROVIDER: "workspace" },
 });
 const messages = output.trim().split("\n").map((line) => JSON.parse(line) as JsonRpcMessage);
 const first = structured(messages[2]);

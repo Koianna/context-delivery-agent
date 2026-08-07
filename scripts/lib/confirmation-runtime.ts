@@ -246,13 +246,13 @@ function resolutionStatus(resolution: string): ConfirmationStatus {
   if ([
     "APPROVE_ALL", "APPROVE_SELECTED", "CONFIRM", "APPROVE",
     "CONFIRM_WRITABLE", "APPROVE_CORE", "ACCEPT_AND_DELIVER",
-    "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "APPROVE_REPLAN",
+    "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "RESTART_PRD_ALIGNMENT", "APPROVE_REPLAN",
     "REVISE_REPLAN", "APPROVE_REPROCESS",
   ].includes(resolution)) return "APPROVED";
   if (resolution === "KEEP_EXISTING") return "DEFERRED";
   if (["REJECT", "REJECT_ALL"].includes(resolution)) return "REJECTED";
   if (["DEFER", "DEFER_ALL"].includes(resolution)) return "DEFERRED";
-  if (["CANCEL", "CANCEL_CHANGE"].includes(resolution)) return "CANCELLED";
+  if (["CANCEL", "CANCEL_TASK", "CANCEL_CHANGE"].includes(resolution)) return "CANCELLED";
   throw new Error(`不支持的确认动作: ${resolution}`);
 }
 
@@ -264,7 +264,7 @@ function itemDecision(
 ): ConfirmationItem["approval_status"] {
   if ([
     "APPROVE_ALL", "APPROVE", "CONFIRM", "CONFIRM_WRITABLE", "APPROVE_CORE",
-    "ACCEPT_AND_DELIVER", "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "APPROVE_REPLAN",
+    "ACCEPT_AND_DELIVER", "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "RESTART_PRD_ALIGNMENT", "APPROVE_REPLAN",
     "REVISE_REPLAN", "APPROVE_REPROCESS",
   ].includes(resolution)) return "APPROVED";
   if (resolution === "APPROVE_SELECTED") {
@@ -272,7 +272,7 @@ function itemDecision(
     return proposalId && selectedIds.includes(proposalId) ? "APPROVED" : "DEFERRED";
   }
   if (["DEFER", "DEFER_ALL"].includes(resolution)) return "DEFERRED";
-  if (["REJECT", "REJECT_ALL", "CANCEL", "CANCEL_CHANGE"].includes(resolution)) {
+  if (["REJECT", "REJECT_ALL", "CANCEL", "CANCEL_TASK", "CANCEL_CHANGE"].includes(resolution)) {
     return "REJECTED";
   }
   return "PENDING";

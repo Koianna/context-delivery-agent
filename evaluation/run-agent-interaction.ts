@@ -6,6 +6,9 @@ import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { PROJECT_ROOT, readPendingConfirmations, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 interface CaseResult { case_id: string; passed: boolean; detail: string }
 class EvaluationModelProvider extends WorkspaceProvider {
@@ -16,6 +19,7 @@ class EvaluationModelProvider extends WorkspaceProvider {
 const results: CaseResult[] = [];
 const transcript: Array<{ user: string; response: Awaited<ReturnType<AgentOrchestrator["handleMessage"]>> }> = [];
 const taskId = `agent-eval-${Date.now()}`;
+const legacyTaskId = `${taskId}-legacy`;
 const projectId = "evaluation-product";
 const sourceDir = path.join(PROJECT_ROOT, "runtime/agent-interaction-materials");
 const sourcePath = path.join(sourceDir, "产品现状.md");
@@ -97,9 +101,32 @@ check(
   fixBeforeReview.state.id === "PRD_REVIEWING" && fixBeforeReview.status === "CONTINUE",
   "CP-P03 选择先修复后进入专用审核修订节点"
 );
+const prdPath = path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${taskId}.md`);
+const recoveryManifestPath = path.join(
+  PROJECT_ROOT,
+  "context-workspace/workspace/prd-recovery",
+  `prd-${projectId}`,
+  "manifest.json",
+);
+check(
+  "AGENT-06E",
+  fs.existsSync(prdPath) && fs.existsSync(recoveryManifestPath),
+  "PRD 写入后同步保存内容寻址恢复快照和 manifest",
+);
+fs.rmSync(prdPath);
 const revisionMessage = "补充具体修订决定。1）CONSISTENCY-01：P95<2 秒作为强制验收标准，移除“仅作为目标”表述，不达标即阻塞交付；2）SCOPE-01：冬季查询返回夏季商品纳入本期，双向修复季节错配；3）COMPLETENESS-01：拼音混合输入支持，仅转换纯字母部分，与中文合并后搜索；4）COMPLETENESS-02：PRD 内提供临时基线季节词表与类目供开发先行实现；5）COMPLETENESS-03：拼音置信度阈值暂定 0.8，后续可调。请按此修订并重新审核。";
 const revised = await turn(revisionMessage);
 const revisionConfirmations = readPendingConfirmations()?.records ?? [];
+const recoveryEvents = fs.readFileSync(path.join(PROJECT_ROOT, "runtime/task-events.jsonl"), "utf-8")
+  .trim()
+  .split("\n")
+  .filter(Boolean)
+  .map((line) => JSON.parse(line) as { event_type?: string; task_id?: string });
+check(
+  "AGENT-06F",
+  recoveryEvents.some((event) => event.task_id === taskId && event.event_type === "ARTIFACT_RECOVERED"),
+  "审核修订前 PRD 缺失时由 Runtime 自动恢复并记录审计事件",
+);
 check(
   "AGENT-06B",
   revised.state.id === "WAITING_REVIEW_DECISION"
@@ -150,13 +177,12 @@ check(
   "非法等待态迁移会系统取消刚创建的确认，不留下悬空 PENDING"
 );
 await controlTurn("暂停");
-await controlTurn("继续");
-const retried = await controlTurn("重试");
+const retried = await controlTurn("继续");
 check(
   "AGENT-14",
   retried.state.id === "PRD_DRAFTING_DETAILS"
     && !readPendingConfirmations()?.records.some((item) => item.status === "PENDING"),
-  "阻塞态暂停后仍可通过继续和重试返回最近业务节点，不形成循环"
+  "阻塞态暂停后回复继续会直接受控重试并返回最近业务节点，不形成循环"
 );
 
 const confirmations = readPendingConfirmations()?.records ?? [];
@@ -175,6 +201,43 @@ check(
   "AGENT-12",
   transcript.every((item) => item.response.provider.id === "evaluation-model") && transcript.every((item) => !item.response.message.includes("npx")),
   "用户响应明确 Provider 且不暴露脚本命令作为交互方式"
+);
+
+clearRuntime();
+clearAgentArtifacts(taskId);
+clearAgentArtifacts(legacyTaskId);
+fs.mkdirSync(sourceDir, { recursive: true });
+fs.writeFileSync(sourcePath, "---\nsource_type: PRODUCT_DOC\nsource_owner: 产品团队\nsource_time: 2026-08-06T10:00:00+08:00\n---\n\n当前项目支持用户提交材料并查看处理结果。\n", "utf-8");
+const legacyAgent = new AgentOrchestrator(new EvaluationModelProvider());
+const legacyTurn = async (user: string) => await legacyAgent.handleMessage(user, {
+  taskId: legacyTaskId,
+  projectId,
+  materialPath: sourcePath,
+  debug: true,
+});
+await legacyTurn("请整理这份会议记录，先不要写 PRD");
+await legacyTurn("继续准备 PRD");
+await legacyTurn("按建议确认，可以生成 PRD");
+await legacyTurn("确认范围和核心流程");
+await legacyTurn("先修复再审核");
+const legacyPrdPath = path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${legacyTaskId}.md`);
+fs.rmSync(legacyPrdPath);
+fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/prd-recovery", `prd-${projectId}`), { recursive: true, force: true });
+const recoveryPrompt = await legacyTurn(revisionMessage);
+check(
+  "AGENT-15",
+  recoveryPrompt.state.id === "WAITING_PRD_RECOVERY_CONFIRM"
+    && recoveryPrompt.confirmation?.actions.includes("RESTART_PRD_ALIGNMENT") === true
+    && recoveryPrompt.confirmation?.actions.includes("CANCEL_TASK") === true,
+  "旧任务 PRD 丢失且没有快照时进入专用恢复确认，不再进入普通重试循环",
+);
+const restartedAlignment = await legacyTurn("重新开始 PRD 写前对齐");
+check(
+  "AGENT-16",
+  restartedAlignment.state.id === "WAITING_DECISION_CONFIRM"
+    && restartedAlignment.debug?.task_id === legacyTaskId
+    && readTaskState()?.prd_version === "0.1.0",
+  "用户确认恢复后在同一任务重新进入 CP-P01，不复用旧 PRD 授权",
 );
 
 const passed = results.filter((item) => item.passed).length;
@@ -199,6 +262,7 @@ if (process.argv.includes("--write-result")) {
 }
 clearRuntime();
 clearAgentArtifacts(taskId);
+clearAgentArtifacts(legacyTaskId);
 if (passed !== results.length) process.exit(1);
 }
 
@@ -210,7 +274,7 @@ function clearRuntime() {
   for (const file of ["task-state.json", "pending-confirmations.json", "task-events.jsonl"]) {
     fs.rmSync(path.join(PROJECT_ROOT, "runtime", file), { force: true });
   }
-  fs.rmSync(path.join(PROJECT_ROOT, "runtime/provider-output"), { recursive: true, force: true });
+  fs.rmSync(path.join(PROJECT_ROOT, "runtime/provider-output", taskId), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "runtime/agent-interaction-materials"), { recursive: true, force: true });
 }
 
@@ -223,6 +287,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId, "materials"),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${slug}.md`),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/prd-recovery", `prd-${projectId}`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `${projectId}-${slug}-replan.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/snapshots", changeId),
@@ -253,6 +318,9 @@ function sanitizeTranscript(
 }
 
 main().catch((error) => {
+  clearRuntime();
+  clearAgentArtifacts(taskId);
+  clearAgentArtifacts(legacyTaskId);
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });

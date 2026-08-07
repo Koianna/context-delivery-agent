@@ -11,11 +11,15 @@ import {
   resolveConfirmation,
 } from "../lib/confirmation-runtime.js";
 import {
+  appendEvent,
   getActiveConfirmation,
+  idempotencyKey,
   loadStates,
+  nowISO,
   PROJECT_ROOT,
   readPendingConfirmations,
   readTaskState,
+  uid,
   writeTaskState,
 } from "../lib/config.js";
 import type { ContextAnalysisOutput, ContextProposal } from "../lib/context-types.js";
@@ -37,6 +41,11 @@ import { recordReplan } from "../record-replan.js";
 import { registerMaterials } from "../register-materials.js";
 import { updateMaterialIngestionArtifact } from "../lib/material-manifest.js";
 import { restoreCancelledChange } from "../restore-change-snapshot.js";
+import {
+  defaultPrdRef,
+  ensureCurrentPrdIntegrity,
+  type PrdIntegrityResult,
+} from "../lib/prd-recovery.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
 import { OpenAIProvider } from "./openai-provider.js";
 import { OpenAICompatibleClient } from "./openai-compatible-client.js";
@@ -57,6 +66,7 @@ const WAITING_STATES = new Set<StateId>([
   "WAITING_DECISION_CONFIRM",
   "WAITING_SCOPE_CONFIRM",
   "WAITING_REVIEW_DECISION",
+  "WAITING_PRD_RECOVERY_CONFIRM",
   "WAITING_REPLAN_CONFIRM",
 ]);
 
@@ -368,6 +378,8 @@ export class AgentOrchestrator {
     } else if (state.current_state === "CONTEXT_TASK_COMPLETED") {
       updateTask({ taskId: state.task_id, mode: "PRD", goal: message });
       assertTransition({ taskId: state.task_id, toState: "PRD_THINKING", reason: "Context 整理完成后继续 PRD" });
+    } else if (state.current_state === "PRD_THINKING") {
+      updateTask({ taskId: state.task_id, mode: "PRD", goal: message });
     } else {
       throw new Error(`当前状态 ${state.current_state} 不能启动 PRD 写前对齐`);
     }
@@ -497,6 +509,9 @@ export class AgentOrchestrator {
     }
     if (state.current_state === "WAITING_REVIEW_DECISION") {
       return await this.resolveP03(state, confirmation, message, options);
+    }
+    if (state.current_state === "WAITING_PRD_RECOVERY_CONFIRM") {
+      return await this.resolvePrdRecovery(state, confirmation, message, options);
     }
     if (state.current_state === "WAITING_REPLAN_CONFIRM") {
       return this.resolveReplan(state, confirmation, message, options);
@@ -742,6 +757,14 @@ export class AgentOrchestrator {
     message: string,
     options: HandleMessageOptions
   ): Promise<AgentResponse> {
+    if (state.current_state === "PRD_DRAFTING_DETAILS" || isSubstantivePrdRevision(message)) {
+      const integrity = this.checkCurrentPrdIntegrity(state);
+      if (integrity.status === "RECOVERED") {
+        this.recordPrdRecovery(state, integrity);
+      } else if (integrity.status === "RECOVERY_REQUIRED") {
+        return this.requestPrdRecovery(state, integrity, options);
+      }
+    }
     if (!isSubstantivePrdRevision(message)) {
       return this.response({
         message: "当前正在等待你给出具体 PRD 修订决定。请说明每个审核问题采用什么业务口径，以及需要改成什么内容。",
@@ -805,6 +828,105 @@ export class AgentOrchestrator {
       nextSteps: ["回复“接受审核结果并交付”", "如仍需修改，回复“先修复再审核”"],
       debug: options.debug,
     });
+  }
+
+  private checkCurrentPrdIntegrity(state: TaskState): PrdIntegrityResult {
+    const reviewRef = this.provider.getPrdReportRefs(state.task_id).reviewRef;
+    return ensureCurrentPrdIntegrity(
+      state,
+      PROJECT_ROOT,
+      defaultPrdRef(state.project_id, state.task_id),
+      reviewRef,
+    );
+  }
+
+  private recordPrdRecovery(state: TaskState, result: Extract<PrdIntegrityResult, { status: "RECOVERED" }>): void {
+    appendEvent({
+      event_id: uid(),
+      event_type: "ARTIFACT_RECOVERED",
+      task_id: state.task_id,
+      request_id: `req_${uid()}`,
+      idempotency_key: idempotencyKey(state.task_id, `prd_recovered_${state.prd_version}`),
+      timestamp: nowISO(),
+      operator: "SYSTEM",
+      current_state: state.current_state,
+      previous_state: state.previous_state,
+      skill_name: "prd-recovery",
+      skill_version: "0.1.0",
+      prompt_version: null,
+      artifact_ref: result.prd_ref,
+      details: {
+        version: state.prd_version,
+        recovery_snapshot_ref: result.entry.snapshot_ref,
+        file_sha256: result.entry.file_sha256,
+      },
+    });
+  }
+
+  private requestPrdRecovery(
+    state: TaskState,
+    integrity: Extract<PrdIntegrityResult, { status: "RECOVERY_REQUIRED" }>,
+    options: HandleMessageOptions,
+  ): AgentResponse {
+    const confirmation = createConfirmationAndTransition({
+      taskId: state.task_id,
+      type: "PRD_ARTIFACT_RECOVERY",
+      state: "WAITING_PRD_RECOVERY_CONFIRM",
+      sourceState: state.current_state,
+      title: "处理缺失或不一致的 PRD 产物",
+      actions: ["RESTART_PRD_ALIGNMENT", "CANCEL_TASK"],
+      items: [{
+        proposal_id: `prd-recovery-${state.prd_version}`,
+        prd_ref: integrity.prd_ref,
+        prd_version: state.prd_version,
+        reason: integrity.reason,
+        detail: integrity.detail,
+        action: "RECOVERY_REQUIRED",
+        requires_confirmation: true,
+      }],
+      reason: "当前 PRD 无法通过完整性校验，需要用户选择恢复策略",
+    });
+    return this.response({
+      message: [
+        `Runtime 发现当前 PRD ${state.prd_version} 无法继续使用：${integrity.detail}。`,
+        "这不是模型生成失败，Runtime 也不会凭空补造原 PRD。",
+        "请确认“重新开始 PRD 写前对齐”以在当前任务中重新生成并重新确认，或取消任务。",
+      ].join("\n"),
+      status: "WAITING_CONFIRMATION",
+      skill: "prd-recovery",
+      artifacts: [
+        { ref: integrity.prd_ref, label: "当前 PRD 引用" },
+        { ref: this.provider.getPrdReportRefs(state.task_id).reviewRef, label: "已有审核记录" },
+      ],
+      confirmation,
+      nextSteps: ["回复“重新开始 PRD 写前对齐”", "回复“取消任务”", "回复“暂停”"],
+      debug: options.debug,
+    });
+  }
+
+  private async resolvePrdRecovery(
+    state: TaskState,
+    confirmation: ConfirmationRecord,
+    message: string,
+    options: HandleMessageOptions,
+  ): Promise<AgentResponse> {
+    if (!/(重新开始|重新对齐|重新生成|重建|从头)/.test(message)) {
+      return this.confirmationReminder(confirmation, options);
+    }
+    resolveConfirmation({
+      taskId: state.task_id,
+      confirmationId: confirmation.confirmation_id,
+      resolution: "RESTART_PRD_ALIGNMENT",
+    });
+    assertTransition({ taskId: state.task_id, toState: "PRD_THINKING", reason: "用户确认在当前任务中重新进行 PRD 写前对齐" });
+    const restarted = requireState(state.task_id);
+    restarted.task_mode = "PRD";
+    restarted.prd_version = "0.1.0";
+    restarted.latest_output_ref = null;
+    restarted.error_info = null;
+    restarted.return_state = null;
+    writeTaskState(restarted);
+    return await this.startPrd(restarted, restarted.task_goal, options);
   }
 
   private resolveReplan(
@@ -929,6 +1051,9 @@ export class AgentOrchestrator {
     if (!state.previous_state) throw new Error("暂停任务缺少可恢复状态");
     assertTransition({ taskId: state.task_id, toState: state.previous_state, reason: "用户恢复暂停任务", operator: "USER" });
     const resumed = requireState(state.task_id);
+    if (resumed.current_state === "EXECUTION_BLOCKED") {
+      return await this.retryBlocked(resumed, "重试", options);
+    }
     if (WAITING_STATES.has(resumed.current_state)) {
       const confirmation = getActiveConfirmation(resumed.task_id, resumed.current_state);
       if (confirmation) return this.confirmationReminder(confirmation, options);
@@ -937,6 +1062,19 @@ export class AgentOrchestrator {
   }
 
   private cancelTask(state: TaskState, options: HandleMessageOptions): AgentResponse {
+    const confirmation = getActiveConfirmation(state.task_id, state.current_state);
+    if (confirmation) {
+      const cancellation = ["CANCEL_TASK", "CANCEL", "CANCEL_CHANGE"]
+        .find((action) => confirmation.allowed_actions.includes(action));
+      if (cancellation) {
+        resolveConfirmation({
+          taskId: state.task_id,
+          confirmationId: confirmation.confirmation_id,
+          resolution: cancellation,
+          operator: "USER",
+        });
+      }
+    }
     assertTransition({ taskId: state.task_id, toState: "TASK_CANCELLED", reason: "用户取消任务", operator: "USER" });
     return this.response({
       message: "任务已取消。已生成的文件和事件记录会保留，但不会继续执行后续写入。",
@@ -974,6 +1112,14 @@ export class AgentOrchestrator {
     }
     if (resumed.current_state === "CONTEXT_ANALYZING" && resumed.task_mode === "CONTEXT") {
       return await this.runContextAnalysis(resumed, resumed.task_goal, options);
+    }
+    if (isReviewRevisionDraftState(resumed)) {
+      const integrity = this.checkCurrentPrdIntegrity(resumed);
+      if (integrity.status === "RECOVERED") {
+        this.recordPrdRecovery(resumed, integrity);
+      } else if (integrity.status === "RECOVERY_REQUIRED") {
+        return this.requestPrdRecovery(resumed, integrity, options);
+      }
     }
     const intent = resumed.task_mode ?? routeIntent(resumed.task_goal);
     if (resumed.current_state === "CONTEXT_TASK_COMPLETED" && intent === "PRD") {

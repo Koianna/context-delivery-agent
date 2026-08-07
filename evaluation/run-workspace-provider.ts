@@ -8,6 +8,9 @@ import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
 import { registerMaterials } from "../scripts/register-materials.js";
 import { safeProjectSlug } from "../scripts/lib/project-paths.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 async function main() {
 const taskId = "workspace-phone-feedback-demo";

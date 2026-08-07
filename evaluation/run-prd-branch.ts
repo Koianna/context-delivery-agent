@@ -18,6 +18,10 @@ import {
   parseFrontmatter, readJson, repoRefToPath,
 } from "../scripts/lib/repository.js";
 import {
+  ensureCurrentPrdIntegrity,
+  savePrdRecoverySnapshot,
+} from "../scripts/lib/prd-recovery.js";
+import {
   validatePrdReview, validatePrdThinking, validatePrdWrite,
 } from "../scripts/validate-prd-output.js";
 
@@ -78,6 +82,57 @@ try {
   const detailsSecond = writePrdArtifactFile(details, tempRoot, "2026-08-04T11:50:00+08:00");
   const detailsDocument = parseFrontmatter(fs.readFileSync(targetPath, "utf-8"));
   check("PRD-09", detailsFirst.status === "UPDATED" && detailsSecond.status === "UNCHANGED" && detailsDocument.metadata.version === "0.2.0" && detailsDocument.body.includes("产品目标"), "DETAILS 更新到 0.2.0、保留主体且幂等");
+
+  const recoveryState = { ...detailsState, prd_version: "0.2.0" };
+  const expectedBytes = fs.readFileSync(targetPath);
+  const recovery = savePrdRecoverySnapshot(
+    recoveryState,
+    details.prd_artifact,
+    targetPath,
+    tempRoot,
+    "2026-08-04T11:50:00+08:00",
+  );
+  fs.rmSync(targetPath);
+  const recovered = ensureCurrentPrdIntegrity(recoveryState, tempRoot, details.prd_artifact.markdown_ref);
+  check(
+    "PRD-09A",
+    recovered.status === "RECOVERED" && fs.readFileSync(targetPath).equals(expectedBytes),
+    "PRD 正文缺失时从内容寻址快照逐字节恢复",
+  );
+
+  fs.appendFileSync(targetPath, "\n未授权改写\n", "utf-8");
+  const changed = ensureCurrentPrdIntegrity(recoveryState, tempRoot, details.prd_artifact.markdown_ref);
+  check(
+    "PRD-09B",
+    changed.status === "RECOVERY_REQUIRED" && changed.reason === "HASH_MISMATCH",
+    "当前 PRD 与快照不一致时阻止静默覆盖",
+  );
+  fs.writeFileSync(targetPath, expectedBytes);
+
+  const snapshotPath = repoRefToPath(recovery.snapshot_ref, tempRoot);
+  const snapshotBytes = fs.readFileSync(snapshotPath);
+  fs.writeFileSync(snapshotPath, "损坏的恢复快照\n", "utf-8");
+  fs.rmSync(targetPath);
+  const damaged = ensureCurrentPrdIntegrity(recoveryState, tempRoot, details.prd_artifact.markdown_ref);
+  check(
+    "PRD-09C",
+    damaged.status === "RECOVERY_REQUIRED" && damaged.reason === "SNAPSHOT_INVALID",
+    "恢复快照 hash 损坏时停止恢复",
+  );
+  fs.writeFileSync(snapshotPath, snapshotBytes);
+  fs.writeFileSync(targetPath, expectedBytes);
+
+  const legacyState = { ...recoveryState, task_id: "legacy-task", prd_version: "0.2.0" };
+  const legacy = ensureCurrentPrdIntegrity(
+    legacyState,
+    tempRoot,
+    "repo://context-workspace/workspace/prd/legacy-missing.md",
+  );
+  check(
+    "PRD-09D",
+    legacy.status === "RECOVERY_REQUIRED" && legacy.reason === "MISSING_WITHOUT_SNAPSHOT",
+    "旧任务没有恢复快照时进入受控恢复分支",
+  );
 
   const reviewTemplate = readJson<PrdReviewTemplate>(path.join(caseRoot, "prd-review.template.json"));
   const beforeHash = crypto.createHash("sha256").update(fs.readFileSync(targetPath)).digest("hex");

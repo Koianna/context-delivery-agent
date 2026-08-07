@@ -5,6 +5,9 @@ import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 const projectId = "material-reprocess-eval";
 const sourceDir = path.join(PROJECT_ROOT, "runtime/material-reprocess-source");

@@ -14,6 +14,7 @@
         "SKILL_RESULT",
         "USER_CONFIRMATION",
         "ARTIFACT_CREATED",
+        "ARTIFACT_RECOVERED",
         "VERSION_CREATED",
         "ERROR",
         "TASK_PAUSED",

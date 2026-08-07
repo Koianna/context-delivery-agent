@@ -82,8 +82,10 @@
 - CP-P01 必须通过 `manage-confirmation.ts` 记录 `CONFIRM_WRITABLE`，并由 `record-confirmed-decisions.ts` 固化人工决策；仍有阻塞决策或 `writable_status` 不为 `true` 时，不得进入 `PRD_DRAFTING_CORE`。
 - `prd-write/CORE` 先通过 `validate-prd-output.ts` 和 `apply-prd-artifact.ts` 写入稳定 PRD 路径，再进入 CP-P02；没有 `APPROVE_CORE`，不得生成 DETAILS。
 - `prd-write/DETAILS` 沿用同一 PRD 路径并递增语义版本；重复执行相同内容必须返回 `UNCHANGED`，不得创建 v1、v2、final 等副本。
+- 每次成功写入 PRD 后，Runtime 必须在 `workspace/prd-recovery/` 保存内容寻址的同字节恢复快照和 manifest；快照完成后才能更新 `task-state.prd_version` 和追加产物事件。
 - `prd-review` 对 PRD 只读，通过 `record-prd-review.ts` 保存带正文哈希的审核结果；审核前后不得修改 PRD 正文。
 - CP-P03 必须通过 `manage-confirmation.ts` 逐项记录审核处置。存在 P0/P1、P2 未完整处置或当前 PRD 正文与审核 hash 不一致时均阻止交付；全部校验通过后，才可用 `finalize-prd-delivery.ts` 标记交付并进入 `DELIVERED`。
+- 审核修订前必须校验当前 PRD 的版本、正文 hash 和恢复快照。正文缺失且快照有效时由 Runtime 自动恢复并记录 `ARTIFACT_RECOVERED`；正文冲突、快照损坏或旧任务没有快照时不得静默覆盖，必须进入 CP-P04。
 - 确定性复跑顺序：`prd:validate-thinking` → `prd:validate-core` → `prd:validate-details` → `prd:validate-review` → `eval:prd`。
 
 ### 修改与重规划分支确定性校验
@@ -106,6 +108,7 @@
 | CP-P01 | 关键决策确认 | 写前对齐完成 |
 | CP-P02 | 范围与流程确认 | PRD 主体完成 |
 | CP-P03 | 审核处理决定 | 独立审核完成 |
+| CP-P04 | PRD 产物恢复策略 | 当前 PRD 无法通过完整性校验且不能自动恢复 |
 | CP-R01 | 重规划方案确认 | 影响分析完成 |
 
 ## 禁止行为

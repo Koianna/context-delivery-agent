@@ -205,9 +205,19 @@
     "guard": "DETAILS_DONE"
   },
   {
+    "from": "PRD_DRAFTING_DETAILS",
+    "to": "WAITING_PRD_RECOVERY_CONFIRM",
+    "guard": "PRD_ARTIFACT_MISSING"
+  },
+  {
     "from": "PRD_REVIEWING",
     "to": "PRD_DRAFTING_DETAILS",
     "guard": "USER_PROVIDES_REVIEW_REVISION_DECISIONS"
+  },
+  {
+    "from": "PRD_REVIEWING",
+    "to": "WAITING_PRD_RECOVERY_CONFIRM",
+    "guard": "PRD_ARTIFACT_MISSING"
   },
   {
     "from": "PRD_REVIEWING",
@@ -241,6 +251,21 @@
   },
   {
     "from": "WAITING_REVIEW_DECISION",
+    "to": "TASK_CANCELLED",
+    "guard": "USER_CANCEL"
+  },
+  {
+    "from": "WAITING_PRD_RECOVERY_CONFIRM",
+    "to": "PRD_THINKING",
+    "guard": "USER_RESTART_PRD_ALIGNMENT"
+  },
+  {
+    "from": "WAITING_PRD_RECOVERY_CONFIRM",
+    "to": "TASK_PAUSED",
+    "guard": "USER_PAUSE"
+  },
+  {
+    "from": "WAITING_PRD_RECOVERY_CONFIRM",
     "to": "TASK_CANCELLED",
     "guard": "USER_CANCEL"
   },

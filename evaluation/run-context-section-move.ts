@@ -7,6 +7,9 @@ import { PROJECT_ROOT } from "../scripts/lib/config.js";
 import { parseFrontmatter, readJson, renderFrontmatter, repoRefToPath, writeTextAtomic } from "../scripts/lib/repository.js";
 import { updateIndex } from "../scripts/update-index.js";
 import type { ContextAnalysisOutput } from "../scripts/lib/context-types.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 interface Result { case_id: string; passed: boolean; detail: string }
 

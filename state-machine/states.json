@@ -80,6 +80,11 @@
     "type": "waiting"
   },
   {
+    "id": "WAITING_PRD_RECOVERY_CONFIRM",
+    "name": "等待 PRD 产物恢复决定",
+    "type": "waiting"
+  },
+  {
     "id": "DELIVERED",
     "name": "需求交付已完成",
     "type": "terminal"

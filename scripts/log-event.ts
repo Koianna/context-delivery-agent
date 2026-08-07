@@ -28,7 +28,7 @@ function usage(): never {
       "  [--operator USER|AGENT|SYSTEM]",
       "",
       "事件类型: STATE_TRANSITION, SKILL_CALL, SKILL_RESULT, USER_CONFIRMATION,",
-      "         ARTIFACT_CREATED, VERSION_CREATED, ERROR,",
+      "         ARTIFACT_CREATED, ARTIFACT_RECOVERED, VERSION_CREATED, ERROR,",
       "         TASK_PAUSED, TASK_RESUMED, TASK_CANCELLED",
     ].join("\n")
   );

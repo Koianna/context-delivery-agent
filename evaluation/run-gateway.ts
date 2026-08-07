@@ -4,6 +4,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
 import { repoRefToPath } from "../scripts/lib/repository.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 interface GatewayResponse {
   request_id: string;
@@ -47,7 +50,7 @@ const input = `${requests.map((request) => JSON.stringify(request)).join("\n")}\
 const output = childProcess.execFileSync(
   process.execPath,
   ["--import", "tsx", path.join(PROJECT_ROOT, "scripts/agent-gateway.ts")],
-  { cwd: PROJECT_ROOT, input, encoding: "utf-8", env: { ...process.env } }
+  { cwd: PROJECT_ROOT, input, encoding: "utf-8", env: { ...process.env, MODEL_PROVIDER: "workspace" } }
 );
 const responses = output.trim().split("\n").map((line) => JSON.parse(line) as GatewayResponse);
 const results = [

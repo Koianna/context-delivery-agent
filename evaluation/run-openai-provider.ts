@@ -13,6 +13,9 @@ import { PROJECT_ROOT } from "../scripts/lib/config.js";
 import { inspectModelProviderConfig } from "../scripts/lib/model-provider-config.js";
 import type { PrdWriteOutput } from "../scripts/lib/prd-types.js";
 import { readJson, repoRefToPath, writeJsonAtomic } from "../scripts/lib/repository.js";
+import { isolateRuntime } from "./runtime-isolation.js";
+
+isolateRuntime(PROJECT_ROOT);
 
 interface Result { case_id: string; passed: boolean; detail: string }
 
@@ -271,6 +274,7 @@ function clearRuntime(taskId: string, projectId: string): void {
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${taskId}.md`),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/prd-recovery", `prd-${projectId}`),
   ]) fs.rmSync(target, { recursive: true, force: true });
 }
 

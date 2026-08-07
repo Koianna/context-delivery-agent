@@ -2,7 +2,7 @@
 // Context 工程与需求交付协作 Agent — 共享类型定义
 // ============================================================
 
-/** 23 个状态枚举 */
+/** 24 个状态枚举 */
 export type StateId =
   | "INITIALIZING"
   | "WAITING_RESUME_CHOICE"
@@ -20,6 +20,7 @@ export type StateId =
   | "PRD_DRAFTING_DETAILS"
   | "PRD_REVIEWING"
   | "WAITING_REVIEW_DECISION"
+  | "WAITING_PRD_RECOVERY_CONFIRM"
   | "DELIVERED"
   | "CHANGE_ANALYZING"
   | "REPLANNING"
@@ -38,6 +39,7 @@ export type EventType =
   | "SKILL_RESULT"
   | "USER_CONFIRMATION"
   | "ARTIFACT_CREATED"
+  | "ARTIFACT_RECOVERED"
   | "VERSION_CREATED"
   | "ERROR"
   | "TASK_PAUSED"
@@ -52,6 +54,7 @@ export type ConfirmationType =
   | "DECISION_AND_WRITABLE_STATUS"
   | "SCOPE_AND_CORE_FLOW"
   | "REVIEW_DISPOSITION"
+  | "PRD_ARTIFACT_RECOVERY"
   | "REPLAN_APPROVAL";
 
 export type ConfirmationStatus = "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED" | "CANCELLED";
