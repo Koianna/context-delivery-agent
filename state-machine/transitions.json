@@ -61,6 +61,21 @@
   },
   {
     "from": "CONTEXT_ANALYZING",
+    "to": "WAITING_MATERIAL_REPROCESS_CONFIRM",
+    "guard": "DUPLICATE_MATERIAL"
+  },
+  {
+    "from": "WAITING_MATERIAL_REPROCESS_CONFIRM",
+    "to": "CONTEXT_ANALYZING",
+    "guard": "USER_APPROVE_REPROCESS"
+  },
+  {
+    "from": "WAITING_MATERIAL_REPROCESS_CONFIRM",
+    "to": "CONTEXT_MAINTAINING",
+    "guard": "USER_KEEP_EXISTING"
+  },
+  {
+    "from": "CONTEXT_ANALYZING",
     "to": "WAITING_CONTEXT_CONFIRM",
     "guard": "STABLE_CONTEXT_CHANGE"
   },

@@ -183,6 +183,7 @@ export class WorkspaceProvider implements AgentProvider {
     const prd = await this.getPrdAssets(state.task_id);
     const reports = this.getPrdReportRefs(state.task_id);
     const indexRef = contextIndexRef(this.projectId);
+    const hasContextIndex = fs.existsSync(contextIndexPath(this.projectId, PROJECT_ROOT));
     const changeId = `change-${safeSlug(this.projectId)}-${slug}`.slice(0, 80);
     const snapshotRef = `repo://context-workspace/workspace/snapshots/${changeId}/manifest.json`;
     const reportRef = `repo://context-workspace/workspace/reports/change-impact-${slug}.json`;
@@ -190,7 +191,7 @@ export class WorkspaceProvider implements AgentProvider {
       request_meta: { request_id: `request-${slug}`, project_id: this.projectId, task_id: state.task_id, current_state: "CHANGE_ANALYZING", triggered_by: "USER", requested_at: new Date().toISOString() },
       change_request: { change_id: changeId, change_text: message, change_source: "USER", received_at: new Date().toISOString(), source_refs: [prd.prdRef] },
       task_snapshot: { source_state: "DELIVERED", material_version: state.material_version, context_version: state.context_version, decision_ledger_version: state.decision_ledger_version, prd_version: state.prd_version, plan_version: state.plan_version },
-      artifact_refs: [prd.prdRef, reports.reviewRef, reports.ledgerRef, indexRef],
+      artifact_refs: [prd.prdRef, reports.reviewRef, reports.ledgerRef, ...(hasContextIndex ? [indexRef] : [])],
       confirmed_decision_refs: ["decision_goal", "decision_scope"],
     };
     const analysis: ChangeAnalysisOutput = {
@@ -198,7 +199,7 @@ export class WorkspaceProvider implements AgentProvider {
       change_classification: { change_type: "DETAIL_RULE_CHANGE", is_material_change: true, confidence: 0.65 },
       change_summary: { old_value: "当前已确认方案", new_value: message, source_refs: [prd.prdRef] },
       affected_items: [{ item_id: "affected-prd", artifact_ref: prd.prdRef, locations: ["需求目标与核心流程"], impact_type: "REWRITE_REQUIRED", reason: "用户提出的变化可能影响当前需求交付内容" }],
-      unaffected_items: [{ item_id: "unaffected-context-index", artifact_ref: indexRef, locations: ["Context 索引"], reason: "仅凭当前变化不能推断稳定 Context 需要改变" }],
+      unaffected_items: [{ item_id: "unaffected-review", artifact_ref: reports.reviewRef, locations: ["独立审核报告"], reason: "当前变化只影响 PRD 细节，不改变既有审核记录" }],
       recommended_return_state: "PRD_DRAFTING_DETAILS", risks: ["变更影响需结合业务判断确认"], open_questions: ["请确认变更是否影响目标、范围或核心流程"],
     };
     const outputDir = this.outputDir(slug);
@@ -211,11 +212,12 @@ export class WorkspaceProvider implements AgentProvider {
 
   async prepareChangeReplan(state: TaskState, assets: ChangeAnalysisAssets): Promise<ChangeReplanAssets> {
     const slug = safeSlug(state.task_id);
+    const reports = this.getPrdReportRefs(state.task_id);
     const planRef = `repo://context-workspace/workspace/plans/${safeSlug(this.projectId)}-${slug}-replan.json`;
     const analysisRef = assets.reportRef;
     const plan: ReplanOutput = {
       mode: "REPLAN", change_id: assets.changeId, analysis_ref: analysisRef, analysis_sha256: sha256Buffer(fs.readFileSync(repoRefToPath(analysisRef, PROJECT_ROOT))), snapshot_ref: `repo://context-workspace/workspace/snapshots/${assets.changeId}/manifest.json`,
-      plan: { plan_id: `replan-${assets.changeId}`, version: "0.2.0", previous_version: state.plan_version, status: "DRAFT", recommended_return_state: "PRD_DRAFTING_DETAILS", steps: [{ step_id: "step-details", state: "PRD_DRAFTING_DETAILS", action: "根据获批变更补充 PRD 细节并重新审核", input_refs: [analysisRef], depends_on: [] }], preserved_artifacts: [contextIndexRef(this.projectId)], preserved_items: [{ artifact_ref: contextIndexRef(this.projectId), locations: ["全部索引"] }], deprecated_artifacts: [], required_confirmations: ["CP-R01", "CP-P03"] },
+      plan: { plan_id: `replan-${assets.changeId}`, version: "0.2.0", previous_version: state.plan_version, status: "DRAFT", recommended_return_state: "PRD_DRAFTING_DETAILS", steps: [{ step_id: "step-details", state: "PRD_DRAFTING_DETAILS", action: "根据获批变更补充 PRD 细节并重新审核", input_refs: [analysisRef], depends_on: [] }], preserved_artifacts: [reports.reviewRef], preserved_items: [{ artifact_ref: reports.reviewRef, locations: ["独立审核报告"] }], deprecated_artifacts: [], required_confirmations: ["CP-R01", "CP-P03"] },
       risks: ["未确认的业务变化不能直接覆盖现有 PRD"], open_questions: ["确认后需补充具体业务规则"],
     };
     const replanPath = path.join(this.outputDir(slug), "change-impact.replan.json");
@@ -251,6 +253,7 @@ export class WorkspaceProvider implements AgentProvider {
       task_goal: taskGoal,
       updated_at: new Date().toISOString(),
       materials: files.map((source) => ({
+        source_id: `src-${sha256Buffer(fs.readFileSync(source)).slice(0, 10)}`,
         original_name: path.basename(source),
         stored_name: path.basename(source),
         source_type: null,

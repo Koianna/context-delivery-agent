@@ -46,9 +46,12 @@ export function validateChangeInput(input: ChangeRequestInput, root = PROJECT_RO
       const confirmedIds = new Set(ledger.decisions.filter((item) => item.status === "CONFIRMED").map((item) => item.decision_id));
       if (input.confirmed_decision_refs.some((id) => !confirmedIds.has(id))) errors.push("输入引用了未确认或不存在的决策");
     }
-    const indexPath = contextIndexPath(input.request_meta.project_id, root);
-    const index = parseFrontmatter(fs.readFileSync(indexPath, "utf-8"));
-    if (index.metadata.version !== input.task_snapshot.context_version) errors.push("输入 Context 版本与索引不一致");
+    const indexRef = contextIndexPath(input.request_meta.project_id, root);
+    const hasIndexArtifact = input.artifact_refs.some((ref) => ref === `repo://context-workspace/context/${input.request_meta.project_id}/INDEX.md`);
+    if (hasIndexArtifact) {
+      const index = parseFrontmatter(fs.readFileSync(indexRef, "utf-8"));
+      if (index.metadata.version !== input.task_snapshot.context_version) errors.push("输入 Context 版本与索引不一致");
+    }
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
   }

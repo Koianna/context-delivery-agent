@@ -33,6 +33,7 @@ import { recordPrdReview } from "../record-prd-review.js";
 import { recordPrdThinking } from "../record-prd-thinking.js";
 import { recordReplan } from "../record-replan.js";
 import { registerMaterials } from "../register-materials.js";
+import { updateMaterialIngestionArtifact } from "../lib/material-manifest.js";
 import { restoreCancelledChange } from "../restore-change-snapshot.js";
 import { WorkspaceProvider } from "./workspace-provider.js";
 import { OpenAIProvider } from "./openai-provider.js";
@@ -49,6 +50,7 @@ import type {
 const WAITING_STATES = new Set<StateId>([
   "WAITING_RESUME_CHOICE",
   "WAITING_INTENT_CLARIFICATION",
+  "WAITING_MATERIAL_REPROCESS_CONFIRM",
   "WAITING_CONTEXT_CONFIRM",
   "WAITING_DECISION_CONFIRM",
   "WAITING_SCOPE_CONFIRM",
@@ -66,7 +68,11 @@ export class AgentOrchestrator {
     try {
       let state = readTaskState();
       if (options.taskId && state && state.task_id !== options.taskId) {
-        throw new Error(`当前运行任务是 ${state.task_id}，不是 ${options.taskId}`);
+        if (["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(state.current_state)) {
+          state = this.initializeTask(normalized, options.taskId, options.sessionId, options.projectId ?? state.project_id, true);
+        } else {
+          throw new Error(`当前运行任务是 ${state.task_id}，不是 ${options.taskId}`);
+        }
       }
       if (state && options.projectId && options.projectId.trim().toLowerCase() !== state.project_id) {
         throw new Error(`当前运行任务属于项目 ${state.project_id}，不能用项目 ${options.projectId} 继续执行`);
@@ -94,12 +100,13 @@ export class AgentOrchestrator {
     }
   }
 
-  private initializeTask(message: string, taskId?: string, sessionId?: string, projectId?: string): TaskState {
+  private initializeTask(message: string, taskId?: string, sessionId?: string, projectId?: string, replaceTerminal = false): TaskState {
     return createTask({
       taskId: taskId ?? `agent-${Date.now()}`,
       sessionId,
       projectId: projectId ?? "default-project",
       goal: message,
+      replaceTerminal,
     });
   }
 
@@ -136,10 +143,56 @@ export class AgentOrchestrator {
     updateTask({ taskId: state.task_id, mode: "CONTEXT", goal: message });
     assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "用户要求整理材料和维护 Context" });
 
+    return await this.runContextAnalysis(requireState(state.task_id), message, options);
+  }
+
+  private async runContextAnalysis(
+    state: TaskState,
+    message: string,
+    options: HandleMessageOptions,
+    allowDuplicate = false,
+    structuredMaterialRefOverride?: string,
+  ): Promise<AgentResponse> {
+
     const materialPath = options.materialPath ?? extractExistingPath(message);
     const assets = await this.provider.getContextAssets(materialPath, state.task_id, message);
     const reportRefs = this.provider.getContextReportRefs(state.task_id, assets.structuredMaterialPath);
-    const registered = registerMaterials(assets.inputPath, PROJECT_ROOT, state.project_id);
+    const registered = registerMaterials(assets.inputPath, PROJECT_ROOT, state.project_id, state.task_id);
+    if (!allowDuplicate && registered.duplicate_records.length) {
+      const confirmation = createConfirmation({
+        taskId: state.task_id,
+        type: "MATERIAL_REPROCESS",
+        state: "WAITING_MATERIAL_REPROCESS_CONFIRM",
+        sourceState: "CONTEXT_ANALYZING",
+        title: "确认是否重新整理已存在的材料",
+        actions: ["APPROVE_REPROCESS", "KEEP_EXISTING"],
+        items: registered.duplicate_records.map((duplicate) => ({
+          proposal_id: `material-${duplicate.source_id}`,
+          source_id: duplicate.source_id,
+          existing_task_id: duplicate.existing_task_id,
+          existing_draft_ref: duplicate.existing_draft_ref,
+          existing_structured_material_ref: duplicate.existing_structured_material_ref ?? null,
+          action: "REPROCESS_MATERIAL",
+          requires_confirmation: true,
+        })),
+      });
+      assertTransition({ taskId: state.task_id, toState: "WAITING_MATERIAL_REPROCESS_CONFIRM", reason: "检测到项目中已登记相同材料" });
+      return this.response({
+        message: `检测到 ${registered.duplicate_records.length} 份材料已经在当前项目中整理过。是否重新整理并覆盖原整理稿？稳定 Context 不会因此自动覆盖。`,
+        status: "WAITING_CONFIRMATION",
+        skill: "material-ingest",
+        artifacts: [
+          { ref: registered.manifest_ref, label: "材料登记清单" },
+          ...registered.duplicate_records.flatMap((item) => item.existing_structured_material_ref ? [{ ref: item.existing_structured_material_ref, label: "已有整理稿" }] : []),
+        ],
+        confirmation,
+        nextSteps: ["回复“确认重新整理并覆盖”", "回复“保留已有整理稿”", "回复“暂停”"],
+        debug: options.debug,
+      });
+    }
+    const effectiveReportRefs = structuredMaterialRefOverride
+      ? { ...reportRefs, structuredMaterialRef: structuredMaterialRefOverride }
+      : reportRefs;
     const recorded = recordContextAnalysis({
       taskId: state.task_id,
       materialInputPath: assets.inputPath,
@@ -148,8 +201,14 @@ export class AgentOrchestrator {
       structuredMaterialPath: assets.structuredMaterialPath,
       materialReportRef: reportRefs.materialReportRef,
       contextReportRef: reportRefs.contextReportRef,
-      structuredMaterialRef: reportRefs.structuredMaterialRef,
+      structuredMaterialRef: effectiveReportRefs.structuredMaterialRef,
     });
+    updateMaterialIngestionArtifact(
+      state.project_id,
+      state.task_id,
+      effectiveReportRefs.structuredMaterialRef,
+      PROJECT_ROOT,
+    );
     const analysis = readJson<ContextAnalysisOutput>(assets.contextOutputPath);
     const confirmableProposals = analysis.update_proposals
       .filter((proposal) => proposal.requires_confirmation)
@@ -162,7 +221,7 @@ export class AgentOrchestrator {
         message: [
           `我已登记并完成 ${recorded.material_count} 份材料的结构化整理。`,
           "当前没有可以直接提升为稳定 Context 的内容。原文、分类结果和待确认问题已保留在工作区。",
-          `整理稿已写入 ${reportRefs.structuredMaterialRef}。`,
+          `整理稿已写入 ${effectiveReportRefs.structuredMaterialRef}。`,
           analysis.remaining_questions.length ? `发现 ${analysis.remaining_questions.length} 个需要产品经理判断的问题，未被当成既定需求。` : "没有遗留问题。",
         ].join("\n"),
         status: "COMPLETED",
@@ -191,7 +250,7 @@ export class AgentOrchestrator {
     return this.response({
         message: [
         `我已登记并完成 ${recorded.material_count} 份材料的结构化整理。`,
-        `整理稿已写入 ${reportRefs.structuredMaterialRef}。`,
+        `整理稿已写入 ${effectiveReportRefs.structuredMaterialRef}。`,
         `发现 ${analysis.conflicts.length} 个冲突，形成 ${analysis.update_proposals.length} 条处理建议，其中 ${confirmation.items.length} 条会修改稳定 Context，需要你判断。`,
         analysis.remaining_questions.length
           ? `另有 ${analysis.remaining_questions.length} 个问题保留在工作区，不会被当成已确认事实。`
@@ -376,6 +435,9 @@ export class AgentOrchestrator {
       assertTransition({ taskId: state.task_id, toState: "INTENT_ROUTING", reason: "用户补充了任务意图" });
       return await this.handleMessage(message, { ...options, taskId: state.task_id });
     }
+    if (state.current_state === "WAITING_MATERIAL_REPROCESS_CONFIRM") {
+      return await this.resolveMaterialReprocess(state, confirmation, message, options);
+    }
     if (state.current_state === "WAITING_CONTEXT_CONFIRM") {
       return this.resolveContextConfirmation(state, confirmation, message, options);
     }
@@ -457,6 +519,32 @@ export class AgentOrchestrator {
       nextSteps: ["回复“继续准备 PRD”进入写前对齐", "回复新的材料整理任务"],
       debug: options.debug,
     });
+  }
+
+  private async resolveMaterialReprocess(
+    state: TaskState,
+    confirmation: ConfirmationRecord,
+    message: string,
+    options: HandleMessageOptions,
+  ): Promise<AgentResponse> {
+    if (/(保留|不重新|不覆盖|取消|拒绝|否)/.test(message) && !/(重新整理|覆盖)/.test(message)) {
+      resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "KEEP_EXISTING" });
+      assertTransition({ taskId: state.task_id, toState: "CONTEXT_MAINTAINING", reason: "用户选择保留已有整理稿" });
+      assertTransition({ taskId: state.task_id, toState: "CONTEXT_TASK_COMPLETED", reason: "重复材料未重新整理" });
+      return this.response({
+        message: "检测到材料已经整理过，本次保留已有整理稿，没有重新分析或覆盖。",
+        status: "COMPLETED",
+        skill: "material-ingest",
+        artifacts: confirmation.items.flatMap((item) => typeof item.existing_structured_material_ref === "string" ? [{ ref: item.existing_structured_material_ref, label: "已有整理稿" }] : []),
+        nextSteps: ["如需重新整理，请重新提交同一材料并明确确认覆盖", "也可以补充新材料后重新分析"],
+        debug: options.debug,
+      });
+    }
+    if (!/(重新整理|覆盖|重做|确认)/.test(message)) return this.confirmationReminder(confirmation, options);
+    resolveConfirmation({ taskId: state.task_id, confirmationId: confirmation.confirmation_id, resolution: "APPROVE_REPROCESS" });
+    assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "用户确认重新整理并覆盖已有整理稿" });
+    const targetRef = confirmation.items.find((item) => typeof item.existing_structured_material_ref === "string")?.existing_structured_material_ref;
+    return await this.runContextAnalysis(requireState(state.task_id), state.task_goal, options, true, typeof targetRef === "string" ? targetRef : undefined);
   }
 
   private async resolveP01(
@@ -747,6 +835,9 @@ export class AgentOrchestrator {
     if (WAITING_STATES.has(resumed.current_state)) {
       const confirmation = getActiveConfirmation(resumed.task_id, resumed.current_state);
       if (confirmation) return this.confirmationReminder(confirmation, options);
+    }
+    if (resumed.current_state === "CONTEXT_ANALYZING" && resumed.task_mode === "CONTEXT") {
+      return await this.runContextAnalysis(resumed, resumed.task_goal, options);
     }
     const intent = resumed.task_mode ?? routeIntent(resumed.task_goal);
     if (resumed.current_state === "CONTEXT_TASK_COMPLETED" && intent === "PRD") {

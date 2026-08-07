@@ -2,12 +2,13 @@
 // Context 工程与需求交付协作 Agent — 共享类型定义
 // ============================================================
 
-/** 22 个状态枚举 */
+/** 23 个状态枚举 */
 export type StateId =
   | "INITIALIZING"
   | "WAITING_RESUME_CHOICE"
   | "INTENT_ROUTING"
   | "WAITING_INTENT_CLARIFICATION"
+  | "WAITING_MATERIAL_REPROCESS_CONFIRM"
   | "CONTEXT_ANALYZING"
   | "WAITING_CONTEXT_CONFIRM"
   | "CONTEXT_MAINTAINING"
@@ -46,6 +47,7 @@ export type EventType =
 export type ConfirmationType =
   | "RESUME_CHOICE"
   | "INTENT_CLARIFICATION"
+  | "MATERIAL_REPROCESS"
   | "CONTEXT_UPDATE"
   | "DECISION_AND_WRITABLE_STATUS"
   | "SCOPE_AND_CORE_FLOW"

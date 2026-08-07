@@ -20,6 +20,11 @@
     "type": "waiting"
   },
   {
+    "id": "WAITING_MATERIAL_REPROCESS_CONFIRM",
+    "name": "等待重复材料重新整理确认",
+    "type": "waiting"
+  },
+  {
     "id": "CONTEXT_ANALYZING",
     "name": "Context 分析中",
     "type": "execution"

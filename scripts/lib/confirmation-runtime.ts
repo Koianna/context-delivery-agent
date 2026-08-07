@@ -181,8 +181,9 @@ function resolutionStatus(resolution: string): ConfirmationStatus {
     "APPROVE_ALL", "APPROVE_SELECTED", "CONFIRM", "APPROVE",
     "CONFIRM_WRITABLE", "APPROVE_CORE", "ACCEPT_AND_DELIVER",
     "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "APPROVE_REPLAN",
-    "REVISE_REPLAN",
+    "REVISE_REPLAN", "APPROVE_REPROCESS",
   ].includes(resolution)) return "APPROVED";
+  if (resolution === "KEEP_EXISTING") return "DEFERRED";
   if (["REJECT", "REJECT_ALL"].includes(resolution)) return "REJECTED";
   if (["DEFER", "DEFER_ALL"].includes(resolution)) return "DEFERRED";
   if (["CANCEL", "CANCEL_CHANGE"].includes(resolution)) return "CANCELLED";
@@ -198,7 +199,7 @@ function itemDecision(
   if ([
     "APPROVE_ALL", "APPROVE", "CONFIRM", "CONFIRM_WRITABLE", "APPROVE_CORE",
     "ACCEPT_AND_DELIVER", "DELIVER_WITH_NOTES", "FIX_AND_REVIEW", "APPROVE_REPLAN",
-    "REVISE_REPLAN",
+    "REVISE_REPLAN", "APPROVE_REPROCESS",
   ].includes(resolution)) return "APPROVED";
   if (resolution === "APPROVE_SELECTED") {
     if (proposalId && rejectedIds.includes(proposalId)) return "REJECTED";

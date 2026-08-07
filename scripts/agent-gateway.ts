@@ -43,6 +43,13 @@ async function handleLine(line: string): Promise<ExternalAgentResponse> {
   const request = validation.request;
   try {
     const current = readTaskState();
+    const hasUnfinishedTask = current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state);
+    if (hasUnfinishedTask && request.task_id && request.task_id !== current.task_id) {
+      throw new Error(`当前运行任务是 ${current.task_id}，不是 ${request.task_id}`);
+    }
+    if (hasUnfinishedTask && request.project_id && request.project_id.toLowerCase() !== current.project_id) {
+      throw new Error(`当前运行任务属于项目 ${current.project_id}，不能用项目 ${request.project_id} 继续执行`);
+    }
     const taskId = request.task_id ?? (current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state) ? current.task_id : undefined) ?? `agent-${Date.now()}`;
     const projectId = request.project_id?.toLowerCase() ?? (current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state) ? current.project_id : undefined);
     const inlineMaterialPath = request.materials?.length

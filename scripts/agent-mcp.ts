@@ -71,6 +71,13 @@ async function callTool(id: JsonRpcId, params: unknown): Promise<unknown> {
   const validation = validateArguments(args, current);
   if (!validation.ok) return toolError(id, "INVALID_TOOL_INPUT", validation.error);
 
+  const hasUnfinishedTask = current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state);
+  if (hasUnfinishedTask && args.task_id && args.task_id !== current.task_id) {
+    return toolError(id, "TASK_MISMATCH", `当前运行任务是 ${current.task_id}，不是 ${args.task_id}`);
+  }
+  if (hasUnfinishedTask && args.project_id && args.project_id.toLowerCase() !== current.project_id) {
+    return toolError(id, "PROJECT_MISMATCH", `当前运行任务属于项目 ${current.project_id}，不能用项目 ${args.project_id} 继续执行`);
+  }
   const taskId = args.task_id ?? (current && !["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(current.current_state) ? current.task_id : undefined) ?? `agent-${Date.now()}`;
   const projectId = args.project_id ?? current?.project_id ?? "default-project";
   const inlinePath = args.materials?.length

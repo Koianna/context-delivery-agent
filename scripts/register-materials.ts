@@ -3,7 +3,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
-import { materialManifestPath, readMaterialManifest, type MaterialManifest } from "./lib/material-manifest.js";
+import { materialManifestPath, readMaterialManifest, type DuplicateMaterialRecord, type MaterialManifest } from "./lib/material-manifest.js";
 import { safeProjectSlug } from "./lib/project-paths.js";
 import type { MaterialIngestInput } from "./lib/context-types.js";
 import {
@@ -15,7 +15,7 @@ import {
   writeTextAtomic,
 } from "./lib/repository.js";
 
-export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projectId?: string) {
+export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projectId?: string, taskId?: string) {
   const input = readJson<MaterialIngestInput>(inputPath);
   const allowed = new Set(input.analysis_scope.included_source_ids);
   const workspaceSlug = projectId ?? input.workspace_slug ?? input.project_id ?? "default-project";
@@ -62,9 +62,24 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projec
   });
 
   const records = [...(existing?.records ?? [])];
+  const duplicateRecords: DuplicateMaterialRecord[] = [];
   let changed = false;
   for (const incoming of incomingRecords) {
     const registered = records.find((record) => record.source_id === incoming.source_id);
+    const priorIngestion = existing?.ingestions.find((item) => item.materials.some((material) => material.source_id === incoming.source_id));
+    const duplicate = priorIngestion && priorIngestion.task_id !== (taskId ?? "")
+      ? {
+        source_id: incoming.source_id,
+        sha256: incoming.sha256,
+        existing_task_id: priorIngestion.task_id,
+        existing_draft_ref: registered?.draft_ref ?? pathToRepoRef(
+          path.join(targetDir, "source-materials", safeSlug(priorIngestion.task_id), priorIngestion.materials.find((material) => material.source_id === incoming.source_id)?.stored_name ?? "material.md"),
+          root,
+        ),
+        existing_structured_material_ref: priorIngestion.structured_material_ref,
+      } satisfies DuplicateMaterialRecord
+      : null;
+    if (duplicate) duplicateRecords.push(duplicate);
     if (!registered) {
       records.push(incoming);
       changed = true;
@@ -92,6 +107,7 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projec
   return {
     manifest_ref: pathToRepoRef(manifestPath, root),
     records: incomingRecords,
+    duplicate_records: duplicateRecords,
     status: changed || !existing ? "UPDATED" as const : "UNCHANGED" as const,
   };
 }

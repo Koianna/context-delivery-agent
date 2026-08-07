@@ -29,6 +29,15 @@ export interface MaterialIngestionRecord {
   task_goal: string;
   updated_at: string;
   materials: IngestionMaterialRecord[];
+  structured_material_ref?: string | null;
+}
+
+export interface DuplicateMaterialRecord {
+  source_id: string;
+  sha256: string;
+  existing_task_id: string;
+  existing_draft_ref: string;
+  existing_structured_material_ref?: string | null;
 }
 
 export interface MaterialManifest {
@@ -89,6 +98,44 @@ export function upsertMaterialIngestion(
   }
   writeJsonAtomic(materialManifestPath(projectId, root), manifest);
   return pathToRepoRef(materialManifestPath(projectId, root), root);
+}
+
+export function updateMaterialIngestionArtifact(
+  projectId: string,
+  taskId: string,
+  structuredMaterialRef: string,
+  root = PROJECT_ROOT,
+): void {
+  const current = readMaterialManifest(projectId, root).manifest;
+  const ingestion = current?.ingestions.find((item) => item.task_id === taskId);
+  if (!current || !ingestion || ingestion.structured_material_ref === structuredMaterialRef) return;
+  ingestion.structured_material_ref = structuredMaterialRef;
+  current.version = incrementPatch(current.version);
+  writeJsonAtomic(materialManifestPath(projectId, root), current);
+}
+
+export function findDuplicateMaterials(
+  projectId: string,
+  sourceIds: string[],
+  taskId: string,
+  root = PROJECT_ROOT,
+): DuplicateMaterialRecord[] {
+  const manifest = readMaterialManifest(projectId, root).manifest;
+  if (!manifest) return [];
+  return sourceIds.flatMap((sourceId) => {
+    const ingestion = manifest.ingestions.find(
+      (item) => item.task_id !== taskId && item.materials.some((material) => material.source_id === sourceId),
+    );
+    const record = manifest.records.find((item) => item.source_id === sourceId);
+    if (!ingestion || !record) return [];
+    return [{
+      source_id: sourceId,
+      sha256: record.sha256,
+      existing_task_id: ingestion.task_id,
+      existing_draft_ref: record.draft_ref,
+      existing_structured_material_ref: ingestion.structured_material_ref,
+    }];
+  });
 }
 
 export function readIngestionMaterials(
