@@ -11,6 +11,8 @@ import { OpenAIProvider } from "../scripts/agent/openai-provider.js";
 import { SKILL_NAMES, SkillRuntime } from "../scripts/agent/skill-runtime.js";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
 import { inspectModelProviderConfig } from "../scripts/lib/model-provider-config.js";
+import type { PrdWriteOutput } from "../scripts/lib/prd-types.js";
+import { readJson, repoRefToPath, writeJsonAtomic } from "../scripts/lib/repository.js";
 
 interface Result { case_id: string; passed: boolean; detail: string }
 
@@ -158,7 +160,12 @@ async function main() {
     providerId: "openai",
     async generateJson<T>(input: ModelJsonRequest): Promise<T> {
       prdRequests.push(input);
-      const content = input.content as { sources?: Array<{ ref: string }>; core_markdown?: string };
+      const content = input.content as {
+        sources?: Array<{ ref: string }>;
+        core_markdown?: string;
+        current_prd_markdown?: string;
+        revision_decisions?: string;
+      };
       const sourceRefs = content.sources?.map((item) => item.ref) ?? [];
       const outputs: Record<string, unknown> = {
         prd_thinking: {
@@ -170,7 +177,9 @@ async function main() {
         },
         prd_core: { core_markdown: "# Skill Driven PRD\n\n## 1. 背景与问题\n待确认。\n\n## 2. 目标与非目标\n待确认。\n\n## 3. 目标用户\n待确认。\n\n## 4. 本期范围\n待确认。\n\n## 5. 核心流程\n待确认。\n\n## 6. 已确认决策\n以 CP-P01 为准。" },
         prd_details: { details_markdown: `${content.core_markdown ?? "# Skill Driven PRD"}\n\n## 功能规则\n待确认。\n\n## 角色与权限\n待确认。\n\n## 边界与异常\n待确认。\n\n## 验收标准\n待确认。` },
+        prd_revision: { details_markdown: `${content.current_prd_markdown ?? "# Skill Driven PRD"}\n\n## 审核修订结果\n${content.revision_decisions ?? ""}` },
         prd_review: { review_id: "review-skill-driven", reviewed_prd_version: "0.2.0", issues: [], summary: { p0_count: 0, p1_count: 0, p2_count: 0, recommendation: "PASS" }, passed_dimensions: ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"], unverifiable_items: [] },
+        prd_review_revision: { review_id: "review-skill-driven-revision", reviewed_prd_version: "0.2.1", issues: [], summary: { p0_count: 0, p1_count: 0, p2_count: 0, recommendation: "PASS" }, passed_dimensions: ["FACT_STATUS", "SCOPE", "COMPLETENESS", "ACCEPTANCE", "DEPENDENCY", "CONSISTENCY", "OVER_DESIGN"], unverifiable_items: [] },
       };
       return outputs[input.name] as T;
     },
@@ -181,14 +190,41 @@ async function main() {
   await prdProvider.getPrdAssets(prdTaskId, "THINKING");
   await prdProvider.getPrdAssets(prdTaskId, "CORE", { userConfirmation: "确认目标与范围" });
   const prdAssets = await prdProvider.getPrdAssets(prdTaskId, "DETAILS", { userConfirmation: "确认核心流程" });
+  const detailsOutput = readJson<PrdWriteOutput>(prdAssets.detailsPath);
+  const currentPrdPath = repoRefToPath(prdAssets.prdRef, PROJECT_ROOT);
+  fs.mkdirSync(path.dirname(currentPrdPath), { recursive: true });
+  fs.copyFileSync(repoRefToPath(detailsOutput.prd_artifact.content_ref, PROJECT_ROOT), currentPrdPath);
+  const currentReviewPath = repoRefToPath(prdProvider.getPrdReportRefs(prdTaskId).reviewRef, PROJECT_ROOT);
+  const persistedThinkingPath = repoRefToPath(prdProvider.getPrdReportRefs(prdTaskId).thinkingRef, PROJECT_ROOT);
+  fs.mkdirSync(path.dirname(persistedThinkingPath), { recursive: true });
+  fs.copyFileSync(prdAssets.thinkingPath, persistedThinkingPath);
+  writeJsonAtomic(currentReviewPath, {
+    review_id: "review-skill-driven",
+    reviewed_prd_version: "0.2.0",
+    prd_sha256: "runtime-computed-in-production",
+    issues: [{ issue_id: "CONSISTENCY-01", severity: "P1", dimension: "CONSISTENCY", location: "验收标准", description: "指标口径冲突", evidence: [], impact: "无法验收", recommended_fix: "确认强制标准", requires_replan: false }],
+    summary: { p0_count: 0, p1_count: 1, p2_count: 0, recommendation: "FIX_BEFORE_DELIVERY" },
+    passed_dimensions: [],
+    unverifiable_items: [],
+  });
+  fs.rmSync(path.join(PROJECT_ROOT, "runtime/provider-output", prdTaskId), { recursive: true, force: true });
+  const revisionMessage = "补充具体修订决定。CONSISTENCY-01：P95<2 秒作为强制验收标准，不达标即阻塞交付；SCOPE-01：双向修复季节错配；拼音置信度阈值暂定 0.8。请按此修订并重新审核。";
+  const revisionAssets = await prdProvider.getPrdAssets(prdTaskId, "REVISION", { revisionDecisions: revisionMessage });
   const prdRequestNames = prdRequests.map((item) => item.name);
   const detailsRequest = prdRequests.find((item) => item.name === "prd_details");
   const reviewRequest = prdRequests.find((item) => item.name === "prd_review");
-  const reviewTemplate = JSON.parse(fs.readFileSync(prdAssets.reviewTemplatePath, "utf-8")) as { review_id?: string };
+  const revisionRequest = prdRequests.find((item) => item.name === "prd_revision");
+  const revisionReviewRequest = prdRequests.find((item) => item.name === "prd_review_revision");
+  const revisionContent = revisionRequest?.content as { current_prd_markdown?: string; current_review?: { review_id?: string }; revision_decisions?: string } | undefined;
+  const revisionOutput = readJson<PrdWriteOutput>(revisionAssets.detailsPath);
+  const reviewTemplate = JSON.parse(fs.readFileSync(revisionAssets.reviewTemplatePath, "utf-8")) as { review_id?: string; reviewed_prd_version?: string };
   results.push(
-    check("MODEL-18", prdRequestNames.join(",") === "prd_thinking,prd_core,prd_details,prd_review", "PRD 写前、CORE、DETAILS 和独立审核按四次模型调用顺序执行"),
+    check("MODEL-18", prdRequestNames.join(",") === "prd_thinking,prd_core,prd_details,prd_review,prd_revision,prd_review_revision", "PRD 初稿与审核修订分别调用模型并重新审核"),
     check("MODEL-19", detailsRequest?.instructions.includes("激活 Skill: prd-write / DETAILS") === true && !detailsRequest.instructions.includes("激活 Skill: prd-review"), "DETAILS 调用只由 prd-write Skill 驱动"),
-    check("MODEL-20", reviewRequest?.instructions.includes("激活 Skill: prd-review / REVIEW") === true && reviewTemplate.review_id === "review-skill-driven", "独立审核只由 prd-review Skill 驱动并产生 Runtime 审核模板"),
+    check("MODEL-20", reviewRequest?.instructions.includes("激活 Skill: prd-review / REVIEW") === true && revisionReviewRequest?.instructions.includes("激活 Skill: prd-review / REVIEW") === true, "初次审核和修订后审核都只由 prd-review Skill 驱动"),
+    check("MODEL-24", revisionRequest?.instructions.includes("激活 Skill: prd-write / REVISION") === true && revisionContent?.current_prd_markdown?.includes("验收标准") === true && revisionContent.current_review?.review_id === "review-skill-driven" && revisionContent.revision_decisions === revisionMessage, "REVISION 模型输入包含当前 PRD、当前审核报告和用户修订决定"),
+    check("MODEL-25", revisionOutput.prd_artifact.version === "0.2.1" && revisionOutput.prd_artifact.previous_version === "0.2.0" && reviewTemplate.reviewed_prd_version === "0.2.1", "审核修订递增到 0.2.1 且重新审核同一版本"),
+    check("MODEL-26", fs.existsSync(revisionAssets.detailsPath) && revisionRequest !== undefined, "Provider 中间缓存清理后仍可依据已发布 PRD 和报告恢复 REVISION"),
   );
   clearRuntime(prdTaskId, prdProjectId);
 
@@ -234,6 +270,7 @@ function clearRuntime(taskId: string, projectId: string): void {
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskId),
+    path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${taskId}.md`),
   ]) fs.rmSync(target, { recursive: true, force: true });
 }
 

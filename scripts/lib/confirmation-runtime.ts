@@ -8,6 +8,7 @@ import {
   uid,
   writePendingConfirmations,
 } from "./config.js";
+import { assertTransition } from "./state-runtime.js";
 import type {
   ConfirmationItem,
   ConfirmationRecord,
@@ -35,6 +36,23 @@ export interface ResolveConfirmationInput {
   selectedIds?: string[];
   rejectedIds?: string[];
   operator?: Operator;
+}
+
+export interface CreateConfirmationAndTransitionInput extends CreateConfirmationInput {
+  reason: string;
+}
+
+export function createConfirmationAndTransition(
+  input: CreateConfirmationAndTransitionInput
+): ConfirmationRecord {
+  const confirmation = createConfirmation(input);
+  try {
+    assertTransition({ taskId: input.taskId, toState: input.state, reason: input.reason });
+    return confirmation;
+  } catch (error) {
+    cancelConfirmationBySystem(input.taskId, confirmation.confirmation_id, "TRANSITION_FAILED");
+    throw error;
+  }
 }
 
 export function createConfirmation(input: CreateConfirmationInput): ConfirmationRecord {
@@ -174,6 +192,54 @@ export function resolveConfirmation(input: ResolveConfirmationInput): Confirmati
 export function listConfirmations(taskId: string): ConfirmationRecord[] {
   const pending = readPendingConfirmations();
   return pending?.task_id === taskId ? pending.records : [];
+}
+
+export function cancelOrphanedConfirmations(
+  taskId: string,
+  referencedConfirmationId: string | null
+): ConfirmationRecord[] {
+  const pending = readPendingConfirmations();
+  if (!pending || pending.task_id !== taskId) return [];
+  const orphaned = pending.records.filter(
+    (record) => record.status === "PENDING" && record.confirmation_id !== referencedConfirmationId
+  );
+  for (const record of orphaned) {
+    cancelConfirmationBySystem(taskId, record.confirmation_id, "ORPHANED_PENDING_CONFIRMATION");
+  }
+  return orphaned;
+}
+
+function cancelConfirmationBySystem(taskId: string, confirmationId: string, reason: string): void {
+  const pending = readPendingConfirmations();
+  if (!pending || pending.task_id !== taskId) return;
+  const index = pending.records.findIndex((record) => record.confirmation_id === confirmationId);
+  if (index === -1 || pending.records[index].status !== "PENDING") return;
+  const record = pending.records[index];
+  pending.records[index] = {
+    ...record,
+    items: record.items.map((item) => ({ ...item, approval_status: "REJECTED" })),
+    status: "CANCELLED",
+    resolved_by: "SYSTEM",
+    resolved_at: nowISO(),
+    resolution: reason,
+  };
+  writePendingConfirmations(pending);
+  appendEvent({
+    event_id: uid(),
+    event_type: "USER_CONFIRMATION",
+    task_id: taskId,
+    request_id: `req_${uid()}`,
+    idempotency_key: idempotencyKey(taskId, `confirm_cancel_${confirmationId}`),
+    timestamp: nowISO(),
+    operator: "SYSTEM",
+    current_state: record.current_state,
+    previous_state: null,
+    skill_name: null,
+    skill_version: null,
+    prompt_version: null,
+    artifact_ref: null,
+    details: { confirmation_id: confirmationId, status: "CANCELLED", reason },
+  });
 }
 
 function resolutionStatus(resolution: string): ConfirmationStatus {

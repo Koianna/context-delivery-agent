@@ -50,6 +50,7 @@ export interface HandleMessageOptions {
 
 export interface PrdProviderContext {
   userConfirmation?: string;
+  revisionDecisions?: string;
 }
 
 export interface PrdProviderAssets {
@@ -64,7 +65,7 @@ export interface PrdProviderAssets {
   prdRef: string;
 }
 
-export type PrdProviderPhase = "THINKING" | "CORE" | "DETAILS" | "REFERENCE";
+export type PrdProviderPhase = "THINKING" | "CORE" | "DETAILS" | "REVISION" | "REFERENCE";
 
 export interface ChangeAnalysisAssets {
   inputPath: string;

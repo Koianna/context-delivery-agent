@@ -160,6 +160,12 @@ function validateTransitionGuards(state: TaskState, to: StateId): string[] {
       taskId
     ));
   }
+  if (from === "PRD_REVIEWING" && to === "PRD_DRAFTING_DETAILS") {
+    const confirmation = getLatestConfirmation(taskId, "WAITING_REVIEW_DECISION", "REVIEW_DISPOSITION");
+    if (confirmation?.status !== "APPROVED" || confirmation.resolution !== "FIX_AND_REVIEW") {
+      errors.push("审核修订必须先由 CP-P03 选择 FIX_AND_REVIEW");
+    }
+  }
   if (from === "WAITING_REPLAN_CONFIRM") {
     const confirmation = getLatestConfirmation(taskId, from, "REPLAN_APPROVAL");
     if (confirmation?.resolution === "APPROVE_REPLAN") {
@@ -199,7 +205,7 @@ function validateTransitionGuards(state: TaskState, to: StateId): string[] {
 
 function isSpecialTransition(from: StateId, to: StateId, state: TaskState): boolean {
   if (from === "TASK_PAUSED" && state.previous_state === to) return true;
-  if (from === "EXECUTION_BLOCKED" && state.previous_state === to) return true;
+  if (from === "EXECUTION_BLOCKED" && (state.previous_state === to || state.return_state === to)) return true;
   if (from === "WAITING_REPLAN_CONFIRM" && state.return_state === to) return true;
   if (to === "EXECUTION_BLOCKED" && loadStates().find((item) => item.id === from)?.type === "execution") return true;
   if (to === "TASK_PAUSED" && !["TASK_CANCELLED", "DELIVERED", "CONTEXT_TASK_COMPLETED"].includes(from)) {

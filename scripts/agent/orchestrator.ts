@@ -6,7 +6,8 @@ import { applyApprovedReplan } from "../apply-replan.js";
 import { createTaskChangeSnapshot } from "../create-change-snapshot.js";
 import { finalizePrdDelivery } from "../finalize-prd-delivery.js";
 import {
-  createConfirmation,
+  cancelOrphanedConfirmations,
+  createConfirmationAndTransition,
   resolveConfirmation,
 } from "../lib/confirmation-runtime.js";
 import {
@@ -85,6 +86,9 @@ export class AgentOrchestrator {
         throw new Error(`当前运行任务属于项目 ${state.project_id}，不能用项目 ${options.projectId} 继续执行`);
       }
       if (!state) state = this.initializeTask(normalized, options.taskId, options.sessionId, options.projectId);
+      if (state.current_state !== "TASK_PAUSED") {
+        cancelOrphanedConfirmations(state.task_id, state.pending_confirmation);
+      }
       this.provider.setProjectId?.(options.projectId ?? state.project_id);
 
       if (isPause(normalized)) return this.pause(state, options);
@@ -96,6 +100,9 @@ export class AgentOrchestrator {
 
       if (WAITING_STATES.has(state.current_state)) {
         return await this.handleWaitingState(state, normalized, options);
+      }
+      if (state.current_state === "PRD_REVIEWING" || isReviewRevisionDraftState(state)) {
+        return await this.handlePrdReviewRevision(state, normalized, options);
       }
 
       const intent = routeIntent(normalized, Boolean(options.materialPath ?? extractExistingPath(normalized)));
@@ -166,7 +173,7 @@ export class AgentOrchestrator {
     const reportRefs = this.provider.getContextReportRefs(state.task_id, assets.structuredMaterialPath);
     const registered = registerMaterials(assets.inputPath, PROJECT_ROOT, state.project_id, state.task_id);
     if (!allowDuplicate && registered.duplicate_records.length) {
-      const confirmation = createConfirmation({
+      const confirmation = createConfirmationAndTransition({
         taskId: state.task_id,
         type: "MATERIAL_REPROCESS",
         state: "WAITING_MATERIAL_REPROCESS_CONFIRM",
@@ -182,8 +189,8 @@ export class AgentOrchestrator {
           action: "REPROCESS_MATERIAL",
           requires_confirmation: true,
         })),
+        reason: "检测到项目中已登记相同材料",
       });
-      assertTransition({ taskId: state.task_id, toState: "WAITING_MATERIAL_REPROCESS_CONFIRM", reason: "检测到项目中已登记相同材料" });
       return this.response({
         message: `检测到 ${registered.duplicate_records.length} 份材料已经在当前项目中整理过。是否重新整理并覆盖原整理稿？稳定 Context 不会因此自动覆盖。`,
         status: "WAITING_CONFIRMATION",
@@ -243,7 +250,7 @@ export class AgentOrchestrator {
         debug: options.debug,
       });
     }
-    const confirmation = createConfirmation({
+    const confirmation = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "CONTEXT_UPDATE",
       state: "WAITING_CONTEXT_CONFIRM",
@@ -251,8 +258,8 @@ export class AgentOrchestrator {
       title: "确认稳定 Context 更新建议",
       actions: ["APPROVE_ALL", "APPROVE_SELECTED", "DEFER_ALL", "REJECT_ALL"],
       items: confirmableProposals.map((proposal) => ({ ...proposal })),
+      reason: "稳定 Context 变更需要 CP-C01 人工确认",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_CONTEXT_CONFIRM", reason: "稳定 Context 变更需要 CP-C01 人工确认" });
 
     return this.response({
         message: [
@@ -309,7 +316,7 @@ export class AgentOrchestrator {
         source_refs: item.proposal.source_refs,
       })),
     });
-    const confirmation = createConfirmation({
+    const confirmation = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "CONTEXT_UPDATE",
       state: "WAITING_CONTEXT_CONFIRM",
@@ -317,8 +324,8 @@ export class AgentOrchestrator {
       title: sectionMove ? "确认稳定 Context 局部更新" : "确认撤销稳定 Context（归档，不删除原文件）",
       actions: ["APPROVE_ALL", "APPROVE_SELECTED", "DEFER_ALL", "REJECT_ALL"],
       items: proposals.map((proposal) => ({ ...proposal })),
+      reason: "稳定 Context 变更需要 CP-C01 人工确认",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_CONTEXT_CONFIRM", reason: "稳定 Context 变更需要 CP-C01 人工确认" });
     return this.response({
       message: sectionMove
         ? `已生成 ${proposals.length} 条稳定 Context 局部更新建议。批准后只移出指定章节，其余内容和文件索引保持有效。`
@@ -374,7 +381,7 @@ export class AgentOrchestrator {
       reportRefs.thinkingRef
     );
     const thinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
-    const confirmation = createConfirmation({
+    const confirmation = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "DECISION_AND_WRITABLE_STATUS",
       state: "WAITING_DECISION_CONFIRM",
@@ -382,8 +389,8 @@ export class AgentOrchestrator {
       title: "确认关键决策并授权生成 PRD 主体",
       actions: ["CONFIRM_WRITABLE"],
       items: [assets.p01],
+      reason: "写前关键决策需要 CP-P01 确认",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_DECISION_CONFIRM", reason: "写前关键决策需要 CP-P01 确认" });
     return this.response({
       message: [
         "我已完成 PRD 写前对齐，还没有生成 PRD。",
@@ -429,7 +436,7 @@ export class AgentOrchestrator {
       replanAssets.planRef
     );
     const analysis = readJson<ChangeAnalysisOutput>(analysisAssets.analysisPath);
-    const confirmation = createConfirmation({
+    const confirmation = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "REPLAN_APPROVAL",
       state: "WAITING_REPLAN_CONFIRM",
@@ -438,8 +445,8 @@ export class AgentOrchestrator {
       title: "确认最小重规划方案",
       actions: ["APPROVE_REPLAN", "REVISE_REPLAN", "CANCEL_CHANGE"],
       items: [replanAssets.approval],
+      reason: "重规划方案需要 CP-R01 人工批准",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_REPLAN_CONFIRM", reason: "重规划方案需要 CP-R01 人工批准" });
     return this.response({
       message: [
         `我已为本次变更创建包含 ${snapshot.artifact_count} 个产物的不可变快照。`,
@@ -615,7 +622,7 @@ export class AgentOrchestrator {
     );
     const coreResult = applyPrdArtifact(state.task_id, assets.corePath);
     const core = readJson<PrdWriteOutput>(assets.corePath);
-    const p02 = createConfirmation({
+    const p02 = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "SCOPE_AND_CORE_FLOW",
       state: "WAITING_SCOPE_CONFIRM",
@@ -623,8 +630,8 @@ export class AgentOrchestrator {
       title: "确认 PRD 范围与核心流程",
       actions: ["APPROVE_CORE"],
       items: [assets.p02],
+      reason: "PRD 主体完成，需要 CP-P02 确认",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_SCOPE_CONFIRM", reason: "PRD 主体完成，需要 CP-P02 确认" });
     return this.response({
       message: [
         `关键决策已写入决策账本，PRD 主体 ${coreResult.version} 已生成。`,
@@ -663,7 +670,7 @@ export class AgentOrchestrator {
       PROJECT_ROOT,
       reportRefs.reviewRef
     );
-    const p03 = createConfirmation({
+    const p03 = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "REVIEW_DISPOSITION",
       state: "WAITING_REVIEW_DECISION",
@@ -671,8 +678,8 @@ export class AgentOrchestrator {
       title: "处理独立审核结果并决定是否交付",
       actions: ["ACCEPT_AND_DELIVER", "FIX_AND_REVIEW"],
       items: [assets.p03],
+      reason: "独立审核完成，需要 CP-P03 处理决定",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_REVIEW_DECISION", reason: "独立审核完成，需要 CP-P03 处理决定" });
     return this.response({
       message: [
         `PRD 已补充到 ${detailsResult.version}，并完成独立审核。`,
@@ -726,6 +733,76 @@ export class AgentOrchestrator {
         { ref: reportRefs.ledgerRef, label: "决策账本" },
       ],
       nextSteps: ["可直接用自然语言提出后续变更", "也可以开始新的材料整理任务"],
+      debug: options.debug,
+    });
+  }
+
+  private async handlePrdReviewRevision(
+    state: TaskState,
+    message: string,
+    options: HandleMessageOptions
+  ): Promise<AgentResponse> {
+    if (!isSubstantivePrdRevision(message)) {
+      return this.response({
+        message: "当前正在等待你给出具体 PRD 修订决定。请说明每个审核问题采用什么业务口径，以及需要改成什么内容。",
+        status: "CONTINUE",
+        skill: "prd-write/REVISION",
+        artifacts: state.latest_output_ref ? [{ ref: state.latest_output_ref, label: "当前审核报告" }] : [],
+        nextSteps: ["提交具体修订决定", "也可说“暂停”保留当前节点"],
+        debug: options.debug,
+      });
+    }
+    if (!hasReviewRevisionApproval(state.task_id)) {
+      return this.response({
+        message: "当前 PRD 仍在执行独立审核，审核完成并由你选择“先修复再审核”后，才能提交修订决定。",
+        status: "CONTINUE",
+        skill: "prd-review",
+        artifacts: state.latest_output_ref ? [{ ref: state.latest_output_ref, label: "当前审核报告" }] : [],
+        nextSteps: ["等待审核完成", "也可说“暂停”保留当前节点"],
+        debug: options.debug,
+      });
+    }
+    if (state.current_state === "PRD_REVIEWING") {
+      assertTransition({ taskId: state.task_id, toState: "PRD_DRAFTING_DETAILS", reason: "用户提交审核后的具体修订决定" });
+    }
+    const reportRefs = this.provider.getPrdReportRefs(state.task_id);
+    const assets = await this.provider.getPrdAssets(state.task_id, "REVISION", {
+      userConfirmation: message,
+      revisionDecisions: message,
+    });
+    const revisionResult = applyPrdArtifact(state.task_id, assets.detailsPath);
+    assertTransition({ taskId: state.task_id, toState: "PRD_REVIEWING", reason: "PRD 审核修订已写入，开始重新审核" });
+    const reviewResult = recordPrdReview(
+      state.task_id,
+      assets.reviewTemplatePath,
+      assets.prdRef,
+      PROJECT_ROOT,
+      reportRefs.reviewRef
+    );
+    const p03 = createConfirmationAndTransition({
+      taskId: state.task_id,
+      type: "REVIEW_DISPOSITION",
+      state: "WAITING_REVIEW_DECISION",
+      sourceState: "PRD_REVIEWING",
+      title: "处理重新审核结果并决定是否交付",
+      actions: ["ACCEPT_AND_DELIVER", "FIX_AND_REVIEW"],
+      items: [assets.p03],
+      reason: "PRD 修订后重新审核完成，需要新的 CP-P03 处理决定",
+    });
+    return this.response({
+      message: [
+        `已按你的具体决定将 PRD 修订到 ${revisionResult.version}，并重新完成独立审核。`,
+        `重新审核结果：P0=${reviewResult.summary.p0_count}，P1=${reviewResult.summary.p1_count}，P2=${reviewResult.summary.p2_count}，建议 ${reviewResult.summary.recommendation}。`,
+        reviewDispositionHint(reviewResult),
+      ].join("\n"),
+      status: "WAITING_CONFIRMATION",
+      skill: "prd-write/REVISION → prd-review",
+      artifacts: [
+        { ref: revisionResult.artifact_ref, label: "修订后的完整 PRD" },
+        { ref: reviewResult.review_ref, label: "新的 PRD 独立审核报告" },
+      ],
+      confirmation: p03,
+      nextSteps: ["回复“接受审核结果并交付”", "如仍需修改，回复“先修复再审核”"],
       debug: options.debug,
     });
   }
@@ -787,7 +864,7 @@ export class AgentOrchestrator {
     options: HandleMessageOptions
   ): AgentResponse {
     state = this.moveToRouting(state);
-    const confirmation = createConfirmation({
+    const confirmation = createConfirmationAndTransition({
       taskId: state.task_id,
       type: "INTENT_CLARIFICATION",
       state: "WAITING_INTENT_CLARIFICATION",
@@ -795,8 +872,8 @@ export class AgentOrchestrator {
       title: "确认本次任务目标",
       actions: ["CONFIRM", "CANCEL"],
       items: [{ original_message: message }],
+      reason: "用户意图不够明确",
     });
-    assertTransition({ taskId: state.task_id, toState: "WAITING_INTENT_CLARIFICATION", reason: "用户意图不够明确" });
     return this.response({
       message: "我还无法判断你是想只整理材料、准备 PRD，还是修改已有需求。请补充一个明确目标。",
       status: "WAITING_CONFIRMATION",
@@ -825,6 +902,11 @@ export class AgentOrchestrator {
       return this.response({ message: "当前任务无需再次暂停。", status: "COMPLETED", artifacts: [], nextSteps: [], debug: options.debug });
     }
     assertTransition({ taskId: state.task_id, toState: "TASK_PAUSED", reason: "用户暂停任务", operator: "USER" });
+    if (state.current_state === "EXECUTION_BLOCKED" && state.previous_state) {
+      const paused = requireState(state.task_id);
+      paused.return_state = state.previous_state;
+      writeTaskState(paused);
+    }
     return this.response({
       message: "任务已暂停，状态、确认记录和已生成产物都已保留。",
       status: "COMPLETED",
@@ -875,8 +957,13 @@ export class AgentOrchestrator {
         debug: options.debug,
       });
     }
-    if (!state.previous_state) throw new Error("阻塞任务缺少可恢复状态");
-    assertTransition({ taskId: state.task_id, toState: state.previous_state, reason: "用户修正阻塞原因后重试", operator: "USER" });
+    const recoverState = recoverableBlockedState(state);
+    if (!recoverState) throw new Error("阻塞任务缺少可恢复状态");
+    if (state.return_state !== recoverState) {
+      state.return_state = recoverState;
+      writeTaskState(state);
+    }
+    assertTransition({ taskId: state.task_id, toState: recoverState, reason: "用户修正阻塞原因后重试", operator: "USER" });
     const resumed = requireState(state.task_id);
     resumed.error_info = null;
     resumed.retry_count += 1;
@@ -1000,7 +1087,7 @@ export function routeIntent(message: string, hasMaterialPath = false): AgentInte
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
   if (/(撤销|回滚|取消提升|移(?:出|除).*(?:稳定\s*)?(?:context|contact)|从.*(?:context|contact).*移(?:出|除)|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
   if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+))/i.test(message)) return "CONTEXT";
-  if (/(修改|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
+  if (/(修改|修订|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
   if (hasMaterialPath) return "CONTEXT";
   return "UNKNOWN";
@@ -1288,6 +1375,35 @@ function reviewDispositionHint(review: Pick<PrdReviewOutput, "summary">): string
   if (review.summary.p0_count || review.summary.p1_count) return "审核存在阻塞问题，交付前需要先修复并重新审核。";
   if (review.summary.p2_count) return `存在 ${review.summary.p2_count} 个低优先级待办，不阻塞交付，但需要你明确是否接受。`;
   return "审核未发现阻塞问题，请确认是否交付当前版本。";
+}
+
+function isReviewRevisionDraftState(state: TaskState): boolean {
+  if (state.current_state !== "PRD_DRAFTING_DETAILS") return false;
+  return hasReviewRevisionApproval(state.task_id);
+}
+
+function hasReviewRevisionApproval(taskId: string): boolean {
+  const confirmations = readPendingConfirmations();
+  if (confirmations?.task_id !== taskId) return false;
+  const disposition = [...confirmations.records].reverse().find((record) => record.confirmation_type === "REVIEW_DISPOSITION");
+  return disposition?.status === "APPROVED" && disposition.resolution === "FIX_AND_REVIEW";
+}
+
+function isSubstantivePrdRevision(message: string): boolean {
+  return message.trim().length >= 8
+    && /(修订|修改|补充|移除|删除|调整|改为|纳入|支持|阈值|验收|范围|标准|决定|不达标|修复)/.test(message);
+}
+
+function recoverableBlockedState(state: TaskState): StateId | null {
+  if (state.current_state !== "EXECUTION_BLOCKED") return state.previous_state;
+  if (state.previous_state && state.previous_state !== "TASK_PAUSED") return state.previous_state;
+  if (state.return_state) return state.return_state;
+  return [...state.completed_steps].reverse().find((step): step is StateId =>
+    [
+      "INTENT_ROUTING", "CONTEXT_ANALYZING", "CONTEXT_MAINTAINING", "PRD_THINKING",
+      "PRD_DRAFTING_CORE", "PRD_DRAFTING_DETAILS", "PRD_REVIEWING", "CHANGE_ANALYZING", "REPLANNING",
+    ].includes(step as StateId)
+  ) ?? null;
 }
 
 function requireState(taskId: string): TaskState {

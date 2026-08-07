@@ -125,6 +125,11 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const corePath = path.join(outputDir, "openai-prd-core.json");
     const detailsPath = path.join(outputDir, "openai-prd-details.json");
     const reviewPath = path.join(outputDir, "openai-prd-review.json");
+    const revisionVersion = phase === "REVISION"
+      ? readJson<PrdWriteOutput>(assets.detailsPath).prd_artifact.version
+      : null;
+    const revisionPath = revisionVersion ? path.join(outputDir, `openai-prd-revision-${revisionVersion}.json`) : null;
+    const revisionReviewPath = revisionVersion ? path.join(outputDir, `openai-prd-review-${revisionVersion}.json`) : null;
 
     if (phase === "THINKING" && !fs.existsSync(thinkingPath)) {
       writeJsonAtomic(thinkingPath, await this.generatePrdThinking(assets));
@@ -141,13 +146,28 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
       if (!fs.existsSync(corePath)) throw new Error("缺少经 CP-P01 生成的 PRD CORE，不能生成 DETAILS");
       writeJsonAtomic(detailsPath, await this.generatePrdDetails(assets, context.userConfirmation));
     }
-    if (fs.existsSync(detailsPath)) {
+    if (phase !== "REVISION" && fs.existsSync(detailsPath)) {
       applyPrdDetails(readJson<PrdDetailsModelOutput>(detailsPath), assets, this.projectId);
     }
     if (phase === "DETAILS" && !fs.existsSync(reviewPath)) {
-      writeJsonAtomic(reviewPath, await this.generatePrdReview(assets));
+      writeJsonAtomic(reviewPath, await this.generatePrdReview(taskId, assets));
     }
-    if (fs.existsSync(reviewPath)) applyPrdReview(readJson<PrdReviewModelOutput>(reviewPath), assets);
+    if (phase !== "REVISION" && fs.existsSync(reviewPath)) {
+      applyPrdReview(readJson<PrdReviewModelOutput>(reviewPath), assets);
+    }
+    if (phase === "REVISION") {
+      if (!revisionPath || !revisionReviewPath) throw new Error("无法确定 PRD 修订版本");
+      const revisionDecisions = context.revisionDecisions ?? context.userConfirmation;
+      if (!revisionDecisions?.trim()) throw new Error("缺少用户确认的 PRD 修订决定");
+      if (!fs.existsSync(revisionPath)) {
+        writeJsonAtomic(revisionPath, await this.generatePrdRevision(taskId, assets, revisionDecisions));
+      }
+      applyPrdDetails(readJson<PrdDetailsModelOutput>(revisionPath), assets, this.projectId);
+      if (!fs.existsSync(revisionReviewPath)) {
+        writeJsonAtomic(revisionReviewPath, await this.generatePrdReview(taskId, assets, "prd_review_revision"));
+      }
+      applyPrdReview(readJson<PrdReviewModelOutput>(revisionReviewPath), assets);
+    }
     return assets;
   }
 
@@ -230,12 +250,40 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     });
   }
 
-  private async generatePrdReview(assets: PrdProviderAssets): Promise<PrdReviewModelOutput> {
+  private async generatePrdRevision(taskId: string, assets: PrdProviderAssets, revisionDecisions: string): Promise<PrdDetailsModelOutput> {
+    const revision = readJson<PrdWriteOutput>(assets.detailsPath);
+    const currentPrdPath = repoRefToPath(revision.prd_artifact.markdown_ref, PROJECT_ROOT);
+    if (!fs.existsSync(currentPrdPath)) throw new Error("当前 PRD 不存在，不能执行审核修订");
+    const currentPrd = fs.readFileSync(currentPrdPath, "utf-8");
+    const reviewRef = this.getPrdReportRefs(taskId).reviewRef;
+    const reviewPath = repoRefToPath(reviewRef, PROJECT_ROOT);
+    if (!fs.existsSync(reviewPath)) throw new Error("当前 PRD 审核报告不存在，不能执行审核修订");
+    const currentReview = readJson<PrdReviewTemplate & { prd_sha256?: string }>(reviewPath);
+    return await this.client.generateJson<PrdDetailsModelOutput>({
+      name: "prd_revision",
+      schema: PRD_DETAILS_SCHEMA,
+      instructions: this.skills.buildInstructions(
+        [{ name: "prd-write", mode: "REVISION" }],
+        "严格依据用户对审核问题作出的修订决定，保留未受影响章节，返回一份完整 PRD 修订 Markdown。不得扩大用户未授权的范围。",
+      ),
+      content: {
+        project_id: this.projectId,
+        current_prd_markdown: currentPrd,
+        current_review: currentReview,
+        revision_decisions: revisionDecisions,
+      },
+    });
+  }
+
+  private async generatePrdReview(taskId: string, assets: PrdProviderAssets, requestName = "prd_review"): Promise<PrdReviewModelOutput> {
     const details = readJson<PrdWriteOutput>(assets.detailsPath);
     const prdMarkdown = fs.readFileSync(repoRefToPath(details.prd_artifact.content_ref, PROJECT_ROOT), "utf-8");
-    const thinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
+    const persistedThinkingPath = repoRefToPath(this.getPrdReportRefs(taskId).thinkingRef, PROJECT_ROOT);
+    const thinkingPath = fs.existsSync(assets.thinkingPath) ? assets.thinkingPath : persistedThinkingPath;
+    if (!fs.existsSync(thinkingPath)) throw new Error("缺少已发布的 PRD 写前分析，不能执行独立审核");
+    const thinking = readJson<PrdThinkingOutput>(thinkingPath);
     return await this.client.generateJson<PrdReviewModelOutput>({
-      name: "prd_review",
+      name: requestName,
       schema: PRD_REVIEW_SCHEMA,
       instructions: this.skills.buildInstructions(
         [{ name: "prd-review", mode: "REVIEW" }],
@@ -324,16 +372,18 @@ function applyPrdCore(generated: PrdCoreModelOutput, assets: PrdProviderAssets, 
 }
 
 function applyPrdDetails(generated: PrdDetailsModelOutput, assets: PrdProviderAssets, projectId: string): void {
-  const thinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
-  const decisionIds = thinking.decision_ledger.map((item) => item.decision_id);
   const details = readJson<PrdWriteOutput>(assets.detailsPath);
-  writeTextAtomic(repoRefToPath(details.prd_artifact.content_ref, PROJECT_ROOT), withPrdFrontmatter(generated.details_markdown, projectId, "0.2.0"));
+  const decisionIds = details.prd_artifact.phase === "REVISION"
+    ? details.prd_artifact.decision_refs
+    : readJson<PrdThinkingOutput>(assets.thinkingPath).decision_ledger.map((item) => item.decision_id);
+  writeTextAtomic(repoRefToPath(details.prd_artifact.content_ref, PROJECT_ROOT), withPrdFrontmatter(generated.details_markdown, projectId, details.prd_artifact.version));
   details.prd_artifact.decision_refs = decisionIds;
   writeJsonAtomic(assets.detailsPath, details);
 }
 
 function applyPrdReview(generated: PrdReviewModelOutput, assets: PrdProviderAssets): void {
-  const review = { ...generated, reviewed_prd_version: "0.2.0" };
+  const reviewedVersion = readJson<PrdWriteOutput>(assets.detailsPath).prd_artifact.version;
+  const review = { ...generated, reviewed_prd_version: reviewedVersion };
   writeJsonAtomic(assets.reviewTemplatePath, review);
   assets.p03 = {
     confirmation_type: "REVIEW_DISPOSITION",

@@ -9,7 +9,7 @@ import { readIngestionMaterialList, upsertMaterialIngestion } from "../lib/mater
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
 import { contextDocumentRef, contextIndexRef, contextIndexPath, safeProjectSlug } from "../lib/project-paths.js";
-import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { incrementPatch, parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { writeStructuredMaterial } from "./structured-material.js";
@@ -71,7 +71,7 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  async getPrdAssets(taskId: string, phase: PrdProviderPhase = "REFERENCE", _context: PrdProviderContext = {}): Promise<PrdProviderAssets> {
+  async getPrdAssets(taskId: string, phase: PrdProviderPhase = "REFERENCE", context: PrdProviderContext = {}): Promise<PrdProviderAssets> {
     const slug = safeSlug(taskId);
     const outputDir = this.outputDir(slug);
     const base = `repo://context-workspace/workspace/agent-runs/${slug}`;
@@ -82,9 +82,17 @@ export class WorkspaceProvider implements AgentProvider {
     const ledgerPath = path.join(outputDir, "decision-ledger.confirmed.json");
     const corePath = path.join(outputDir, "prd-write.core.json");
     const detailsPath = path.join(outputDir, "prd-write.details.json");
+    const revisionPath = path.join(outputDir, "prd-write.revision.json");
     const coreCandidatePath = path.join(outputDir, "prd.core.md");
     const detailsCandidatePath = path.join(outputDir, "prd.details.md");
+    const revisionCandidatePath = path.join(outputDir, "prd.revision.md");
     const reviewTemplatePath = path.join(outputDir, "prd-review.template.json");
+    const prdPath = repoRefToPath(prdRef, PROJECT_ROOT);
+    const currentPrd = fs.existsSync(prdPath) ? parseFrontmatter(fs.readFileSync(prdPath, "utf-8")) : null;
+    const currentVersion = typeof currentPrd?.metadata.version === "string" ? currentPrd.metadata.version : null;
+    const revisionVersion = currentVersion ? incrementPatch(currentVersion) : null;
+    const revisionSourceRefs = stringArrayMetadata(currentPrd?.metadata.source_refs, sourceRefs);
+    const revisionDecisionIds = stringArrayMetadata(currentPrd?.metadata.decision_refs, decisionIds);
 
     const thinking: PrdThinkingOutput = {
       background_card: {
@@ -122,9 +130,25 @@ export class WorkspaceProvider implements AgentProvider {
     };
     const core = this.buildPrdOutput(prdRef, sourceRefs, decisionIds, "CORE", "0.1.0", null, coreCandidatePath, phase === "CORE");
     const details = this.buildPrdOutput(prdRef, sourceRefs, decisionIds, "DETAILS", "0.2.0", "0.1.0", detailsCandidatePath, phase === "DETAILS");
+    const revision = revisionVersion && currentVersion
+      ? this.buildPrdOutput(
+          prdRef,
+          revisionSourceRefs,
+          revisionDecisionIds,
+          "REVISION",
+          revisionVersion,
+          currentVersion,
+          revisionCandidatePath,
+          phase === "REVISION",
+          currentPrd?.body,
+          context.revisionDecisions ?? context.userConfirmation,
+        )
+      : null;
+    if (phase === "REVISION" && !revision) throw new Error("生成审核修订稿前必须存在当前 PRD 版本");
+    const reviewedVersion = phase === "REVISION" ? revisionVersion ?? "0.2.0" : "0.2.0";
     const reviewTemplate: PrdReviewTemplate = {
       review_id: `review-${safeSlug(this.projectId)}-${slug}`,
-      reviewed_prd_version: "0.2.0",
+      reviewed_prd_version: reviewedVersion,
       issues: [],
       summary: { p0_count: 0, p1_count: 0, p2_count: 0, recommendation: "PASS" },
       passed_dimensions: ["FACT_STATUS", "SCOPE", "DEPENDENCY", "CONSISTENCY"],
@@ -139,11 +163,15 @@ export class WorkspaceProvider implements AgentProvider {
       writeJsonAtomic(detailsPath, details);
       writeJsonAtomic(reviewTemplatePath, reviewTemplate);
     }
+    if (phase === "REVISION" && revision) {
+      writeJsonAtomic(revisionPath, revision);
+      writeJsonAtomic(reviewTemplatePath, reviewTemplate);
+    }
     return {
       thinkingPath,
       confirmedLedgerPath: ledgerPath,
       corePath,
-      detailsPath,
+      detailsPath: phase === "REVISION" ? revisionPath : detailsPath,
       reviewTemplatePath,
       p01: {
         confirmation_type: "DECISION_AND_WRITABLE_STATUS",
@@ -383,13 +411,26 @@ export class WorkspaceProvider implements AgentProvider {
     return refs;
   }
 
-  private buildPrdOutput(prdRef: string, sourceRefs: string[], decisionIds: string[], phase: "CORE" | "DETAILS", version: string, previousVersion: string | null, candidatePath: string, writeCandidate: boolean): PrdWriteOutput {
+  private buildPrdOutput(
+    prdRef: string,
+    sourceRefs: string[],
+    decisionIds: string[],
+    phase: "CORE" | "DETAILS" | "REVISION",
+    version: string,
+    previousVersion: string | null,
+    candidatePath: string,
+    writeCandidate: boolean,
+    currentBody?: string,
+    revisionDecisions?: string,
+  ): PrdWriteOutput {
     const headings = phase === "CORE" ? ["background", "problem", "goal", "non-goals", "target-users", "scope", "core-flow", "confirmed-decisions"] : ["background", "problem", "goal", "non-goals", "target-users", "scope", "core-flow", "confirmed-decisions", "rules", "roles", "exceptions", "acceptance"];
-    const body = phase === "CORE"
+    const body = phase === "REVISION"
+      ? `${currentBody?.trim() ?? `# ${this.projectId} 需求文档`}\n\n## 本轮审核修订\n${revisionDecisions?.trim() || "按用户确认的审核处置修订。"}`
+      : phase === "CORE"
       ? `# ${this.projectId} 需求文档\n\n## 1. 背景与问题\n基于当前项目材料整理，具体问题待产品经理确认。\n\n## 2. 目标\n待确认。\n\n## 3. 本期范围与非范围\n待确认。\n\n## 4. 核心流程\n用户场景 → 核心任务 → 结果反馈。\n\n## 5. 已确认决策\n等待产品经理确认目标与范围。`
       : `# ${this.projectId} 需求文档\n\n## 1. 背景与问题\n基于当前项目材料整理，具体问题待产品经理确认。\n\n## 2. 目标\n待确认。\n\n## 3. 本期范围与非范围\n待确认。\n\n## 4. 核心流程\n用户场景 → 核心任务 → 结果反馈。\n\n## 5. 已确认决策\n等待产品经理确认目标与范围。\n\n## 功能规则\n待补充。\n\n## 角色与权限\n待补充。\n\n## 边界与异常\n待补充。\n\n## 验收标准\n待补充。`;
     if (writeCandidate) writeTextAtomic(candidatePath, `---\nid: ${safeSlug(this.projectId)}-prd\nversion: ${version}\n---\n\n${body}`);
-    return { prd_artifact: { artifact_id: `prd-${safeSlug(this.projectId)}`, version, previous_version: previousVersion, phase, structured_sections: headings, markdown_ref: prdRef, content_ref: pathToRepoRef(candidatePath, PROJECT_ROOT), source_refs: sourceRefs, decision_refs: decisionIds }, coverage: { required_sections: headings, covered_sections: headings, missing_sections: [] }, unresolved_items: [{ item: "业务事实、目标和验收口径待确认", status: "OPEN", source_refs: sourceRefs }], unsupported_claims: [], change_summary: phase === "CORE" ? "通用项目 PRD 主体草稿" : "通用项目 PRD 细节草稿" };
+    return { prd_artifact: { artifact_id: `prd-${safeSlug(this.projectId)}`, version, previous_version: previousVersion, phase, structured_sections: headings, markdown_ref: prdRef, content_ref: pathToRepoRef(candidatePath, PROJECT_ROOT), source_refs: sourceRefs, decision_refs: decisionIds }, coverage: { required_sections: headings, covered_sections: headings, missing_sections: [] }, unresolved_items: phase === "REVISION" ? [] : [{ item: "业务事实、目标和验收口径待确认", status: "OPEN", source_refs: sourceRefs }], unsupported_claims: [], change_summary: phase === "CORE" ? "通用项目 PRD 主体草稿" : phase === "DETAILS" ? "通用项目 PRD 细节草稿" : "根据用户审核处置决定修订 PRD" };
   }
 
   protected outputDir(slug: string) { const dir = path.join(PROJECT_ROOT, "runtime/provider-output", slug); fs.mkdirSync(dir, { recursive: true }); return dir; }
@@ -417,3 +458,8 @@ function isSupportedFile(filePath: string): boolean {
 }
 function extensionType(name: string): string { return path.extname(name).toLowerCase() === ".json" ? "JSON" : "TEXT"; }
 function safeSlug(value: string): string { const normalized = value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff-]+/g, "-").replace(/^-+|-+$/g, ""); return normalized || "default-project"; }
+function stringArrayMetadata(value: string | string[] | null | undefined, fallback: string[]): string[] {
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return fallback;
+}

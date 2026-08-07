@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import type { ConfirmationRecord, TaskState } from "./types.js";
 import type { PrdWriteOutput } from "./prd-types.js";
 import {
-  parseFrontmatter, renderFrontmatter, repoRefToPath, writeTextAtomic,
+  incrementPatch, parseFrontmatter, renderFrontmatter, repoRefToPath, writeTextAtomic,
 } from "./repository.js";
 import { validateCoreConfirmation, validatePrdEntryConfirmation } from "./prd-guards.js";
 import { validatePrdRevisionScope, validateReplanApproval } from "./change-guards.js";
@@ -67,6 +67,18 @@ export function authorizePrdWrite(
     }
   }
 
+  if (artifact.phase === "REVISION") {
+    const reviewDisposition = latestConfirmation(confirmations, "REVIEW_DISPOSITION");
+    if (reviewDisposition?.status !== "APPROVED" || reviewDisposition.resolution !== "FIX_AND_REVIEW") {
+      errors.push("REVISION 写入要求 CP-P03 已选择 FIX_AND_REVIEW");
+    }
+    if (artifact.previous_version !== state.prd_version) {
+      errors.push(`REVISION 基线版本与当前 PRD 不一致: 期望 ${state.prd_version}`);
+    } else if (artifact.version !== incrementPatch(state.prd_version)) {
+      errors.push(`REVISION 版本必须从 ${state.prd_version} 递增一个补丁版本`);
+    }
+  }
+
   try {
     const candidate = repoRefToPath(artifact.content_ref, root);
     if (!fs.existsSync(candidate)) errors.push(`PRD 候选内容不存在: ${artifact.content_ref}`);
@@ -83,9 +95,9 @@ export function authorizePrdWrite(
         errors.push("CORE 目标已存在且不是同版本幂等内容");
       }
     }
-    if (artifact.phase === "DETAILS") {
+    if (artifact.phase === "DETAILS" || artifact.phase === "REVISION") {
       if (!fs.existsSync(target)) {
-        errors.push("DETAILS 写入前 CORE 文件不存在");
+        errors.push(`${artifact.phase} 写入前 PRD 文件不存在`);
       } else {
         const current = parseFrontmatter(fs.readFileSync(target, "utf-8"));
         const candidateBody = fs.existsSync(candidate)

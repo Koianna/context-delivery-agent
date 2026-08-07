@@ -53,9 +53,9 @@ export function validatePrdWrite(
     if (artifact.phase === "CORE" && /## (8|9|10)\.|验收标准|角色与权限/.test(body)) {
       errors.push("CORE 候选提前展开 DETAILS 内容");
     }
-    if (artifact.phase === "DETAILS") {
+    if (artifact.phase === "DETAILS" || artifact.phase === "REVISION") {
       for (const heading of ["功能规则", "角色与权限", "边界与异常", "验收标准"]) {
-        if (!body.includes(heading)) errors.push(`DETAILS 缺少章节: ${heading}`);
+        if (!body.includes(heading)) errors.push(`${artifact.phase} 缺少章节: ${heading}`);
       }
     }
   } catch (error) {

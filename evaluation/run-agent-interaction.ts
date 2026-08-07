@@ -31,6 +31,11 @@ const turn = async (user: string) => {
   transcript.push({ user, response });
   return response;
 };
+const controlTurn = async (user: string) => {
+  const response = await agent.handleMessage(user, { taskId, projectId, debug: true });
+  transcript.push({ user, response });
+  return response;
+};
 const check = (caseId: string, passed: boolean, detail: string) => {
   results.push({ case_id: caseId, passed, detail });
 };
@@ -76,6 +81,39 @@ check(
   p03.state.id === "WAITING_REVIEW_DECISION" && p03.artifacts.some((item) => item.label === "PRD 独立审核报告" && fileExists(item.ref)),
   "CP-P02 后生成 DETAILS、独立审核并停在 CP-P03"
 );
+const firstP03Id = p03.confirmation?.id;
+await controlTurn("暂停");
+const resumedP03 = await controlTurn("继续");
+check(
+  "AGENT-06D",
+  resumedP03.state.id === "WAITING_REVIEW_DECISION"
+    && resumedP03.confirmation?.id === firstP03Id
+    && readPendingConfirmations()?.records.find((item) => item.confirmation_id === firstP03Id)?.status === "PENDING",
+  "等待 CP-P03 时暂停和恢复会保留原确认，不将其误判为悬空记录"
+);
+const fixBeforeReview = await turn("先修复再审核");
+check(
+  "AGENT-06A",
+  fixBeforeReview.state.id === "PRD_REVIEWING" && fixBeforeReview.status === "CONTINUE",
+  "CP-P03 选择先修复后进入专用审核修订节点"
+);
+const revisionMessage = "补充具体修订决定。1）CONSISTENCY-01：P95<2 秒作为强制验收标准，移除“仅作为目标”表述，不达标即阻塞交付；2）SCOPE-01：冬季查询返回夏季商品纳入本期，双向修复季节错配；3）COMPLETENESS-01：拼音混合输入支持，仅转换纯字母部分，与中文合并后搜索；4）COMPLETENESS-02：PRD 内提供临时基线季节词表与类目供开发先行实现；5）COMPLETENESS-03：拼音置信度阈值暂定 0.8，后续可调。请按此修订并重新审核。";
+const revised = await turn(revisionMessage);
+const revisionConfirmations = readPendingConfirmations()?.records ?? [];
+check(
+  "AGENT-06B",
+  revised.state.id === "WAITING_REVIEW_DECISION"
+    && readTaskState()?.prd_version === "0.2.1"
+    && revised.confirmation?.id !== firstP03Id,
+  "具体修订决定生成 0.2.1 并在重新审核后创建新的 CP-P03"
+);
+check(
+  "AGENT-06C",
+  !revisionConfirmations.some((item) => item.confirmation_type === "INTENT_CLARIFICATION")
+    && revisionConfirmations.filter((item) => item.status === "PENDING").length === 1
+    && revisionConfirmations.find((item) => item.status === "PENDING")?.confirmation_id === revised.confirmation?.id,
+  "审核修订不进入意图澄清，也不留下悬空 PENDING 确认"
+);
 const delivered = await turn("接受 P2 并交付");
 check(
   "AGENT-07",
@@ -100,6 +138,25 @@ check(
   "AGENT-10",
   replanned.state.id === "PRD_DRAFTING_DETAILS" && readTaskState()?.replan_count === 1,
   "批准后只返回最小 DETAILS 修订节点"
+);
+
+const intentionallyBlocked = await controlTurn("这是一条无法归类的控制流回归输入");
+const afterAtomicFailure = readPendingConfirmations()?.records ?? [];
+check(
+  "AGENT-13",
+  intentionallyBlocked.state.id === "EXECUTION_BLOCKED"
+    && afterAtomicFailure.some((item) => item.confirmation_type === "INTENT_CLARIFICATION" && item.status === "CANCELLED" && item.resolved_by === "SYSTEM")
+    && !afterAtomicFailure.some((item) => item.status === "PENDING"),
+  "非法等待态迁移会系统取消刚创建的确认，不留下悬空 PENDING"
+);
+await controlTurn("暂停");
+await controlTurn("继续");
+const retried = await controlTurn("重试");
+check(
+  "AGENT-14",
+  retried.state.id === "PRD_DRAFTING_DETAILS"
+    && !readPendingConfirmations()?.records.some((item) => item.status === "PENDING"),
+  "阻塞态暂停后仍可通过继续和重试返回最近业务节点，不形成循环"
 );
 
 const confirmations = readPendingConfirmations()?.records ?? [];

@@ -206,6 +206,11 @@
   },
   {
     "from": "PRD_REVIEWING",
+    "to": "PRD_DRAFTING_DETAILS",
+    "guard": "USER_PROVIDES_REVIEW_REVISION_DECISIONS"
+  },
+  {
+    "from": "PRD_REVIEWING",
     "to": "WAITING_REVIEW_DECISION",
     "guard": "REVIEW_COMPLETE"
   },
