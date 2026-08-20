@@ -116,14 +116,31 @@ export function validateContextAnalysis(
     if (proposalIds.has(proposal.proposal_id)) errors.push(`重复 proposal_id: ${proposal.proposal_id}`);
     proposalIds.add(proposal.proposal_id);
     if (!ACTIONS.has(proposal.action)) errors.push(`${proposal.proposal_id} action 非法`);
-    const item = items.get(proposal.item_id);
-    if (!item) errors.push(`${proposal.proposal_id} 引用了未知 item_id`);
-    if (item && proposal.source_refs.some((source) => !item.source_refs.includes(source))) {
-      errors.push(`${proposal.proposal_id} 的来源超出信息单元来源`);
+
+    // Support comma-separated item_ids for proposals that merge multiple items
+    const itemIds = proposal.item_id.split(',').map(id => id.trim()).filter(id => id);
+    const referencedItems = itemIds.map(id => items.get(id)).filter(Boolean);
+
+    if (itemIds.length === 0) {
+      errors.push(`${proposal.proposal_id} item_id 为空`);
+    } else if (referencedItems.length !== itemIds.length) {
+      const missingIds = itemIds.filter(id => !items.has(id));
+      errors.push(`${proposal.proposal_id} 引用了未知 item_id: ${missingIds.join(', ')}`);
     }
+
+    // Validate source_refs against all referenced items
+    if (referencedItems.length > 0) {
+      const allItemSources = new Set(referencedItems.flatMap(item => item.source_refs));
+      if (proposal.source_refs.some((source) => !allItemSources.has(source))) {
+        errors.push(`${proposal.proposal_id} 的来源超出信息单元来源`);
+      }
+    }
+
     if (STABLE_ACTIONS.has(proposal.action)) {
       if (!proposal.requires_confirmation) errors.push(`${proposal.proposal_id} 稳定写入未要求 CP-C01`);
-      if (!item || !["CONFIRMED", "SUPERSEDED", "ARCHIVED"].includes(item.maturity)) {
+
+      // All referenced items must have confirmed maturity
+      if (referencedItems.length === 0 || referencedItems.some(item => !["CONFIRMED", "SUPERSEDED", "ARCHIVED"].includes(item.maturity))) {
         errors.push(`${proposal.proposal_id} 使用未确认信息修改稳定 Context`);
       }
       if (!proposal.target_ref || !STABLE_CONTEXT_REF.test(proposal.target_ref)) {

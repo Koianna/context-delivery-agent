@@ -76,7 +76,7 @@ export interface ContextProposal {
   proposal_id: string;
   action: ContextAction;
   target_ref: string | null;
-  item_id: string;
+  item_id: string; // Single item_id or comma-separated list (e.g., "info_001,info_002,info_003") for merged proposals
   current_value: unknown;
   proposed_value: unknown;
   source_refs: string[];
