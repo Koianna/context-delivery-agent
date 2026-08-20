@@ -409,9 +409,29 @@ export class WorkspaceProvider implements AgentProvider {
     const existing = fs.existsSync(targetPath) ? parseFrontmatter(fs.readFileSync(targetPath, "utf-8")) : null;
     const candidatePath = path.join(this.outputDir(fileBaseName), "context-candidate.md");
 
-    // 合并多条结论到一个文件
+    // 合并多条结论到一个文件，按类型分组
     const title = hasFactType ? "产品现状" : "业务规则";
-    const contentSections = items.map((item, index) => `### ${index + 1}. ${item.information_type === "FACT" ? "现状" : "规则"}\n\n${item.content}`).join("\n\n");
+
+    // 按 information_type 分组
+    const groupedItems = new Map<string, typeof items>();
+    for (const item of items) {
+      const type = item.information_type === "FACT" ? "现状" : "规则";
+      if (!groupedItems.has(type)) {
+        groupedItems.set(type, []);
+      }
+      groupedItems.get(type)!.push(item);
+    }
+
+    // 生成分组后的内容
+    const contentSections = Array.from(groupedItems.entries()).map(([type, groupItems]) => {
+      const itemList = groupItems.map((item, idx) =>
+        groupItems.length > 1
+          ? `${idx + 1}. ${item.content}`
+          : item.content
+      ).join("\n\n");
+      return `## ${type}\n\n${itemList}`;
+    }).join("\n\n");
+
     const content = `# ${title}\n\n${contentSections}`;
 
     const id = String(existing?.metadata.id ?? fileBaseName);
