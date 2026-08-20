@@ -4,6 +4,22 @@
 
 **架构边界：外部 Agent 是可替换的自然语言交互宿主，项目 Runtime 是唯一的业务编排与执行中心。** 外部 Agent 可以是 Claude、Codex、Cursor、Gemini 或其他兼容宿主，但不能直接修改业务文件、确认记录或 Runtime 状态。
 
+---
+
+## 📖 入口必读
+
+**如果你是外部 Agent（Claude、Cursor、Codex 等）**，请先阅读 **[CLAUDE.md](CLAUDE.md)** — 强制工作规则与路由决策流程。
+
+**核心要求**：
+- ✅ 当用户提供材料（会议记录、用户反馈、PRD）或要求整理/生成 PRD/更新 Context 时，**必须调用** `mcp__context-delivery__context_delivery` 工具
+- ❌ 禁止自己用 Read/Write 整理材料或生成 PRD
+- ❌ 禁止直接修改 `context-workspace/` 下的任何文件
+- ✅ 只展示 Runtime 返回的 `artifacts`，不自行创建替代产物
+
+详细规则、触发条件清单和示例见 [CLAUDE.md](CLAUDE.md)。
+
+---
+
 ## 阶段
 
 当前为个人 POC，验证 Agent 架构和产品方案是否成立。默认面向真实日常工作材料。

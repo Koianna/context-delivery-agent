@@ -85,8 +85,17 @@ function validateInformationItem(
       errors.push(`${item.item_id} 证据来源未登记: ${evidence.source_id}`);
       continue;
     }
-    const content = readMaterialContent(source, root);
-    if (!content.includes(evidence.quote)) errors.push(`${item.item_id} 的 quote 未出现在来源中`);
+    try {
+      const sourcePath = repoRefToPath(source.content_ref, root);
+      if (!fs.existsSync(sourcePath)) {
+        errors.push(`${item.item_id} 的来源文件不存在: ${source.content_ref}，可能已被删除`);
+        continue;
+      }
+      const content = readMaterialContent(source, root);
+      if (!content.includes(evidence.quote)) errors.push(`${item.item_id} 的 quote 未出现在来源中`);
+    } catch (error) {
+      errors.push(`${item.item_id} 读取来源文件失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   if (item.target_layer === "CONTEXT" && !item.requires_confirmation) {
     errors.push(`${item.item_id} 建议进入稳定 Context 但未要求确认`);
