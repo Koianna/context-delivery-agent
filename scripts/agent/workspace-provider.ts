@@ -356,9 +356,21 @@ export class WorkspaceProvider implements AgentProvider {
 
   private buildContextOutput(input: MaterialIngestInput, output: MaterialIngestOutput): ContextAnalysisOutput {
     const feedbackCount = output.information_items.filter((item) => item.information_type === "USER_FEEDBACK").length;
-    const proposals = output.information_items
-      .filter((item) => item.maturity === "CONFIRMED" && item.information_type !== "USER_FEEDBACK")
-      .map((item) => this.buildContextProposal(item));
+    const confirmedItems = output.information_items.filter((item) => item.maturity === "CONFIRMED" && item.information_type !== "USER_FEEDBACK");
+
+    // 按材料来源分组：同一份材料的多条结论合并到一个文件
+    const itemsBySource = new Map<string, typeof confirmedItems>();
+    for (const item of confirmedItems) {
+      const sourceKey = item.source_refs.join(",");
+      if (!itemsBySource.has(sourceKey)) {
+        itemsBySource.set(sourceKey, []);
+      }
+      itemsBySource.get(sourceKey)!.push(item);
+    }
+
+    // 为每组生成一个合并的 proposal
+    const proposals = Array.from(itemsBySource.values()).map((items) => this.buildContextProposal(items));
+
     return {
       action: "ANALYZE",
       update_proposals: proposals,
@@ -373,30 +385,59 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  protected buildContextProposal(item: MaterialIngestOutput["information_items"][number]) {
-    const relativePath = item.information_type === "FACT"
-      ? `product/${safeSlug(item.item_id)}.md`
-      : `business-rules/${safeSlug(item.item_id)}.md`;
+  protected buildContextProposal(items: MaterialIngestOutput["information_items"][number][]) {
+    // 如果是单个 item，保持兼容性（向后兼容旧代码调用）
+    if (!Array.isArray(items)) {
+      items = [items as any];
+    }
+
+    const firstItem = items[0];
+    const allSourceRefs = [...new Set(items.flatMap((item) => item.source_refs))];
+
+    // 使用第一个 source_ref 和材料数量生成文件名
+    const sourceId = allSourceRefs[0]?.replace(/^src-/, "") || "unknown";
+    const fileBaseName = `material-${sourceId}`;
+
+    // 根据类型决定目录
+    const hasFactType = items.some((item) => item.information_type === "FACT");
+    const relativePath = hasFactType
+      ? `product/${fileBaseName}.md`
+      : `business-rules/${fileBaseName}.md`;
+
     const targetRef = contextDocumentRef(this.projectId, relativePath);
     const targetPath = repoRefToPath(targetRef, PROJECT_ROOT);
     const existing = fs.existsSync(targetPath) ? parseFrontmatter(fs.readFileSync(targetPath, "utf-8")) : null;
-    const candidatePath = path.join(this.outputDir(safeSlug(item.item_id)), "context-candidate.md");
-    const title = item.information_type === "FACT" ? "产品现状候选" : "已确认业务规则候选";
-    const id = String(existing?.metadata.id ?? safeSlug(item.item_id));
+    const candidatePath = path.join(this.outputDir(fileBaseName), "context-candidate.md");
+
+    // 合并多条结论到一个文件
+    const title = hasFactType ? "产品现状" : "业务规则";
+    const contentSections = items.map((item, index) => `### ${index + 1}. ${item.information_type === "FACT" ? "现状" : "规则"}\n\n${item.content}`).join("\n\n");
+    const content = `# ${title}\n\n${contentSections}`;
+
+    const id = String(existing?.metadata.id ?? fileBaseName);
     const baseVersion = String(existing?.metadata.version ?? "0.0.0");
-    writeTextAtomic(candidatePath, renderFrontmatter({ id, version: existing ? baseVersion : "0.1.0", status: "active" }, `# ${title}\n\n${item.content}`));
+    const itemIds = items.map((item) => item.item_id);
+
+    writeTextAtomic(candidatePath, renderFrontmatter({
+      id,
+      version: existing ? baseVersion : "0.1.0",
+      status: "active",
+      source_refs: allSourceRefs,
+      item_ids: itemIds
+    }, content));
+
     return {
-      proposal_id: `proposal-${safeSlug(item.item_id)}`,
+      proposal_id: `proposal-${fileBaseName}`,
       action: existing ? "UPDATE_CONTEXT" as const : "PROMOTE_TO_CONTEXT" as const,
       target_ref: targetRef,
-      item_id: item.item_id,
+      item_id: itemIds.join(","),
       current_value: null,
-      proposed_value: item.content,
-      source_refs: item.source_refs,
+      proposed_value: content,
+      source_refs: allSourceRefs,
       relationship: "SUPPORTS" as const,
       risk_level: "MEDIUM" as const,
       requires_confirmation: true,
-      impact_if_applied: "后续任务可将这条已确认材料作为稳定业务上下文读取",
+      impact_if_applied: "后续任务可将这些已确认材料作为稳定业务上下文读取",
       impact_if_ignored: "本次只保留材料和分析结果，不更新稳定 Context",
       base_version: baseVersion,
       content_ref: pathToRepoRef(candidatePath, PROJECT_ROOT),

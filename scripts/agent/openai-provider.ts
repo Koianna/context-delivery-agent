@@ -97,9 +97,21 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
       content: { task_goal: taskGoal, project_id: this.projectId, sources },
     });
     const materialOutput = normalizeMaterialOutput(input, generated.information_items);
-    const proposals = materialOutput.information_items
-      .filter((item) => item.requires_confirmation && item.target_layer === "CONTEXT")
-      .map((item) => this.buildContextProposal(item));
+    const confirmedItems = materialOutput.information_items
+      .filter((item) => item.requires_confirmation && item.target_layer === "CONTEXT");
+
+    // 按材料来源分组：同一份材料的多条结论合并到一个文件
+    const itemsBySource = new Map<string, typeof confirmedItems>();
+    for (const item of confirmedItems) {
+      const sourceKey = item.source_refs.join(",");
+      if (!itemsBySource.has(sourceKey)) {
+        itemsBySource.set(sourceKey, []);
+      }
+      itemsBySource.get(sourceKey)!.push(item);
+    }
+
+    // 为每组生成一个合并的 proposal
+    const proposals = Array.from(itemsBySource.values()).map((items) => this.buildContextProposal(items));
     writeJsonAtomic(assets.materialOutputPath, materialOutput);
     writeJsonAtomic(assets.contextOutputPath, {
       action: "ANALYZE",
