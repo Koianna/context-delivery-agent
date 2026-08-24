@@ -144,7 +144,8 @@ export class AgentOrchestrator {
     if (intent === "CONTEXT") return await this.startContext(state, message, options);
     if (intent === "CONTEXT_REVOKE") return await this.startContextRevoke(state, message, options);
     if (intent === "PRD") return await this.startPrd(state, message, options);
-    return await this.startChange(state, message, options);
+    if (intent === "CHANGE") return await this.startChange(state, message, options);
+    return this.requestIntentClarification(state, message, options);
   }
 
   private moveToRouting(state: TaskState): TaskState {
@@ -1232,7 +1233,7 @@ function instructionFor(status: AgentResponse["status"], state: StateId): string
 export function routeIntent(message: string, hasMaterialPath = false): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
   if (/(撤销|回滚|取消提升|移(?:出|除).*(?:稳定\s*)?(?:context|contact)|从.*(?:context|contact).*移(?:出|除)|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
-  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+))/i.test(message)) return "CONTEXT";
+  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+)|(?:帮.{0,4})?记录一下|初步方案|方案.{0,8}(?:记录|沉淀|存档|归档)|(?:我的|一个|这个)?想法|设想)/i.test(message)) return "CONTEXT";
   if (/(修改|修订|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
   if (hasMaterialPath) return "CONTEXT";
