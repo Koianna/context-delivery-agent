@@ -291,6 +291,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
     path.join(PROJECT_ROOT, "context-workspace/workspace/reports", `change-impact-${slug}.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/plans", `${projectId}-${slug}-replan.json`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/snapshots", changeId),
+    path.join(PROJECT_ROOT, ".cache/manifests", projectId),
   ]) {
     fs.rmSync(target, { recursive: true, force: true });
   }

@@ -122,6 +122,7 @@ function clear() {
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
     agentRunsPath(taskId),
     agentRunsPath(archiveTaskId),
+    path.join(PROJECT_ROOT, ".cache/manifests", projectId),
     path.join(PROJECT_ROOT, "runtime/provider-output"),
   ]) {
     fs.rmSync(target, { recursive: true, force: true });

@@ -80,6 +80,7 @@ function clean() {
       agentRunsPath(taskThree),
       agentRunsPath(blockedTask),
       path.join(PROJECT_ROOT, "context-workspace/workspace/projects", project),
+      path.join(PROJECT_ROOT, ".cache/manifests", project),
     ]) fs.rmSync(target, { recursive: true, force: true });
   }
 }

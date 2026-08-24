@@ -277,6 +277,7 @@ function clearRuntime(taskId: string, projectId: string): void {
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
     agentRunsPath(taskId),
+    path.join(PROJECT_ROOT, ".cache/manifests", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${taskId}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd-recovery", `prd-${projectId}`),
   ]) fs.rmSync(target, { recursive: true, force: true });

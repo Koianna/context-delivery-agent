@@ -44,7 +44,7 @@ const first = structured(messages[2]);
 const second = structured(messages[3]);
 const draftRoot = path.join(PROJECT_ROOT, "context-workspace/drafts", projectId);
 const sourceFound = findText(draftRoot, sourceText);
-const unifiedManifestPath = path.join(draftRoot, "material-manifest.json");
+const unifiedManifestPath = path.join(PROJECT_ROOT, ".cache/manifests", projectId, "material-manifest.json");
 const unifiedManifest = fs.existsSync(unifiedManifestPath)
   ? JSON.parse(fs.readFileSync(unifiedManifestPath, "utf-8")) as { ingestions?: Array<{ task_id?: string; task_goal?: string; materials?: Array<{ source_id?: string; original_name?: string; stored_name?: string }> }> }
   : null;
@@ -89,6 +89,7 @@ function clear() {
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
     agentRunsPath(taskId),
+    path.join(PROJECT_ROOT, ".cache/manifests", projectId),
   ]) fs.rmSync(target, { recursive: true, force: true });
 }
 function check(caseId: string, passed: boolean, detail: string) { return { case_id: caseId, passed, detail }; }
