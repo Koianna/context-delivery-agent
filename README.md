@@ -72,7 +72,7 @@ Gateway 返回统一的 `agent_response`、Runtime 状态、产物、确认项�
 
 例如材料中有“用户原话：手机号不用了”，Runtime 会保留原话并分类为用户反馈，询问这可能是修改手机号、解绑手机号还是其他诉求；在产品经理确认前，不会把它写成“用户要修改手机号”，也不会提升为稳定 Context。
 
-通用工作区支持 Markdown、纯文本和 JSON 材料。原文只登记到 `context-workspace/drafts/<project_id>/source-materials/<task_id>/`；项目级 `material-manifest.json` 同时保存材料接入元数据和正式登记记录。Runtime 分析记录保存在被 Git 忽略的 `.cache/agent-runs/`（通过 `runs://` ref 引用，不占用 `context-workspace/`），可阅读整理稿发布到可版本管理的 `workspace/projects/<project_id>/materials/`。通用项目的稳定 Context 位于 `context-workspace/context/<project_id>/`。
+通用工作区支持 Markdown、纯文本和 JSON 材料。原文只登记到 `context-workspace/drafts/<project_id>/source-materials/<task_id>/materials.md`，任务级元信息（`task_goal`、时间、整理稿指针）写在 bundle 顶部 YAML frontmatter，每条材料的属性写在 `<!-- context-material: ... -->` 头注释里，产品经理可直接阅读。项目级 `material-manifest.json` 作为派生缓存移至 `.cache/manifests/<project_id>/`（gitignore），缓存丢失时 Runtime 会从 bundle 自动重建。每个项目还会自动生成 `context-workspace/drafts/<project_id>/README.md`，展示材料时间线与整理稿链接。Runtime 分析记录保存在被 Git 忽略的 `.cache/agent-runs/`（通过 `runs://` ref 引用），可阅读整理稿发布到可版本管理的 `workspace/projects/<project_id>/materials/`。通用项目的稳定 Context 位于 `context-workspace/context/<project_id>/`。
 
 不接入外部宿主时，也可以使用参考 CLI 适配器，直接描述目标，不需要手动执行 Harness 脚本：
 

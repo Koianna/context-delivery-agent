@@ -36,7 +36,7 @@ const contextReportContent = contextReportPath && fs.existsSync(contextReportPat
 const structuredMaterialPath = structuredMaterial ? repoRefToPath(structuredMaterial.ref, PROJECT_ROOT) : null;
 const structuredMaterialContent = structuredMaterialPath && fs.existsSync(structuredMaterialPath) ? fs.readFileSync(structuredMaterialPath, "utf-8") : "";
 const repeatRegistration = registerMaterials(path.join(PROJECT_ROOT, "runtime/provider-output", taskId, "material-ingest.input.json"));
-const manifest = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/material-manifest.json"), "utf-8")) as { records: Array<{ draft_ref: string }>; ingestions: Array<{ task_id: string; materials: Array<{ original_name: string }> }> };
+const manifest = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, ".cache/manifests/account-settings/material-manifest.json"), "utf-8")) as { records: Array<{ draft_ref: string }>; ingestions: Array<{ task_id: string; materials: Array<{ original_name: string }> }> };
 const taskSourceMarkdown = fs.readdirSync(path.join(PROJECT_ROOT, "context-workspace/drafts/account-settings/source-materials", taskId)).filter((name) => /\.md$/i.test(name));
 const results = [
   check("WORKSPACE-01", response.provider.id === "workspace", "未指定案例时使用通用项目工作区 Provider"),
@@ -210,6 +210,10 @@ function clear() {
   fs.rmSync(agentRunsPath("workspace-format-meeting-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-feedback-format-eval"), { recursive: true, force: true });
   fs.rmSync(agentRunsPath("workspace-feedback-format-demo"), { recursive: true, force: true });
+  // 派生 manifest 缓存也要清理，避免残留导致下次运行读到旧数据
+  for (const project of ["account-settings", "workspace-paragraph-eval", "workspace-format-eval", "workspace-feedback-format-eval"]) {
+    fs.rmSync(path.join(PROJECT_ROOT, ".cache/manifests", project), { recursive: true, force: true });
+  }
 }
 
 main().catch((error) => {
