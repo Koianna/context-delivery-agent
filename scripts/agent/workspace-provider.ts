@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { hashReplanForApproval } from "../lib/change-guards.js";
-import { sha256Buffer } from "../lib/change-snapshot.js";
+import { materialBodySha256, sha256Buffer } from "../lib/change-snapshot.js";
 import type { ChangeAnalysisOutput, ChangeRequestInput, ReplanOutput } from "../lib/change-types.js";
 import { PROJECT_ROOT } from "../lib/config.js";
 import { MATERIAL_BUNDLE_FILE, readMaterialBundle, readMaterialContent, writeMaterialBundle, type MaterialBundleEntry } from "../lib/material-bundle.js";
@@ -280,7 +280,7 @@ export class WorkspaceProvider implements AgentProvider {
       const content = fs.readFileSync(source, "utf-8");
       const metadata = parseFrontmatter(content).metadata;
       return {
-        source_id: `src-${sha256Buffer(content).slice(0, 10)}`,
+        source_id: `src-${materialBodySha256(content).slice(0, 10)}`,
         original_name: path.basename(source),
         stored_name: MATERIAL_BUNDLE_FILE,
         source_type: typeof metadata.source_type === "string" ? metadata.source_type : null,
@@ -309,7 +309,7 @@ export class WorkspaceProvider implements AgentProvider {
         if (!fs.existsSync(filePath)) throw new Error(`已登记材料文件不存在: ${filePath}`);
         const content = readMaterialBundle(filePath, ingestion.source_id);
         const metadata = parseFrontmatter(content).metadata;
-        const sourceId = ingestion.source_id ?? `src-${sha256Buffer(content).slice(0, 10)}`;
+        const sourceId = ingestion.source_id ?? `src-${materialBodySha256(content).slice(0, 10)}`;
         const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : ingestion.source_owner ?? "user-provided";
         const sourceTime = typeof metadata.source_time === "string" && metadata.source_time
           ? metadata.source_time
@@ -325,7 +325,7 @@ export class WorkspaceProvider implements AgentProvider {
     const materials = files.map((name) => {
       const filePath = path.join(sourceDir, name);
       const content = fs.readFileSync(filePath, "utf-8");
-      const sourceId = `src-${sha256Buffer(content).slice(0, 10)}`;
+      const sourceId = `src-${materialBodySha256(content).slice(0, 10)}`;
       const metadata = parseFrontmatter(content).metadata;
       const sourceOwner = typeof metadata.source_owner === "string" && metadata.source_owner ? metadata.source_owner : "user-provided";
       const sourceTime = typeof metadata.source_time === "string" && metadata.source_time

@@ -1,8 +1,8 @@
 #!/usr/bin/env npx tsx
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
+import { materialBodySha256 } from "./lib/change-snapshot.js";
 import { readMaterialContent } from "./lib/material-bundle.js";
 import { materialManifestPath, readMaterialManifest, type DuplicateMaterialRecord, type MaterialManifest } from "./lib/material-manifest.js";
 import { safeProjectSlug } from "./lib/project-paths.js";
@@ -56,7 +56,7 @@ export function registerMaterials(inputPath: string, root = PROJECT_ROOT, projec
       source_id: material.source_id,
       original_ref: material.content_ref,
       draft_ref: pathToRepoRef(targetPath, root),
-      sha256: crypto.createHash("sha256").update(content).digest("hex"),
+      sha256: materialBodySha256(content),
       missing_metadata: missingMetadata,
       registered_at: new Date().toISOString(),
     };

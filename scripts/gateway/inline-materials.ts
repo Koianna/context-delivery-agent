@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { sha256Buffer } from "../lib/change-snapshot.js";
+import { materialBodySha256 } from "../lib/change-snapshot.js";
 import { PROJECT_ROOT } from "../lib/config.js";
 import { MATERIAL_BUNDLE_FILE, writeMaterialBundle, type MaterialBundleEntry } from "../lib/material-bundle.js";
 import { upsertMaterialIngestion, type IngestionMaterialRecord } from "../lib/material-manifest.js";
@@ -46,7 +46,7 @@ export function writeInlineMaterials(
       throw new InlineMaterialError("MATERIAL_TOO_LARGE", `本次内联材料总量超过 ${INLINE_MATERIAL_TOTAL_MAX_BYTES} 字节限制`);
     }
     return {
-      source_id: `src-${sha256Buffer(Buffer.from(material.content, "utf8")).slice(0, 10)}`,
+      source_id: `src-${materialBodySha256(Buffer.from(material.content, "utf8")).slice(0, 10)}`,
       original_name: material.name,
       stored_name: MATERIAL_BUNDLE_FILE,
       source_type: material.source_type ?? null,

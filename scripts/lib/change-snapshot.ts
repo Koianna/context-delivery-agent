@@ -8,6 +8,27 @@ export function sha256Buffer(content: Buffer | string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
+/**
+ * 计算 Markdown 材料的"正文"哈希（去除 YAML frontmatter）。
+ *
+ * 目的：材料的去重与 source_id 只跟内容有关，不应受 frontmatter 元信息（task_goal、
+ * source_owner 等）变化影响。产品经理修正元信息不应被误判为"新材料"。
+ *
+ * 若输入不是 Markdown 或没有 frontmatter，退化为对整段内容做 sha256。
+ */
+export function materialBodySha256(content: Buffer | string): string {
+  const text = typeof content === "string" ? content : content.toString("utf-8");
+  const body = stripFrontmatter(text);
+  return sha256Buffer(body);
+}
+
+function stripFrontmatter(text: string): string {
+  if (!text.startsWith("---\n")) return text;
+  const end = text.indexOf("\n---\n", 4);
+  if (end === -1) return text;
+  return text.slice(end + 5);
+}
+
 export function createChangeSnapshot(
   input: ChangeRequestInput,
   taskId: string,
