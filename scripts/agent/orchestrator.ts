@@ -40,6 +40,7 @@ import { recordPrdThinking } from "../record-prd-thinking.js";
 import { recordReplan } from "../record-replan.js";
 import { registerMaterials } from "../register-materials.js";
 import { updateMaterialIngestionArtifact } from "../lib/material-manifest.js";
+import { refreshDraftsReadme } from "../lib/material-index.js";
 import { restoreCancelledChange } from "../restore-change-snapshot.js";
 import {
   defaultPrdRef,
@@ -234,6 +235,7 @@ export class AgentOrchestrator {
       effectiveReportRefs.structuredMaterialRef,
       PROJECT_ROOT,
     );
+    refreshDraftsReadme(state.project_id);
     const analysis = readJson<ContextAnalysisOutput>(assets.contextOutputPath);
     const confirmableProposals = analysis.update_proposals
       .filter((proposal) => proposal.requires_confirmation)

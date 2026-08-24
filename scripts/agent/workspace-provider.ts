@@ -6,6 +6,7 @@ import type { ChangeAnalysisOutput, ChangeRequestInput, ReplanOutput } from "../
 import { PROJECT_ROOT } from "../lib/config.js";
 import { MATERIAL_BUNDLE_FILE, readMaterialBundle, readMaterialContent, writeMaterialBundle, type MaterialBundleEntry } from "../lib/material-bundle.js";
 import { readIngestionMaterialList, upsertMaterialIngestion } from "../lib/material-manifest.js";
+import { refreshDraftsReadme } from "../lib/material-index.js";
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
 import { contextDocumentRef, contextIndexRef, contextIndexPath, safeProjectSlug } from "../lib/project-paths.js";
@@ -305,6 +306,7 @@ export class WorkspaceProvider implements AgentProvider {
       updated_at: nowIso,
       materials: entries.map(({ content: _content, ...entry }) => entry),
     }, this.projectId);
+    refreshDraftsReadme(this.projectId);
     return projectDir;
   }
 

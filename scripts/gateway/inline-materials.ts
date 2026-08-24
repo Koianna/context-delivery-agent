@@ -3,6 +3,7 @@ import { materialBodySha256 } from "../lib/change-snapshot.js";
 import { PROJECT_ROOT } from "../lib/config.js";
 import { MATERIAL_BUNDLE_FILE, writeMaterialBundle, type MaterialBundleEntry } from "../lib/material-bundle.js";
 import { upsertMaterialIngestion, type IngestionMaterialRecord } from "../lib/material-manifest.js";
+import { refreshDraftsReadme } from "../lib/material-index.js";
 import { safeProjectSlug } from "../lib/project-paths.js";
 import type { ExternalAgentMaterial } from "./types.js";
 
@@ -74,6 +75,7 @@ export function writeInlineMaterials(
       stored_name: MATERIAL_BUNDLE_FILE,
     })) as IngestionMaterialRecord[],
   });
+  refreshDraftsReadme(project);
   return targetDir;
 }
 
