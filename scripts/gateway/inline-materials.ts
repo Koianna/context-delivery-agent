@@ -57,11 +57,18 @@ export function writeInlineMaterials(
       content: material.content,
     };
   });
-  writeMaterialBundle(path.join(targetDir, MATERIAL_BUNDLE_FILE), entries);
+  const nowIso = new Date().toISOString();
+  writeMaterialBundle(path.join(targetDir, MATERIAL_BUNDLE_FILE), entries, {
+    task_id: taskId,
+    task_goal: taskGoal,
+    registered_at: nowIso,
+    updated_at: nowIso,
+    project_id: project,
+  });
   upsertMaterialIngestion(project, {
     task_id: taskId,
     task_goal: taskGoal,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso,
     materials: entries.map(({ content: _content, ...manifest }) => ({
       ...manifest,
       stored_name: MATERIAL_BUNDLE_FILE,

@@ -30,9 +30,13 @@ export const PROJECT_ROOT = (() => {
 
 export const RUNTIME_DIR = path.join(PROJECT_ROOT, "runtime");
 export const STATE_MACHINE_DIR = path.join(PROJECT_ROOT, "state-machine");
-// Runtime 中间产物目录（相对 PROJECT_ROOT）。产品经理沉淀区仅保留 context-workspace/，
-// Runtime 过程性产物移入 .cache/agent-runs/，通过 runs:// scheme 引用。
-export const AGENT_RUNS_DIR = ".cache/agent-runs";
+// 项目本地缓存根目录（gitignore）。所有 Runtime 派生产物集中在此，
+// context-workspace/ 只保留产品经理可读的 Markdown。
+export const CACHE_ROOT_DIR = ".cache";
+// Runtime 每次任务的中间产物（分析报告、草稿、候选），通过 runs:// scheme 引用。
+export const AGENT_RUNS_DIR = `${CACHE_ROOT_DIR}/agent-runs`;
+// 项目级派生 manifest 缓存，可从 drafts/<projectId>/source-materials/ 重建。
+export const MANIFESTS_DIR = `${CACHE_ROOT_DIR}/manifests`;
 
 function runtimeFile(filename: string): string {
   return path.join(RUNTIME_DIR, filename);

@@ -291,11 +291,18 @@ export class WorkspaceProvider implements AgentProvider {
         content,
       };
     });
-    writeMaterialBundle(path.join(projectDir, MATERIAL_BUNDLE_FILE), entries);
+    const nowIso = new Date().toISOString();
+    writeMaterialBundle(path.join(projectDir, MATERIAL_BUNDLE_FILE), entries, {
+      task_id: taskId,
+      task_goal: taskGoal,
+      registered_at: nowIso,
+      updated_at: nowIso,
+      project_id: this.projectId,
+    });
     upsertMaterialIngestion(this.projectId, {
       task_id: taskId,
       task_goal: taskGoal,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
       materials: entries.map(({ content: _content, ...entry }) => entry),
     }, this.projectId);
     return projectDir;
