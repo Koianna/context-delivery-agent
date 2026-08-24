@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { PROJECT_ROOT } from "./config.js";
+import { PROJECT_ROOT, AGENT_RUNS_DIR } from "./config.js";
 
 export interface FrontmatterDocument {
   metadata: Record<string, string | string[] | null>;
@@ -8,8 +8,11 @@ export interface FrontmatterDocument {
 }
 
 export function repoRefToPath(ref: string, root = PROJECT_ROOT): string {
+  if (ref.startsWith("runs://")) {
+    return runsRefToPath(ref, root);
+  }
   if (!ref.startsWith("repo://")) {
-    throw new Error(`只支持 repo:// 引用: ${ref}`);
+    throw new Error(`只支持 repo:// 或 runs:// 引用: ${ref}`);
   }
   const relative = ref.slice("repo://".length);
   if (!relative || path.isAbsolute(relative)) {
@@ -23,12 +26,44 @@ export function repoRefToPath(ref: string, root = PROJECT_ROOT): string {
   return resolved;
 }
 
+function runsRefToPath(ref: string, root: string): string {
+  const relative = ref.slice("runs://".length);
+  if (!relative || path.isAbsolute(relative)) {
+    throw new Error(`非法运行引用: ${ref}`);
+  }
+  const resolvedRoot = path.resolve(root);
+  const runsBase = path.resolve(resolvedRoot, AGENT_RUNS_DIR);
+  const resolved = path.resolve(runsBase, relative);
+  if (resolved !== runsBase && !resolved.startsWith(runsBase + path.sep)) {
+    throw new Error(`运行引用越界: ${ref}`);
+  }
+  return resolved;
+}
+
 export function pathToRepoRef(filePath: string, root = PROJECT_ROOT): string {
-  const relative = path.relative(path.resolve(root), path.resolve(filePath));
+  const resolvedRoot = path.resolve(root);
+  const runsBase = path.resolve(resolvedRoot, AGENT_RUNS_DIR);
+  const absPath = path.resolve(filePath);
+  if (absPath === runsBase || absPath.startsWith(runsBase + path.sep)) {
+    const runsRel = path.relative(runsBase, absPath);
+    return `runs://${runsRel.split(path.sep).join("/")}`;
+  }
+  const relative = path.relative(resolvedRoot, absPath);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`路径不在仓库内: ${filePath}`);
   }
   return `repo://${relative.split(path.sep).join("/")}`;
+}
+
+/** 生成 runs:// ref 的辅助函数，供 Runtime 内部使用。 */
+export function runsRef(...segments: string[]): string {
+  const joined = segments.join("/").replace(/^\/+/, "");
+  return `runs://${joined}`;
+}
+
+/** 返回 <PROJECT_ROOT>/.cache/agent-runs/<...segments> 的绝对路径。 */
+export function agentRunsPath(...segments: string[]): string {
+  return path.join(PROJECT_ROOT, AGENT_RUNS_DIR, ...segments);
 }
 
 export function readJson<T>(filePath: string): T {

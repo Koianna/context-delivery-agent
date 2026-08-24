@@ -30,6 +30,9 @@ export const PROJECT_ROOT = (() => {
 
 export const RUNTIME_DIR = path.join(PROJECT_ROOT, "runtime");
 export const STATE_MACHINE_DIR = path.join(PROJECT_ROOT, "state-machine");
+// Runtime 中间产物目录（相对 PROJECT_ROOT）。产品经理沉淀区仅保留 context-workspace/，
+// Runtime 过程性产物移入 .cache/agent-runs/，通过 runs:// scheme 引用。
+export const AGENT_RUNS_DIR = ".cache/agent-runs";
 
 function runtimeFile(filename: string): string {
   return path.join(RUNTIME_DIR, filename);
