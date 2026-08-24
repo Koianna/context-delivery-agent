@@ -17,6 +17,29 @@ const STABLE_ACTIONS = new Set(["PROMOTE_TO_CONTEXT", "UPDATE_CONTEXT", "MARK_SU
 const ACTIONS = new Set(["WRITE_DRAFT", "WRITE_WORKSPACE", ...STABLE_ACTIONS, "UPDATE_INDEX", "FIX_REFERENCE", "NO_ACTION"]);
 const STABLE_CONTEXT_REF = /^repo:\/\/context-workspace\/context\/[a-z0-9][a-z0-9_-]{0,63}\/(?:product|users|business-rules|glossary)\/.+$/;
 
+const QUOTE_CHAR_MAP: Record<string, string> = {
+  "“": "\"", "”": "\"", "„": "\"", "‟": "\"",
+  "‘": "'",  "’": "'",  "‚": "'",  "‛": "'",
+  "«": "\"", "»": "\"",
+  "〈": "<",  "〉": ">",
+  "《": "<",  "》": ">",
+  "「": "\"", "」": "\"",
+  "『": "\"", "』": "\"",
+};
+
+/**
+ * quote 匹配前的形态归一化：Unicode NFC + 引号族折叠 + 空白折叠。
+ * LLM 生成 JSON 时常把中文引号归一化为英文/转义引号、把连续空白改写；
+ * 这里在不放松"必须来自原文"的前提下，消除机械形态偏差。
+ */
+export function normalizeForQuoteMatch(input: string): string {
+  return input
+    .normalize("NFC")
+    .replace(/[“”„‟‘’‚‛«»〈〉《》「」『』]/g, (ch) => QUOTE_CHAR_MAP[ch] ?? ch)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function validateMaterialOutput(
   input: MaterialIngestInput,
   output: MaterialIngestOutput,
@@ -92,7 +115,9 @@ function validateInformationItem(
         continue;
       }
       const content = readMaterialContent(source, root);
-      if (!content.includes(evidence.quote)) errors.push(`${item.item_id} 的 quote 未出现在来源中`);
+      if (!normalizeForQuoteMatch(content).includes(normalizeForQuoteMatch(evidence.quote))) {
+        errors.push(`${item.item_id} 的 quote 未出现在来源中`);
+      }
     } catch (error) {
       errors.push(`${item.item_id} 读取来源文件失败: ${error instanceof Error ? error.message : String(error)}`);
     }
