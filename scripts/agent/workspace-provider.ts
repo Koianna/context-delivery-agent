@@ -9,7 +9,7 @@ import { readIngestionMaterialList, upsertMaterialIngestion } from "../lib/mater
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
 import { contextDocumentRef, contextIndexRef, contextIndexPath, safeProjectSlug } from "../lib/project-paths.js";
-import { incrementPatch, parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { agentRunsPath, incrementPatch, parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { writeStructuredMaterial } from "./structured-material.js";
@@ -61,7 +61,7 @@ export class WorkspaceProvider implements AgentProvider {
   }
 
   getContextReportRefs(taskId: string, structuredMaterialPath?: string) {
-    const base = `repo://context-workspace/workspace/agent-runs/${safeSlug(taskId)}`;
+    const base = `runs://${safeSlug(taskId)}`;
     const name = structuredMaterialPath ? path.basename(structuredMaterialPath) : this.existingStructuredMaterialName(taskId);
     return {
       materialReportRef: `${base}/reports/material-analysis.json`,
@@ -74,7 +74,7 @@ export class WorkspaceProvider implements AgentProvider {
   async getPrdAssets(taskId: string, phase: PrdProviderPhase = "REFERENCE", context: PrdProviderContext = {}): Promise<PrdProviderAssets> {
     const slug = safeSlug(taskId);
     const outputDir = this.outputDir(slug);
-    const base = `repo://context-workspace/workspace/agent-runs/${slug}`;
+    const base = `runs://${slug}`;
     const prdRef = `repo://context-workspace/workspace/prd/${safeSlug(this.projectId)}-${slug}.md`;
     const reportRefs = this.getPrdReportRefs(taskId);
     const sourceRefs = this.ensurePrdSources(slug, base);
@@ -206,7 +206,7 @@ export class WorkspaceProvider implements AgentProvider {
   }
 
   getPrdReportRefs(taskId: string) {
-    const base = `repo://context-workspace/workspace/agent-runs/${safeSlug(taskId)}`;
+    const base = `runs://${safeSlug(taskId)}`;
     return { thinkingRef: `${base}/reports/prd-thinking.json`, ledgerRef: `${base}/decisions/decision-ledger.json`, reviewRef: `${base}/reports/prd-review.json` };
   }
 
@@ -506,7 +506,7 @@ export class WorkspaceProvider implements AgentProvider {
   private existingStructuredMaterialName(taskId: string): string {
     const dir = this.outputDir(safeSlug(taskId));
     if (fs.existsSync(path.join(dir, "meeting-note.md"))) return "meeting-note.md";
-    const runDir = path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", safeSlug(taskId), "materials");
+    const runDir = agentRunsPath(safeSlug(taskId), "materials");
     return fs.existsSync(path.join(runDir, "meeting-note.md")) ? "meeting-note.md" : "structured-materials.md";
   }
 }

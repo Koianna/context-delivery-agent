@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
+import { agentRunsPath } from "../scripts/lib/repository.js";
 import { isolateRuntime } from "./runtime-isolation.js";
 
 isolateRuntime(PROJECT_ROOT);
@@ -87,7 +88,7 @@ function clear() {
     path.join(PROJECT_ROOT, "context-workspace/drafts", projectId),
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskId),
+    agentRunsPath(taskId),
   ]) fs.rmSync(target, { recursive: true, force: true });
 }
 function check(caseId: string, passed: boolean, detail: string) { return { case_id: caseId, passed, detail }; }

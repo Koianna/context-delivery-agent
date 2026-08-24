@@ -3,7 +3,7 @@ import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
-import { repoRefToPath } from "../scripts/lib/repository.js";
+import { agentRunsPath, repoRefToPath } from "../scripts/lib/repository.js";
 import { isolateRuntime } from "./runtime-isolation.js";
 
 isolateRuntime(PROJECT_ROOT);
@@ -114,7 +114,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
   const slug = dynamicTaskId.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   const changeId = `change-target-unavailable-${slug}`.slice(0, 80);
   for (const target of [
-    path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", slug),
+    agentRunsPath(slug),
     path.join(PROJECT_ROOT, "context-workspace/drafts", projectId),
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId, "materials"),

@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { PROJECT_ROOT } from "../scripts/lib/config.js";
-import { parseFrontmatter, readJson, renderFrontmatter, repoRefToPath, writeTextAtomic } from "../scripts/lib/repository.js";
+import { agentRunsPath, parseFrontmatter, readJson, renderFrontmatter, repoRefToPath, writeTextAtomic } from "../scripts/lib/repository.js";
 import { updateIndex } from "../scripts/update-index.js";
 import type { ContextAnalysisOutput } from "../scripts/lib/context-types.js";
 import { isolateRuntime } from "./runtime-isolation.js";
@@ -53,7 +53,7 @@ async function main() {
     const proposal = pending.confirmation?.items[0];
     const workspaceRef = typeof proposal?.workspace_ref === "string" ? proposal.workspace_ref : null;
     const candidateRef = typeof proposal?.content_ref === "string" ? proposal.content_ref : null;
-    const reportPath = repoRefToPath(`repo://context-workspace/workspace/agent-runs/${taskId}/reports/context-analysis.json`, PROJECT_ROOT);
+    const reportPath = repoRefToPath(`runs://${taskId}/reports/context-analysis.json`, PROJECT_ROOT);
     if (!fs.existsSync(reportPath)) throw new Error(`局部更新未生成分析报告: ${JSON.stringify(pending)}`);
     const report = readJson<ContextAnalysisOutput>(reportPath);
     const unchangedBeforeConfirm = parseFrontmatter(fs.readFileSync(targetPath, "utf-8"));
@@ -120,8 +120,8 @@ function clear() {
   for (const target of [
     path.join(PROJECT_ROOT, "context-workspace/context", projectId),
     path.join(PROJECT_ROOT, "context-workspace/workspace/projects", projectId),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskId),
-    path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", archiveTaskId),
+    agentRunsPath(taskId),
+    agentRunsPath(archiveTaskId),
     path.join(PROJECT_ROOT, "runtime/provider-output"),
   ]) {
     fs.rmSync(target, { recursive: true, force: true });

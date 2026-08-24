@@ -25,7 +25,7 @@ import {
 import type { ContextAnalysisOutput, ContextProposal } from "../lib/context-types.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
 import type { ChangeAnalysisOutput } from "../lib/change-types.js";
-import { parseFrontmatter, pathToRepoRef, readJson, renderFrontmatter, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { agentRunsPath, parseFrontmatter, pathToRepoRef, readJson, renderFrontmatter, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import { loadLocalEnv } from "../lib/env.js";
 import { inspectModelProviderConfig } from "../lib/model-provider-config.js";
 import { contextIndexRef, contextRootPath } from "../lib/project-paths.js";
@@ -1399,7 +1399,7 @@ function buildSectionMove(state: TaskState, target: ContextTarget, message: stri
   if (!sourceRefs.length) throw new Error(`稳定 Context 缺少 source_refs，不能执行局部更新: ${target.targetRef}`);
   const taskSlug = safeArtifactName(state.task_id);
   const fileSlug = safeArtifactName(id);
-  const candidatePath = path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskSlug, "candidates", `context-update-${fileSlug}.md`);
+  const candidatePath = agentRunsPath(taskSlug, "candidates", `context-update-${fileSlug}.md`);
   const workspacePath = path.join(PROJECT_ROOT, "context-workspace/workspace/projects", state.project_id, "context-pending", taskSlug, `${fileSlug}.md`);
   const candidateRef = pathToRepoRef(candidatePath, PROJECT_ROOT);
   const workspaceRef = pathToRepoRef(workspacePath, PROJECT_ROOT);

@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
-import { repoRefToPath } from "../scripts/lib/repository.js";
+import { agentRunsPath, repoRefToPath } from "../scripts/lib/repository.js";
 import { isolateRuntime } from "./runtime-isolation.js";
 
 isolateRuntime(PROJECT_ROOT);
@@ -75,10 +75,10 @@ function clean() {
   for (const project of [projectId, `${projectId}-retry`]) {
     for (const target of [
       path.join(PROJECT_ROOT, "context-workspace/drafts", project),
-      path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskOne),
-      path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskTwo),
-      path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", taskThree),
-      path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs", blockedTask),
+      agentRunsPath(taskOne),
+      agentRunsPath(taskTwo),
+      agentRunsPath(taskThree),
+      agentRunsPath(blockedTask),
       path.join(PROJECT_ROOT, "context-workspace/workspace/projects", project),
     ]) fs.rmSync(target, { recursive: true, force: true });
   }

@@ -5,7 +5,7 @@ import { AgentOrchestrator } from "../scripts/agent/orchestrator.js";
 import { WorkspaceProvider } from "../scripts/agent/workspace-provider.js";
 import { writeInlineMaterials } from "../scripts/gateway/inline-materials.js";
 import { PROJECT_ROOT, readTaskState } from "../scripts/lib/config.js";
-import { repoRefToPath } from "../scripts/lib/repository.js";
+import { agentRunsPath, repoRefToPath } from "../scripts/lib/repository.js";
 import { registerMaterials } from "../scripts/register-materials.js";
 import { safeProjectSlug } from "../scripts/lib/project-paths.js";
 import { isolateRuntime } from "./runtime-isolation.js";
@@ -204,12 +204,12 @@ function clear() {
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-paragraph-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-format-eval"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/drafts/workspace-feedback-format-eval"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-phone-feedback-demo"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-confirmed-context-demo"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-paragraph-meeting-demo"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-format-meeting-demo"), { recursive: true, force: true });
+  fs.rmSync(agentRunsPath("workspace-phone-feedback-demo"), { recursive: true, force: true });
+  fs.rmSync(agentRunsPath("workspace-confirmed-context-demo"), { recursive: true, force: true });
+  fs.rmSync(agentRunsPath("workspace-paragraph-meeting-demo"), { recursive: true, force: true });
+  fs.rmSync(agentRunsPath("workspace-format-meeting-demo"), { recursive: true, force: true });
   fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/projects/workspace-feedback-format-eval"), { recursive: true, force: true });
-  fs.rmSync(path.join(PROJECT_ROOT, "context-workspace/workspace/agent-runs/workspace-feedback-format-demo"), { recursive: true, force: true });
+  fs.rmSync(agentRunsPath("workspace-feedback-format-demo"), { recursive: true, force: true });
 }
 
 main().catch((error) => {
