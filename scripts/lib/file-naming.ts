@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { MaterialInput } from "./context-types.js";
+import { findSemanticMatch } from "./semantic-matcher.js";
+import type { TargetLayer } from "./layer-router.js";
 
 /**
  * 文件命名工具 - 参照 context-engineer 原则
@@ -240,19 +242,124 @@ export function sanitizeFileName(name: string): string {
 
 /**
  * 决定文件操作（创建 vs 追加）
+ *
+ * 增强版：支持语义匹配
  */
-export function decideFileAction(
+export async function decideFileAction(
   fileName: string,
   projectId: string,
   isTemporal: boolean,
-  targetLayer: 'drafts' | 'workspace',
+  targetLayer: TargetLayer,
+  root: string,
+  options?: {
+    topic?: string;                    // 新增：主题（用于语义匹配）
+    enableSemanticMatch?: boolean;     // 新增：启用语义匹配
+    semanticThreshold?: number;        // 新增：语义相似度阈值
+    appendThresholdDays?: number;      // 新增：追加阈值天数
+  }
+): Promise<FileDecision> {
+  const {
+    topic = '',
+    enableSemanticMatch = false,
+    semanticThreshold = 0.7,
+    appendThresholdDays = 7
+  } = options || {};
+
+  const basePath = path.join(
+    root,
+    'context-workspace',
+    targetLayer,
+    targetLayer === 'workspace' ? `projects/${projectId}` : projectId
+  );
+
+  const targetPath = path.join(basePath, fileName);
+
+  // 1. 精确文件名匹配
+  if (fs.existsSync(targetPath)) {
+    // 时间性内容 → 创建新文件
+    if (isTemporal) {
+      const uniquePath = makeUniqueFileName(targetPath);
+      return {
+        action: 'create',
+        targetPath: uniquePath,
+        reason: '时间性内容，每次独立记录'
+      };
+    }
+
+    // 持久性内容 → 检查时间间隔
+    const stats = fs.statSync(targetPath);
+    const daysSince = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
+
+    if (daysSince < appendThresholdDays) {
+      return {
+        action: 'append',
+        targetPath,
+        existingPath: targetPath,
+        reason: `精确匹配，${Math.round(daysSince)} 天内更新过，追加新内容`
+      };
+    }
+
+    // 超过阈值 → 创建新文件
+    return {
+      action: 'create',
+      targetPath,
+      reason: `距上次更新已 ${Math.round(daysSince)} 天，创建新版本`
+    };
+  }
+
+  // 2. 语义匹配（新增功能）
+  if (enableSemanticMatch && topic && !isTemporal) {
+    const semanticMatch = await findSemanticMatch(
+      topic,
+      projectId,
+      targetLayer,
+      root,
+      semanticThreshold
+    );
+
+    if (semanticMatch.matchedFile) {
+      const matchedPath = path.join(basePath, semanticMatch.matchedFile);
+
+      // 检查匹配文件的时间间隔
+      if (fs.existsSync(matchedPath)) {
+        const stats = fs.statSync(matchedPath);
+        const daysSince = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
+
+        if (daysSince < appendThresholdDays) {
+          return {
+            action: 'append',
+            targetPath: matchedPath,
+            existingPath: matchedPath,
+            reason: `语义匹配到 ${semanticMatch.matchedFile}（相似度 ${(semanticMatch.similarity * 100).toFixed(0)}%），${Math.round(daysSince)} 天内更新过`
+          };
+        }
+      }
+    }
+  }
+
+  // 3. 无匹配 → 创建新文件
+  return {
+    action: 'create',
+    targetPath,
+    reason: '首次创建此主题的文件'
+  };
+}
+
+/**
+ * 同步版本（向后兼容，不支持语义匹配）
+ */
+export function decideFileActionSync(
+  fileName: string,
+  projectId: string,
+  isTemporal: boolean,
+  targetLayer: TargetLayer,
   root: string
 ): FileDecision {
   const basePath = path.join(
     root,
     'context-workspace',
     targetLayer,
-    targetLayer === 'drafts' ? projectId : `projects/${projectId}/materials`
+    targetLayer === 'workspace' ? `projects/${projectId}` : projectId
   );
 
   const targetPath = path.join(basePath, fileName);
@@ -289,7 +396,7 @@ export function decideFileAction(
     };
   }
 
-  // 4. 超过 7 天 → 需要确认（暂时默认创建新文件）
+  // 4. 超过 7 天 → 创建新文件
   return {
     action: 'create',
     targetPath,
