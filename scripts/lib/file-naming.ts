@@ -1,0 +1,301 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { MaterialInput } from "./context-types.js";
+
+/**
+ * 文件命名工具 - 参照 context-engineer 原则
+ *
+ * 核心规则：
+ * - 时间性内容（会议记录）：{date}-{topic}.md
+ * - 持久性内容（需求整理）：{topic}.md
+ * - 用户友好：可读的文件名，而非 task_id
+ */
+
+export interface FileNamingResult {
+  fileName: string;
+  isTemporal: boolean;
+  contentType: ContentType;
+}
+
+export interface FileDecision {
+  action: 'create' | 'append' | 'confirm';
+  targetPath: string;
+  existingPath?: string;
+  reason: string;
+}
+
+export type ContentType =
+  | 'MEETING_NOTE'
+  | 'USER_FEEDBACK'
+  | 'PRODUCT_REQUIREMENT'
+  | 'DECISION_RECORD'
+  | 'PRODUCT_DOC'
+  | 'TECHNICAL_SPEC'
+  | 'GENERAL';
+
+/**
+ * 生成用户可读的文件名
+ */
+export function generateReadableFileName(
+  materials: MaterialInput[],
+  taskGoal: string,
+  projectId: string,
+  scopeTopic?: string
+): FileNamingResult {
+  const contentType = classifyContentType(materials);
+  const isTemporal = ['MEETING_NOTE', 'DECISION_RECORD'].includes(contentType);
+
+  if (isTemporal) {
+    // 时间性内容：{date}-{topic}.md
+    const date = extractDate(materials);
+    const topic = extractTopic(materials, taskGoal, projectId, scopeTopic);
+    const sanitized = sanitizeFileName(topic);
+
+    const prefix = contentType === 'DECISION_RECORD' ? '决策-' : '';
+    return {
+      fileName: `${date}-${prefix}${sanitized}.md`,
+      isTemporal: true,
+      contentType
+    };
+  }
+
+  // 持久性内容：{topic}.md
+  const topic = extractTopic(materials, taskGoal, projectId, scopeTopic);
+
+  const typeMap: Record<ContentType, string> = {
+    'USER_FEEDBACK': '用户反馈汇总',
+    'PRODUCT_REQUIREMENT': '需求整理',
+    'PRODUCT_DOC': '产品文档',
+    'TECHNICAL_SPEC': '技术规格',
+    'GENERAL': sanitizeFileName(topic),
+    'MEETING_NOTE': '',
+    'DECISION_RECORD': '',
+  };
+
+  return {
+    fileName: typeMap[contentType] + '.md',
+    isTemporal: false,
+    contentType
+  };
+}
+
+/**
+ * 分类内容类型
+ */
+export function classifyContentType(materials: MaterialInput[]): ContentType {
+  const allTypes = materials.map(m => m.source_type?.toUpperCase() || '');
+  const allNames = materials.map(m => m.name?.toLowerCase() || '');
+  const combined = [...allTypes, ...allNames].join(' ');
+
+  if (/MEETING|会议|纪要|kick.*off|讨论会/i.test(combined)) {
+    return 'MEETING_NOTE';
+  }
+
+  if (/USER_FEEDBACK|用户反馈|反馈汇总|客服反馈/i.test(combined)) {
+    return 'USER_FEEDBACK';
+  }
+
+  if (/PRODUCT_REQUIREMENT|PRD|需求文档|产品需求/i.test(combined)) {
+    return 'PRODUCT_REQUIREMENT';
+  }
+
+  if (/DECISION|决策|会议决定|讨论结论/i.test(combined)) {
+    return 'DECISION_RECORD';
+  }
+
+  if (/PRODUCT_DOC|产品文档|功能说明/i.test(combined)) {
+    return 'PRODUCT_DOC';
+  }
+
+  if (/TECHNICAL|技术规格|架构设计/i.test(combined)) {
+    return 'TECHNICAL_SPEC';
+  }
+
+  return 'GENERAL';
+}
+
+/**
+ * 从材料中提取日期
+ */
+export function extractDate(materials: MaterialInput[]): string {
+  // 1. 从 source_time 提取（最可靠）
+  for (const material of materials) {
+    if (material.source_time) {
+      const match = material.source_time.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) return match[1];
+    }
+  }
+
+  // 2. 从 material.name 中提取日期模式
+  for (const material of materials) {
+    const name = material.name || '';
+
+    // 模式 1: 2026-08-20
+    const iso = name.match(/(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+
+    // 模式 2: 2026年8月20日
+    const chinese = name.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+    if (chinese) {
+      const [, year, month, day] = chinese;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+
+    // 模式 3: 08/20/2026
+    const slash = name.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (slash) {
+      const [, month, day, year] = slash;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+  }
+
+  // 3. 使用当前日期
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * 从材料中提取主题
+ */
+export function extractTopic(
+  materials: MaterialInput[],
+  taskGoal: string,
+  projectId: string,
+  scopeTopic?: string
+): string {
+  // 1. 从 task_goal 提取（最准确）
+  if (taskGoal && taskGoal !== '整理项目材料') {
+    const cleaned = cleanTopicFromGoal(taskGoal);
+    if (cleaned) return cleaned;
+  }
+
+  // 2. 从 analysis_scope.topic 提取
+  if (scopeTopic && scopeTopic !== projectId) {
+    return scopeTopic;
+  }
+
+  // 3. 从第一个材料的名称提取
+  if (materials.length > 0) {
+    const firstMaterial = materials[0];
+    const cleaned = cleanMaterialName(firstMaterial.name);
+    if (cleaned && cleaned.length > 2) return cleaned;
+  }
+
+  // 4. 从 project_id 推断
+  return inferTopicFromProjectId(projectId);
+}
+
+function cleanTopicFromGoal(goal: string): string {
+  return goal
+    .replace(/^(整理|分析|归纳|维护|更新|记录|讨论)\s*/g, '')
+    .replace(/材料$/g, '')
+    .replace(/的$/g, '')
+    .trim();
+}
+
+function cleanMaterialName(name: string): string {
+  return name
+    .replace(/^\d{4}-\d{2}-\d{2}[-_]?/g, '')
+    .replace(/[-_]?\d{4}-\d{2}-\d{2}$/g, '')
+    .replace(/^(\d+)[-.)、]?\s*/g, '')
+    .replace(/\.(md|txt|markdown)$/i, '')
+    .trim();
+}
+
+function inferTopicFromProjectId(projectId: string): string {
+  const map: Record<string, string> = {
+    'knowledge-qa-assistant': '知识库问答助手',
+    'prd-review-agent': 'PRD审核助手',
+  };
+  return map[projectId] || projectId.replace(/-/g, ' ');
+}
+
+/**
+ * 清理文件名中的非法字符
+ */
+export function sanitizeFileName(name: string): string {
+  return name
+    .replace(/[\/\\:*?"<>|]/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/[，。！？；、]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+}
+
+/**
+ * 决定文件操作（创建 vs 追加）
+ */
+export function decideFileAction(
+  fileName: string,
+  projectId: string,
+  isTemporal: boolean,
+  targetLayer: 'drafts' | 'workspace',
+  root: string
+): FileDecision {
+  const basePath = path.join(
+    root,
+    'context-workspace',
+    targetLayer,
+    targetLayer === 'drafts' ? projectId : `projects/${projectId}/materials`
+  );
+
+  const targetPath = path.join(basePath, fileName);
+
+  // 1. 文件不存在 → 创建
+  if (!fs.existsSync(targetPath)) {
+    return {
+      action: 'create',
+      targetPath,
+      reason: '首次创建此主题的文件'
+    };
+  }
+
+  // 2. 时间性内容 → 永远创建新文件
+  if (isTemporal) {
+    const uniquePath = makeUniqueFileName(targetPath);
+    return {
+      action: 'create',
+      targetPath: uniquePath,
+      reason: '时间性内容，每次独立记录'
+    };
+  }
+
+  // 3. 持久性内容 → 检查时间间隔
+  const stats = fs.statSync(targetPath);
+  const daysSince = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
+
+  if (daysSince < 7) {
+    return {
+      action: 'append',
+      targetPath,
+      existingPath: targetPath,
+      reason: `最近 ${Math.round(daysSince)} 天内更新过，追加新内容`
+    };
+  }
+
+  // 4. 超过 7 天 → 需要确认（暂时默认创建新文件）
+  return {
+    action: 'create',
+    targetPath,
+    reason: `距上次更新已 ${Math.round(daysSince)} 天，创建新版本`
+  };
+}
+
+/**
+ * 生成唯一文件名（处理冲突）
+ */
+export function makeUniqueFileName(filePath: string): string {
+  const dir = path.dirname(filePath);
+  const ext = path.extname(filePath);
+  const base = path.basename(filePath, ext);
+
+  let counter = 2;
+  let uniquePath = filePath;
+
+  while (fs.existsSync(uniquePath)) {
+    uniquePath = path.join(dir, `${base}-${counter}${ext}`);
+    counter++;
+  }
+
+  return uniquePath;
+}

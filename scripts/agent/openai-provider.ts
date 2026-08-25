@@ -122,7 +122,7 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
       auto_actions: [],
       remaining_questions: generated.remaining_questions,
     });
-    const artifactRef = this.publishedStructuredMaterialRef(taskId, path.basename(assets.structuredMaterialPath));
+    const artifactRef = pathToRepoRef(assets.structuredMaterialPath, PROJECT_ROOT);
     if (renderUserFeedbackLines(input, PROJECT_ROOT).length) {
       writeStructuredMaterial(input, materialOutput, assets.structuredMaterialPath, PROJECT_ROOT, artifactRef);
     } else {

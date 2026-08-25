@@ -1,7 +1,8 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { MaterialIngestInput, MaterialIngestOutput, MaterialInput } from "../lib/context-types.js";
 import { readMaterialContent } from "../lib/material-bundle.js";
-import { parseFrontmatter, pathToRepoRef, writeTextAtomic } from "../lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, writeTextAtomic, renderFrontmatter, incrementPatch } from "../lib/repository.js";
 
 interface MaterialSegment {
   speaker: string | null;
@@ -20,7 +21,15 @@ export function writeStructuredMaterial(
   targetPath: string,
   root: string,
   artifactRef = pathToRepoRef(targetPath, root),
+  mode: 'create' | 'append' = 'create',
+  taskId?: string,
 ): string {
+  // 如果是追加模式且文件存在
+  if (mode === 'append' && fs.existsSync(targetPath)) {
+    return appendToStructuredMaterial(input, _output, targetPath, root, artifactRef, taskId);
+  }
+
+  // 创建新文件
   const isMeeting = input.materials.some((material) =>
     /MEETING|会议|纪要|记录/i.test(`${material.source_type} ${material.name}`)
   );
@@ -50,7 +59,7 @@ export function writeStructuredMaterial(
     sections.get("来源材料")?.push(formatSourceMaterial(material, index, content, artifactRef));
   }
 
-  const body = [
+  const bodyContent = [
     `# ${title}`,
     "",
     "> 本文件由项目 Runtime 生成。内容只对原始材料做结构化整理，不把用户反馈自动升级为产品需求，也不替代人工决策。",
@@ -75,7 +84,104 @@ export function writeStructuredMaterial(
     "原始材料已由 Runtime 登记到 `context-workspace/drafts/`，本整理稿不替换原文。",
     "",
   ].join("\n");
-  writeTextAtomic(targetPath, body);
+
+  // 添加 frontmatter
+  const metadata: Record<string, string | string[] | null> = {
+    artifact_id: `${input.project_id || input.workspace_slug || 'default'}-materials`,
+    version: '0.1.0',
+    project_id: input.project_id || input.workspace_slug || 'default-project',
+    content_type: isMeeting ? 'MEETING_NOTE' : 'GENERAL',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    task_history: taskId ? [
+      JSON.stringify({
+        task_id: taskId,
+        updated_at: new Date().toISOString(),
+        material_count: input.materials.length,
+        summary: input.task_goal
+      })
+    ] : [],
+    source_refs: input.materials.map(m => m.content_ref),
+  };
+
+  const fullContent = renderFrontmatter(metadata, bodyContent);
+  writeTextAtomic(targetPath, fullContent);
+  return pathToRepoRef(targetPath, root);
+}
+
+/**
+ * 追加内容到现有的结构化材料文件
+ */
+function appendToStructuredMaterial(
+  input: MaterialIngestInput,
+  _output: MaterialIngestOutput,
+  targetPath: string,
+  root: string,
+  artifactRef: string,
+  taskId?: string,
+): string {
+  // 1. 读取现有文件
+  const existingContent = fs.readFileSync(targetPath, 'utf-8');
+  const { metadata, body } = parseFrontmatter(existingContent);
+
+  // 2. 更新元数据
+  const existingTaskHistory = Array.isArray(metadata.task_history)
+    ? metadata.task_history.map(item => {
+        try {
+          return typeof item === 'string' ? JSON.parse(item) : item;
+        } catch {
+          return item;
+        }
+      })
+    : [];
+
+  const existingSourceRefs = Array.isArray(metadata.source_refs)
+    ? metadata.source_refs
+    : [];
+
+  const updatedMetadata: Record<string, string | string[] | null> = {
+    ...metadata,
+    version: incrementPatch(typeof metadata.version === 'string' ? metadata.version : '0.1.0'),
+    updated_at: new Date().toISOString(),
+    task_history: [
+      ...existingTaskHistory.map(item => typeof item === 'string' ? item : JSON.stringify(item)),
+      JSON.stringify({
+        task_id: taskId || 'unknown',
+        updated_at: new Date().toISOString(),
+        material_count: input.materials.length,
+        summary: input.task_goal
+      })
+    ],
+    source_refs: [
+      ...existingSourceRefs,
+      ...input.materials.map(m => m.content_ref)
+    ],
+  };
+
+  // 3. 生成增量章节
+  const date = new Date().toISOString().split('T')[0];
+  const incrementalSection = [
+    `---`,
+    ``,
+    `## 更新记录 - ${date}`,
+    taskId ? `> 任务 ID: ${taskId}` : '',
+    ``,
+    `### 新增材料`,
+    ...input.materials.map((m, i) => `${i + 1}. ${m.name}（${m.source_type || '未分类'}）`),
+    ``,
+    `### 新增内容摘要`,
+    ``,
+    `本次补充了 ${input.materials.length} 份材料，主要内容：${input.task_goal}`,
+    ``,
+  ].filter(Boolean).join('\n');
+
+  // 4. 合并内容
+  const updatedBody = `${body.trim()}\n\n${incrementalSection}`;
+
+  // 5. 写回文件
+  const updatedContent = renderFrontmatter(updatedMetadata, updatedBody);
+  writeTextAtomic(targetPath, updatedContent);
+
   return pathToRepoRef(targetPath, root);
 }
 
