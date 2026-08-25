@@ -17,27 +17,21 @@ const STABLE_ACTIONS = new Set(["PROMOTE_TO_CONTEXT", "UPDATE_CONTEXT", "MARK_SU
 const ACTIONS = new Set(["WRITE_DRAFT", "WRITE_WORKSPACE", ...STABLE_ACTIONS, "UPDATE_INDEX", "FIX_REFERENCE", "NO_ACTION"]);
 const STABLE_CONTEXT_REF = /^repo:\/\/context-workspace\/context\/[a-z0-9][a-z0-9_-]{0,63}\/(?:product|users|business-rules|glossary)\/.+$/;
 
-const QUOTE_CHAR_MAP: Record<string, string> = {
-  "“": "\"", "”": "\"", "„": "\"", "‟": "\"",
-  "‘": "'",  "’": "'",  "‚": "'",  "‛": "'",
-  "«": "\"", "»": "\"",
-  "〈": "<",  "〉": ">",
-  "《": "<",  "》": ">",
-  "「": "\"", "」": "\"",
-  "『": "\"", "』": "\"",
-};
-
 /**
- * quote 匹配前的形态归一化：Unicode NFC + 引号族折叠 + 空白折叠。
- * LLM 生成 JSON 时常把中文引号归一化为英文/转义引号、把连续空白改写；
- * 这里在不放松"必须来自原文"的前提下，消除机械形态偏差。
+ * quote 匹配前的形态归一化：Unicode NFC + 仅保留文字/数字字符。
+ *
+ * LLM 生成 JSON 时常见的纯格式偏差（均不应判定为"quote 不在来源中"）：
+ *   - 中文引号/书名号被归一化为英文引号或转义引号
+ *   - 列表符号（●）被删除、多行内容被合并成一句
+ *   - 换行 / 全角空格 / 连续空白被折叠或改写
+ * 这里把两侧统一规约为"文字序列"，仅消除上述格式偏差，字符内容仍需逐字
+ * 存在于来源中，不放松防幻觉的语义约束。
  */
 export function normalizeForQuoteMatch(input: string): string {
   return input
     .normalize("NFC")
-    .replace(/[“”„‟‘’‚‛«»〈〉《》「」『』]/g, (ch) => QUOTE_CHAR_MAP[ch] ?? ch)
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .toLowerCase();
 }
 
 export function validateMaterialOutput(
