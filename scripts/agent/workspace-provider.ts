@@ -16,6 +16,9 @@ import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProvid
 import { writeStructuredMaterial } from "./structured-material.js";
 import { generateReadableFileName, decideFileAction } from "../lib/file-naming.js";
 import { updateProjectIndex, updateRootIndex } from "../lib/index-generator.js";
+import { classifyContent } from "../lib/content-classifier.js";
+import { routeToLayer } from "../lib/layer-router.js";
+import { DEFAULT_CONFIG, mergeConfig, type IngestConfig } from "../lib/ingest-config.js";
 
 /**
  * 通用工作区 Provider：负责把用户材料接入当前项目，并提供可校验的保守基线输出。
@@ -31,12 +34,20 @@ export class WorkspaceProvider implements AgentProvider {
     this.projectId = safeProjectSlug(projectId);
   }
 
-  async getContextAssets(materialPath?: string, taskId = "task", taskGoal = "整理项目材料"): Promise<{
+  async getContextAssets(
+    materialPath?: string,
+    taskId = "task",
+    taskGoal = "整理项目材料",
+    config?: Partial<IngestConfig>
+  ): Promise<{
     inputPath: string;
     materialOutputPath: string;
     contextOutputPath: string;
     structuredMaterialPath: string;
   }> {
+    // 合并配置
+    const ingestConfig = mergeConfig(config);
+
     const slug = safeSlug(taskId);
     const outputDir = this.outputDir(slug);
     const inputPath = path.join(outputDir, "material-ingest.input.json");
@@ -50,6 +61,20 @@ export class WorkspaceProvider implements AgentProvider {
     writeJsonAtomic(materialOutputPath, materialOutput);
     writeJsonAtomic(contextOutputPath, contextOutput);
 
+    // 新增：智能内容分类
+    const classificationResult = await classifyContent(
+      input.materials,
+      ingestConfig.classification.use_ai_assist
+    );
+
+    // 新增：智能层级路由
+    const routingDecision = routeToLayer(
+      input.materials,
+      classificationResult,
+      taskGoal,
+      ingestConfig.routing.enable_smart_routing
+    );
+
     // 使用新的文件命名逻辑
     const namingResult = generateReadableFileName(
       input.materials,
@@ -59,12 +84,18 @@ export class WorkspaceProvider implements AgentProvider {
     );
 
     // 决定文件操作：创建新文件还是追加到现有文件
-    const fileDecision = decideFileAction(
+    const fileDecision = await decideFileAction(
       namingResult.fileName,
       this.projectId,
       namingResult.isTemporal,
-      'drafts',  // 材料初次整理放在 drafts 层级
-      PROJECT_ROOT
+      routingDecision.layer,  // 使用智能路由的结果
+      PROJECT_ROOT,
+      {
+        topic: namingResult.fileName.replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/\.md$/, ''),
+        enableSemanticMatch: ingestConfig.file_decision.enable_semantic_match,
+        semanticThreshold: ingestConfig.file_decision.semantic_threshold,
+        appendThresholdDays: ingestConfig.file_decision.append_threshold_days
+      }
     );
 
     // 写入到最终目标路径
@@ -79,17 +110,19 @@ export class WorkspaceProvider implements AgentProvider {
     );
 
     // 更新索引文件
-    try {
-      const workspaceRoot = path.join(PROJECT_ROOT, 'context-workspace');
+    if (ingestConfig.indexing.auto_update) {
+      try {
+        const workspaceRoot = path.join(PROJECT_ROOT, 'context-workspace');
 
-      // 更新项目目录索引（drafts/{project_id}/CLAUDE.md）
-      updateProjectIndex(this.projectId, 'drafts', workspaceRoot);
+        // 更新项目目录索引
+        updateProjectIndex(this.projectId, routingDecision.layer, workspaceRoot);
 
-      // 更新根索引（context-workspace/CLAUDE.md）
-      updateRootIndex(workspaceRoot);
-    } catch (error) {
-      // 索引更新失败不应阻塞主流程
-      console.error('索引更新失败:', error);
+        // 更新根索引
+        updateRootIndex(workspaceRoot);
+      } catch (error) {
+        // 索引更新失败不应阻塞主流程
+        console.error('索引更新失败:', error);
+      }
     }
 
     // 同时在运行时目录保存一份副本（用于调试和追踪）
