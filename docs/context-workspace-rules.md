@@ -514,13 +514,9 @@ updated_at: 2026-08-22T14:30:00Z
 
 ---
 
-## 十一、参考资料
-
-- **context-engineer**: https://github.com/LeeFinn2025/context-engineer.git
 - **核心原则**: 内容优先、用户可读、智能合并、生命周期管理
 - **实现代码**: `scripts/lib/file-naming.ts`, `scripts/agent/structured-material.ts`
 
 ---
 
-**更新历史**：
-- 2026-08-25: 初始版本，基于 context-engineer 重构完成
+
