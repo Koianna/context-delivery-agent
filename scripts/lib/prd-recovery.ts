@@ -10,6 +10,7 @@ import {
   repoRefToPath,
   writeJsonAtomic,
 } from "./repository.js";
+import { PRD_RECOVERY_DIR, PROJECT_ROOT } from "./config.js";
 
 export interface PrdRecoveryEntry {
   task_id: string;
@@ -183,7 +184,7 @@ export function ensureCurrentPrdIntegrity(
 }
 
 function findRecoveryEntry(state: TaskState, prdRef: string, root: string): PrdRecoveryEntry | undefined {
-  const recoveryBase = path.join(root, "context-workspace/workspace/prd-recovery");
+  const recoveryBase = path.join(root, PRD_RECOVERY_DIR);
   if (!fs.existsSync(recoveryBase)) return undefined;
   const manifests = fs.readdirSync(recoveryBase, { withFileTypes: true })
     .filter((item) => item.isDirectory())
@@ -235,7 +236,7 @@ function readMatchingReview(reviewRef: string | undefined, version: string, root
 }
 
 function recoveryRootPath(artifactId: string, root: string): string {
-  return path.join(root, "context-workspace/workspace/prd-recovery", safeSlug(artifactId));
+  return path.join(root, PRD_RECOVERY_DIR, safeSlug(artifactId));
 }
 
 function safeSlug(value: string): string {

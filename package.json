@@ -12,6 +12,7 @@
     "model:check": "node --import tsx scripts/check-model-provider.ts",
     "state:transition": "node --import tsx scripts/transition-state.ts",
     "runtime:init": "node --import tsx scripts/get-state.ts --init",
+    "cleanup:prd-recovery": "node --import tsx scripts/cleanup-prd-recovery.ts",
     "context:register": "node --import tsx scripts/register-materials.ts --input evaluation/fixtures/material-ingest.input.json",
     "context:validate-material": "node --import tsx scripts/validate-skill-output.ts --skill material-ingest --input evaluation/fixtures/material-ingest.input.json --output evaluation/fixtures/expected-outputs/material-ingest.output.json",
     "context:validate-analysis": "node --import tsx scripts/validate-skill-output.ts --skill context-maintain --material-output evaluation/fixtures/expected-outputs/material-ingest.output.json --output evaluation/fixtures/expected-outputs/context-maintain.analysis.json",

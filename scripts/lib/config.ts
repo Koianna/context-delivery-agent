@@ -37,6 +37,8 @@ export const CACHE_ROOT_DIR = ".cache";
 export const AGENT_RUNS_DIR = `${CACHE_ROOT_DIR}/agent-runs`;
 // 项目级派生 manifest 缓存，可从 drafts/<projectId>/source-materials/ 重建。
 export const MANIFESTS_DIR = `${CACHE_ROOT_DIR}/manifests`;
+// PRD 恢复快照根目录，用于灾难恢复和完整性校验。
+export const PRD_RECOVERY_DIR = `${CACHE_ROOT_DIR}/prd-recovery`;
 
 function runtimeFile(filename: string): string {
   return path.join(RUNTIME_DIR, filename);

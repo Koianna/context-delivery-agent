@@ -8,7 +8,6 @@ runtime/pending-confirmations.json
 runtime/task-events.jsonl
 runtime/provider-output/
 .cache/
-context-workspace/workspace/prd-recovery/
 context-workspace/workspace/reports/change-impact-agent-*.json
 context-workspace/workspace/snapshots/change-target-unavailable-agent-*/
 
