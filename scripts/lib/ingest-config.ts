@@ -34,6 +34,12 @@ export interface IngestConfig {
     include_summary: boolean;         // 包含文件摘要
   };
 
+  // 模板系统（新增）
+  template: {
+    enable_flexible_template: boolean;  // 启用灵活模板
+    use_seven_sections_default: boolean; // 默认使用7章节
+  };
+
   // 用户交互
   confirmation: {
     require_layer: boolean;           // 层级路由确认
@@ -64,6 +70,10 @@ export const DEFAULT_CONFIG: IngestConfig = {
     auto_update: true,                // 自动更新索引
     include_summary: true
   },
+  template: {
+    enable_flexible_template: false,  // 默认不启用灵活模板
+    use_seven_sections_default: true  // 使用7章节
+  },
   confirmation: {
     require_layer: false,             // 默认不需要确认
     require_filename: false,
@@ -93,6 +103,10 @@ export const RECOMMENDED_CONFIG: IngestConfig = {
     auto_update: true,
     include_summary: true
   },
+  template: {
+    enable_flexible_template: true,   // 启用灵活模板
+    use_seven_sections_default: false
+  },
   confirmation: {
     require_layer: false,             // 关键决策点确认
     require_filename: false,
@@ -120,6 +134,10 @@ export function mergeConfig(userConfig: Partial<IngestConfig> = {}): IngestConfi
     indexing: {
       ...DEFAULT_CONFIG.indexing,
       ...userConfig.indexing
+    },
+    template: {
+      ...DEFAULT_CONFIG.template,
+      ...userConfig.template
     },
     confirmation: {
       ...DEFAULT_CONFIG.confirmation,
