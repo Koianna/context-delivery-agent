@@ -295,7 +295,7 @@ function clearAgentArtifacts(dynamicTaskId: string) {
   ]) {
     fs.rmSync(target, { recursive: true, force: true });
   }
-  for (const directory of ["plans", "snapshots"]) {
+  for (const directory of ["plans", "snapshots", "prd-recovery"]) {
     const target = path.join(PROJECT_ROOT, "context-workspace/workspace", directory);
     if (fs.existsSync(target) && fs.readdirSync(target).length === 0) fs.rmdirSync(target);
   }

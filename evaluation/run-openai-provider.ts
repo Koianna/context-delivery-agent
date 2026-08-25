@@ -281,6 +281,8 @@ function clearRuntime(taskId: string, projectId: string): void {
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd", `${projectId}-${taskId}.md`),
     path.join(PROJECT_ROOT, "context-workspace/workspace/prd-recovery", `prd-${projectId}`),
   ]) fs.rmSync(target, { recursive: true, force: true });
+  const prdRecovery = path.join(PROJECT_ROOT, "context-workspace/workspace/prd-recovery");
+  if (fs.existsSync(prdRecovery) && fs.readdirSync(prdRecovery).length === 0) fs.rmdirSync(prdRecovery);
 }
 
 function check(caseId: string, passed: boolean, detail: string): Result {
