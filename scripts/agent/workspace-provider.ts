@@ -15,6 +15,7 @@ import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { writeStructuredMaterial } from "./structured-material.js";
 import { generateReadableFileName, decideFileAction } from "../lib/file-naming.js";
+import { updateProjectIndex, updateRootIndex } from "../lib/index-generator.js";
 
 /**
  * 通用工作区 Provider：负责把用户材料接入当前项目，并提供可校验的保守基线输出。
@@ -76,6 +77,20 @@ export class WorkspaceProvider implements AgentProvider {
       fileDecision.action === 'append' ? 'append' : 'create',
       taskId,
     );
+
+    // 更新索引文件
+    try {
+      const workspaceRoot = path.join(PROJECT_ROOT, 'context-workspace');
+
+      // 更新项目目录索引（drafts/{project_id}/CLAUDE.md）
+      updateProjectIndex(this.projectId, 'drafts', workspaceRoot);
+
+      // 更新根索引（context-workspace/CLAUDE.md）
+      updateRootIndex(workspaceRoot);
+    } catch (error) {
+      // 索引更新失败不应阻塞主流程
+      console.error('索引更新失败:', error);
+    }
 
     // 同时在运行时目录保存一份副本（用于调试和追踪）
     const structuredName = namingResult.isTemporal ? "meeting-note.md" : "structured-materials.md";
