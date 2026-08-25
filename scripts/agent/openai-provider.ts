@@ -6,7 +6,7 @@ import { readMaterialContent } from "../lib/material-bundle.js";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import { loadLocalEnv } from "../lib/env.js";
 import type { ConfirmedDecisionLedger, PrdReviewTemplate, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
-import { parseFrontmatter, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { OpenAIResponsesClient } from "./openai-client.js";
