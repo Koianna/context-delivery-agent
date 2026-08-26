@@ -1,9 +1,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { TargetLayer } from "./layer-router.js";
+import { RuleEngine } from "./rule-engine.js";
 
 /**
  * 语义匹配器 - 找到与新材料主题相关的现有文件
+ *
+ * 重构说明：
+ * - 停用词已提取到 skills/material-ingest/references/stopwords.txt
+ * - 使用规则引擎读取停用词
+ * - 用户修改停用词文件即可调整匹配行为
  *
  * 策略：
  * 1. 基于文件名的字符串相似度（快速、无成本）
@@ -14,6 +20,24 @@ export interface SemanticMatchResult {
   matchedFile: string | null;
   similarity: number;  // 0-1
   reason: string;
+}
+
+// 全局规则引擎实例（懒加载）
+let ruleEngineInstance: RuleEngine | null = null;
+
+/**
+ * 获取或创建规则引擎实例
+ */
+async function getRuleEngine(): Promise<RuleEngine> {
+  if (!ruleEngineInstance) {
+    const projectRoot = process.cwd();
+    const rulesDir = path.join(projectRoot, 'skills', 'material-ingest', 'references');
+
+    ruleEngineInstance = new RuleEngine(rulesDir);
+    await ruleEngineInstance.loadRules();
+  }
+
+  return ruleEngineInstance;
 }
 
 /**
@@ -54,7 +78,7 @@ export async function findSemanticMatch(
     // 移除日期前缀（如果是时间性内容）
     const cleanFileName = fileName.replace(/^\d{4}-\d{2}-\d{2}-?/, '');
 
-    const score = calculateStringSimilarity(newTopic, cleanFileName);
+    const score = await calculateStringSimilarity(newTopic, cleanFileName);
 
     if (score > bestScore) {
       bestScore = score;
@@ -86,10 +110,10 @@ export async function findSemanticMatch(
  * - 计算两个词集合的交集和并集
  * - 相似度 = 交集大小 / 并集大小
  */
-function calculateStringSimilarity(str1: string, str2: string): number {
+async function calculateStringSimilarity(str1: string, str2: string): Promise<number> {
   // 分词：转小写，按空格、连字符、下划线分割
-  const tokens1 = tokenize(str1);
-  const tokens2 = tokenize(str2);
+  const tokens1 = await tokenize(str1);
+  const tokens2 = await tokenize(str2);
 
   const set1 = new Set(tokens1);
   const set2 = new Set(tokens2);
@@ -109,34 +133,18 @@ function calculateStringSimilarity(str1: string, str2: string): number {
 }
 
 /**
- * 分词：将字符串拆分为词语
+ * 分词：将字符串拆分为词语（使用规则引擎的停用词）
  */
-function tokenize(str: string): string[] {
+async function tokenize(str: string): Promise<string[]> {
+  const engine = await getRuleEngine();
+  const stopwords = engine.getStopwords();
+
   return str
     .toLowerCase()
     .replace(/[，。！？；、]/g, ' ')  // 中文标点替换为空格
     .split(/[\s\-_]+/)  // 按空格、连字符、下划线分割
     .filter(token => token.length > 0)  // 过滤空字符串
-    .filter(token => !isStopWord(token));  // 过滤停用词
-}
-
-/**
- * 停用词判断（常见的无意义词）
- */
-function isStopWord(word: string): boolean {
-  const stopWords = new Set([
-    // 中文停用词
-    '的', '了', '和', '是', '在', '有', '我', '你', '他', '她', '它',
-    '这', '那', '个', '们', '与', '及', '或', '等', '中', '内',
-    // 英文停用词
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'be', 'been',
-    // 动词（整理、记录等）
-    '整理', '记录', '分析', '讨论', '总结', '归纳',
-    'organize', 'record', 'analyze', 'discuss', 'summary'
-  ]);
-
-  return stopWords.has(word);
+    .filter(token => !stopwords.has(token));  // 使用规则引擎的停用词
 }
 
 /**
@@ -183,4 +191,18 @@ export function calculateEditSimilarity(str1: string, str2: string): number {
   if (maxLen === 0) return 1;
 
   return 1 - (distance / maxLen);
+}
+
+/**
+ * 预加载规则引擎（推荐在应用启动时调用）
+ */
+export async function preloadRuleEngine(): Promise<void> {
+  await getRuleEngine();
+}
+
+/**
+ * 重置规则引擎（用于测试或重新加载规则）
+ */
+export function resetRuleEngine(): void {
+  ruleEngineInstance = null;
 }

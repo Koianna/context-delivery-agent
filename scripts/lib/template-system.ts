@@ -1,27 +1,24 @@
 import type { ContentType } from "./file-naming.js";
 import type { MaterialInput } from "./context-types.js";
+import { RuleEngine } from "./rule-engine.js";
+import * as path from "node:path";
 
 /**
- * 模板系统 - 根据内容类型选择合适的模板
+ * 模板系统 - 使用规则引擎
  *
- * 参照 context-engineer 的 templates.md，提供多种模板
- * 同时保留7章节结构作为默认模板
+ * 重构说明：
+ * - 模板定义已提取到 skills/material-ingest/references/templates/
+ * - 本模块只负责调用规则引擎获取模板
+ * - 用户修改模板文件即可调整输出格式
  */
 
-// MaterialSegment 的临时定义（避免循环依赖）
-export interface MaterialSegment {
-  content: string;
-  index: number;
-  material: MaterialInput;
-}
-
 export type TemplateType =
-  | 'meeting-notes'       // 会议记录
-  | 'user-feedback'       // 用户反馈
-  | 'decision-record'     // 决策记录
-  | 'prd'                 // 产品需求文档
-  | 'technical-spec'      // 技术规格
-  | 'seven-sections';     // 默认7章节（保留现有）
+  | 'meeting-notes'
+  | 'user-feedback'
+  | 'decision-record'
+  | 'prd'
+  | 'technical-spec'
+  | 'seven-sections';
 
 export interface TemplateConfig {
   type: TemplateType;
@@ -34,127 +31,104 @@ export interface TemplateSection {
   description?: string;
 }
 
+// 全局规则引擎实例（懒加载）
+let ruleEngineInstance: RuleEngine | null = null;
+
 /**
- * 根据内容类型选择模板
+ * 获取或创建规则引擎实例
  */
-export function selectTemplate(contentType: ContentType): TemplateConfig {
-  switch (contentType) {
-    case 'MEETING_NOTE':
-      return MEETING_NOTES_TEMPLATE;
+async function getRuleEngine(): Promise<RuleEngine> {
+  if (!ruleEngineInstance) {
+    const projectRoot = process.cwd();
+    const rulesDir = path.join(projectRoot, 'skills', 'material-ingest', 'references');
 
-    case 'USER_FEEDBACK':
-      return USER_FEEDBACK_TEMPLATE;
-
-    case 'DECISION_RECORD':
-      return DECISION_RECORD_TEMPLATE;
-
-    case 'PRODUCT_REQUIREMENT':
-      return PRD_TEMPLATE;
-
-    case 'TECHNICAL_SPEC':
-      return TECHNICAL_SPEC_TEMPLATE;
-
-    default:
-      return SEVEN_SECTIONS_TEMPLATE;
+    ruleEngineInstance = new RuleEngine(rulesDir);
+    await ruleEngineInstance.loadRules();
   }
+
+  return ruleEngineInstance;
 }
 
 /**
- * 会议记录模板
+ * 内容类型到模板类型的映射
  */
-const MEETING_NOTES_TEMPLATE: TemplateConfig = {
-  type: 'meeting-notes',
-  title: '会议记录',
-  sections: [
-    { heading: '会议概要', description: '会议时间、参与人员、会议主题' },
-    { heading: '关键讨论', description: '讨论的主要议题和观点' },
-    { heading: '决策事项', description: '会议中达成的决策和结论' },
-    { heading: '行动项', description: '待办事项、负责人、截止时间' },
-    { heading: '未决问题', description: '需要后续确认或讨论的问题' },
-    { heading: '补充说明', description: 'AI理解所需的背景信息' }
-  ]
-};
+function contentTypeToTemplateType(contentType: ContentType): TemplateType {
+  const mapping: Record<ContentType, TemplateType> = {
+    'MEETING_NOTE': 'meeting-notes',
+    'USER_FEEDBACK': 'user-feedback',
+    'DECISION_RECORD': 'decision-record',
+    'PRODUCT_REQUIREMENT': 'prd',
+    'TECHNICAL_SPEC': 'technical-spec',
+    'GENERAL': 'seven-sections',
+    'PRODUCT_DOC': 'seven-sections',
+    'DATA': 'seven-sections',
+    'FACT': 'seven-sections',
+    'OBSERVATION': 'seven-sections',
+    'OPINION': 'seven-sections',
+    'PROPOSAL': 'seven-sections',
+    'CONFIRMED_DECISION': 'seven-sections',
+    'OPEN_QUESTION': 'seven-sections',
+    'DEPRECATED_CONTENT': 'seven-sections'
+  };
+
+  return mapping[contentType] || 'seven-sections';
+}
 
 /**
- * 用户反馈模板
+ * 根据内容类型选择模板（使用规则引擎）
+ *
+ * @param contentType 内容类型
+ * @returns 模板配置
  */
-const USER_FEEDBACK_TEMPLATE: TemplateConfig = {
-  type: 'user-feedback',
-  title: '用户反馈汇总',
-  sections: [
-    { heading: '反馈来源', description: '用户类型、渠道、时间范围' },
-    { heading: '问题与痛点', description: '用户遇到的问题和困难' },
-    { heading: '功能需求', description: '用户希望增加的功能' },
-    { heading: '改进建议', description: '用户提出的改进意见' },
-    { heading: '正面反馈', description: '用户认可的功能和体验' },
-    { heading: '优先级评估', description: '反馈频次和影响范围' }
-  ]
-};
+export async function selectTemplate(contentType: ContentType): Promise<TemplateConfig> {
+  const engine = await getRuleEngine();
+
+  // 将内容类型映射到模板类型
+  const templateType = contentTypeToTemplateType(contentType);
+
+  // 从规则引擎获取模板
+  const template = engine.getTemplate(templateType);
+
+  if (!template) {
+    // 如果找不到模板，返回默认的7章节模板
+    const defaultTemplate = engine.getTemplate('seven-sections');
+    if (defaultTemplate) {
+      return {
+        type: 'seven-sections',
+        title: defaultTemplate.title,
+        sections: defaultTemplate.sections
+      };
+    }
+
+    // 如果连默认模板都没有，返回硬编码的备用模板
+    return getFallbackTemplate();
+  }
+
+  return {
+    type: templateType,
+    title: template.title,
+    sections: template.sections
+  };
+}
 
 /**
- * 决策记录模板
+ * 备用模板（当规则引擎无法加载时使用）
  */
-const DECISION_RECORD_TEMPLATE: TemplateConfig = {
-  type: 'decision-record',
-  title: '决策记录',
-  sections: [
-    { heading: '决策背景', description: '为什么需要这个决策' },
-    { heading: '考虑的方案', description: '评估过的各种方案及优缺点' },
-    { heading: '最终决策', description: '选择的方案和理由' },
-    { heading: '影响范围', description: '这个决策的影响和后果' },
-    { heading: '执行计划', description: '如何落地这个决策' },
-    { heading: '后续跟进', description: '需要观察或调整的事项' }
-  ]
-};
-
-/**
- * PRD 模板
- */
-const PRD_TEMPLATE: TemplateConfig = {
-  type: 'prd',
-  title: '产品需求文档',
-  sections: [
-    { heading: '需求背景', description: '为什么做这个功能' },
-    { heading: '目标用户', description: '功能面向的用户群体' },
-    { heading: '核心功能', description: '功能的主要能力和交互' },
-    { heading: '业务规则', description: '功能的约束条件和边界情况' },
-    { heading: '成功指标', description: '如何衡量功能的成功' },
-    { heading: '依赖与风险', description: '技术依赖和潜在风险' }
-  ]
-};
-
-/**
- * 技术规格模板
- */
-const TECHNICAL_SPEC_TEMPLATE: TemplateConfig = {
-  type: 'technical-spec',
-  title: '技术规格',
-  sections: [
-    { heading: '技术概述', description: '技术方案的整体说明' },
-    { heading: '架构设计', description: '系统架构和组件关系' },
-    { heading: '接口定义', description: 'API、数据结构、协议' },
-    { heading: '技术选型', description: '使用的技术栈和理由' },
-    { heading: '性能与安全', description: '性能要求和安全考虑' },
-    { heading: '实施计划', description: '开发步骤和时间安排' }
-  ]
-};
-
-/**
- * 默认7章节模板（保留现有逻辑）
- */
-const SEVEN_SECTIONS_TEMPLATE: TemplateConfig = {
-  type: 'seven-sections',
-  title: '结构化材料整理稿',
-  sections: [
-    { heading: '背景与事实', description: '客观事实、历史背景、当前状态' },
-    { heading: '用户反馈', description: '用户意见、问题、需求' },
-    { heading: '观点与方案', description: '讨论的方案、建议、想法' },
-    { heading: '已确认决策', description: '明确的决定和结论' },
-    { heading: '行动项与分工', description: '待办事项、负责人、时间' },
-    { heading: '风险与待确认', description: '风险点、未决问题' },
-    { heading: '来源材料', description: '原始材料索引' }
-  ]
-};
+function getFallbackTemplate(): TemplateConfig {
+  return {
+    type: 'seven-sections',
+    title: '结构化材料整理稿',
+    sections: [
+      { heading: '背景与事实', description: '客观事实、历史背景、当前状态' },
+      { heading: '用户反馈', description: '用户意见、问题、需求' },
+      { heading: '观点与方案', description: '讨论的方案、建议、想法' },
+      { heading: '已确认决策', description: '明确的决定和结论' },
+      { heading: '行动项与分工', description: '待办事项、负责人、时间' },
+      { heading: '风险与待确认', description: '风险点、未决问题' },
+      { heading: '来源材料', description: '原始材料索引' }
+    ]
+  };
+}
 
 /**
  * 生成模板内容的框架（Markdown格式）
@@ -197,38 +171,38 @@ export function generateTemplateMarkdown(
 }
 
 /**
- * 将材料内容填充到模板中
+ * 预加载规则引擎（推荐在应用启动时调用）
  */
-export function fillTemplate(
-  template: TemplateConfig,
-  segments: MaterialSegment[],
-  classifyFn: (segment: MaterialSegment) => string
-): Map<string, string[]> {
-  const sectionContent = new Map<string, string[]>();
+export async function preloadRuleEngine(): Promise<void> {
+  await getRuleEngine();
+}
 
-  // 初始化所有章节
-  for (const section of template.sections) {
-    sectionContent.set(section.heading, []);
+/**
+ * 重置规则引擎（用于测试或重新加载规则）
+ */
+export function resetRuleEngine(): void {
+  ruleEngineInstance = null;
+}
+
+/**
+ * 同步版本的模板选择（向后兼容，不推荐）
+ */
+export function selectTemplateSync(contentType: ContentType): TemplateConfig {
+  // 如果规则引擎未加载，返回备用模板
+  if (!ruleEngineInstance) {
+    return getFallbackTemplate();
   }
 
-  // 分类并填充内容
-  for (const segment of segments) {
-    const targetSection = classifyFn(segment);
+  const templateType = contentTypeToTemplateType(contentType);
+  const template = ruleEngineInstance.getTemplate(templateType);
 
-    // 映射到模板章节（如果找到对应的）
-    const matchedSection = template.sections.find(s => s.heading === targetSection);
-    if (matchedSection) {
-      const content = sectionContent.get(matchedSection.heading) || [];
-      content.push(segment.content);
-      sectionContent.set(matchedSection.heading, content);
-    } else {
-      // 如果没有匹配的章节，放到第一个章节
-      const firstSection = template.sections[0];
-      const content = sectionContent.get(firstSection.heading) || [];
-      content.push(segment.content);
-      sectionContent.set(firstSection.heading, content);
-    }
+  if (!template) {
+    return getFallbackTemplate();
   }
 
-  return sectionContent;
+  return {
+    type: templateType,
+    title: template.title,
+    sections: template.sections
+  };
 }
