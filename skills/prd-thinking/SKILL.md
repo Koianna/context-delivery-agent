@@ -7,8 +7,8 @@ description: 在编写 PRD 前读取稳定 Context、当前材料和历史决策
 
 ## 工作流
 
-1. 按 `references/writable-rules.md` 读取最小必要 Context、workspace 和历史 PRD。
-2. 生成背景理解卡，区分已确认事实、已确认范围、未决问题和冲突。
+1. 按 Provider 注入的 sources（含 category/maturity）做资料状态分层，生成背景理解卡。
+2. 区分已确认事实、已确认范围、未决问题和冲突。
 3. 将会改变功能、权限、流程或验收的事项拆成决策账本条目。
 4. 评估目标、范围、依赖和阻塞决策，输出 `READY`、`NEEDS_CONFIRMATION` 或 `BLOCKED`。
 5. 最多提出三个优先问题，每个问题说明影响和建议选项。

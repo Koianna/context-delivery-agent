@@ -8,11 +8,11 @@ import { MATERIAL_BUNDLE_FILE, readMaterialBundle, readMaterialContent, writeMat
 import { readIngestionMaterialList, upsertMaterialIngestion } from "../lib/material-manifest.js";
 import { refreshDraftsReadme } from "../lib/material-index.js";
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
-import type { PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
-import { contextDocumentRef, contextIndexRef, contextIndexPath, safeProjectSlug } from "../lib/project-paths.js";
+import type { PrdMaterialClassification, PrdSourceAdoption, PrdSourceCategory, PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
+import { contextDocumentRef, contextIndexRef, contextIndexPath, contextRootPath, materialAnalysisReportRef, prdDirectoryPath, prdFileRef, safeProjectSlug } from "../lib/project-paths.js";
 import { agentRunsPath, incrementPatch, parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
-import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
+import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase, PrdSourceMeta } from "./types.js";
 import { writeStructuredMaterial } from "./structured-material.js";
 import { generateReadableFileName, decideFileAction } from "../lib/file-naming.js";
 import { updateProjectIndex, updateRootIndex } from "../lib/index-generator.js";
@@ -156,7 +156,8 @@ export class WorkspaceProvider implements AgentProvider {
     const base = `runs://${slug}`;
     const prdRef = `repo://context-workspace/workspace/prd/${safeSlug(this.projectId)}-${slug}.md`;
     const reportRefs = this.getPrdReportRefs(taskId);
-    const sourceRefs = this.ensurePrdSources(slug, base);
+    const sourceMetas = this.collectPrdSources(this.projectId, taskId, base);
+    const sourceRefs = sourceMetas.map((s) => s.ref);
     const decisionIds = ["decision_goal", "decision_scope"];
     const thinkingPath = path.join(outputDir, "prd-thinking.json");
     const ledgerPath = path.join(outputDir, "decision-ledger.confirmed.json");
@@ -178,6 +179,13 @@ export class WorkspaceProvider implements AgentProvider {
       background_card: {
         materials_read: sourceRefs,
         source_refs: sourceRefs,
+        material_classification: sourceMetas.map((m) => ({
+          source_ref: m.ref,
+          category: m.category,
+          usage: m.note ?? "作为写前对齐的参考资料",
+          adoption: defaultAdoptionFor(m.category),
+          risk: m.category === "stable_context" || m.category === "decision_ledger" ? undefined : "内容可能未确认或为草稿级，需在决策账本中标注采用方式",
+        })),
         current_state: "当前项目材料已接入工作区，具体业务现状以来源材料为准",
         problem: "待由产品经理确认需要解决的问题和用户价值",
         target_users: ["待从材料和用户判断中确认"],
@@ -281,6 +289,7 @@ export class WorkspaceProvider implements AgentProvider {
         reason: "审核无阻塞项，未核实业务内容保留为待办",
       },
       prdRef,
+      thinkingSourceMeta: sourceMetas,
     };
   }
 
@@ -551,14 +560,58 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  private ensurePrdSources(slug: string, base: string): string[] {
-    const refs = fs.existsSync(contextIndexPath(this.projectId, PROJECT_ROOT))
-      ? [contextIndexRef(this.projectId)]
-      : [];
-    const report = repoRefToPath(`${base}/reports/material-analysis.json`, PROJECT_ROOT);
-    if (!fs.existsSync(report)) writeJsonAtomic(report, { project_id: this.projectId, note: "通用项目尚未完成材料分析，当前以 Context 索引作为输入" });
-    refs.push(pathToRepoRef(report, PROJECT_ROOT));
-    return refs;
+  /**
+   * 收集 prd-thinking 可见的资料并打上分类标签（资料状态分层的输入侧）。
+   * 模型无法自主读文件，检索与组装由 Provider 完成；缺失的文件静默跳过。
+   */
+  private collectPrdSources(projectId: string, taskId: string, base: string): PrdSourceMeta[] {
+    const slug = safeSlug(taskId);
+    const metas: PrdSourceMeta[] = [];
+    // 1. 稳定 Context：context-workspace/context/<projectId>/ 下全部 .md（含 INDEX.md）
+    const ctxRoot = contextRootPath(projectId, PROJECT_ROOT);
+    if (fs.existsSync(ctxRoot)) {
+      for (const file of listMarkdownRecursive(ctxRoot).slice(0, PRD_SOURCE_LIMITS.stable_context)) {
+        const relative = path.relative(ctxRoot, file).replaceAll(path.sep, "/");
+        metas.push({ ref: contextDocumentRef(projectId, relative), category: "stable_context", maturity: "CONFIRMED", note: "稳定 Context（已确认知识）" });
+      }
+    }
+    // 2. 历史 PRD：context-workspace/workspace/prd/ 下 .md，按最近修改优先
+    const prdDir = prdDirectoryPath(PROJECT_ROOT);
+    if (fs.existsSync(prdDir)) {
+      const files = fs.readdirSync(prdDir)
+        .filter((name) => name.endsWith(".md"))
+        .map((name) => path.join(prdDir, name))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)
+        .slice(0, PRD_SOURCE_LIMITS.historical_prd);
+      for (const file of files) {
+        metas.push({ ref: prdFileRef(path.relative(prdDir, file).replaceAll(path.sep, "/")), category: "historical_prd", note: "历史 PRD（草稿级，需核验是否仍有效）" });
+      }
+    }
+    // 3. 材料分析报告：优先本次任务 runs://，缺失时用 workspace 报告
+    const analysisRef = `${base}/reports/material-analysis.json`;
+    if (fs.existsSync(repoRefToPath(analysisRef, PROJECT_ROOT))) {
+      metas.push({ ref: analysisRef, category: "material_analysis", note: "本次材料分析报告（含 maturity 分层）" });
+    } else if (fs.existsSync(repoRefToPath(materialAnalysisReportRef(), PROJECT_ROOT))) {
+      metas.push({ ref: materialAnalysisReportRef(), category: "material_analysis", note: "材料分析报告（fallback）" });
+    }
+    // 4. 用户显式上传的原始材料 bundle（PRD/规划/讨论稿的载体）
+    for (const bundleDir of [`source-materials/${slug}`, `source-materials/${taskId}`]) {
+      const bundleRef = `repo://context-workspace/drafts/${safeProjectSlug(projectId)}/${bundleDir}/materials.md`;
+      if (fs.existsSync(repoRefToPath(bundleRef, PROJECT_ROOT))) {
+        metas.push({ ref: bundleRef, category: "user_material", note: "用户显式上传的原始材料" });
+        break;
+      }
+    }
+    // 5. 已确认决策账本（若已存在）
+    const ledgerRef = `${base}/decisions/decision-ledger.json`;
+    if (fs.existsSync(repoRefToPath(ledgerRef, PROJECT_ROOT))) {
+      metas.push({ ref: ledgerRef, category: "decision_ledger", note: "已确认决策账本" });
+    }
+    if (metas.length === 0) {
+      // 保证至少有一条可消费输入，避免模型面对空 sources
+      metas.push({ ref: materialAnalysisReportRef(), category: "material_analysis", note: "材料分析报告（尚未生成时占位）" });
+    }
+    return metas;
   }
 
   private buildPrdOutput(
@@ -585,7 +638,7 @@ export class WorkspaceProvider implements AgentProvider {
 
   protected outputDir(slug: string) { const dir = path.join(PROJECT_ROOT, "runtime/provider-output", slug); fs.mkdirSync(dir, { recursive: true }); return dir; }
 
-  protected publishedStructuredMaterialRef(taskId: string, fileName: string, fileDecision: ReturnType<typeof decideFileAction>): string {
+  protected publishedStructuredMaterialRef(taskId: string, fileName: string, fileDecision: Awaited<ReturnType<typeof decideFileAction>>): string {
     // 使用文件决策中的目标路径
     return pathToRepoRef(fileDecision.targetPath, PROJECT_ROOT);
   }
@@ -595,6 +648,42 @@ export class WorkspaceProvider implements AgentProvider {
     if (fs.existsSync(path.join(dir, "meeting-note.md"))) return "meeting-note.md";
     const runDir = agentRunsPath(safeSlug(taskId), "materials");
     return fs.existsSync(path.join(runDir, "meeting-note.md")) ? "meeting-note.md" : "structured-materials.md";
+  }
+}
+
+/** prd-thinking 资料收集容量上限（避免模型输入过大） */
+const PRD_SOURCE_LIMITS = {
+  stable_context: 10,
+  historical_prd: 5,
+};
+
+/** 递归收集目录下的 .md 文件（跳过 .gitkeep） */
+function listMarkdownRecursive(dir: string, out: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      listMarkdownRecursive(fullPath, out);
+    } else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== ".gitkeep") {
+      out.push(fullPath);
+    }
+  }
+  return out;
+}
+
+/** 根据资料类型返回默认采用方式（占位 thinking 中使用） */
+function defaultAdoptionFor(category: PrdSourceCategory): PrdSourceAdoption {
+  switch (category) {
+    case "stable_context":
+    case "decision_ledger":
+      return "default_adopt";
+    case "material_analysis":
+    case "historical_prd":
+      return "reference_only";
+    case "user_material":
+      return "needs_confirmation";
+    case "external_standard":
+      return "verify_version";
   }
 }
 

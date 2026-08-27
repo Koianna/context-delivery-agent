@@ -22,6 +22,30 @@ export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_RO
       errors.push(`${decision.decision_id} 标记 CONFIRMED 但没有 human_decision`);
     }
   }
+  // 校验资料状态分层表（material_classification）
+  const classification = output.background_card.material_classification;
+  if (!classification || !Array.isArray(classification)) {
+    errors.push("background_card.material_classification 缺失或非数组");
+  } else {
+    const validCategories = new Set(["stable_context", "historical_prd", "material_analysis", "user_material", "decision_ledger", "external_standard"]);
+    const validAdoptions = new Set(["default_adopt", "reference_only", "needs_confirmation", "verify_version"]);
+    const allSourceRefs = new Set([...output.background_card.materials_read, ...output.background_card.source_refs]);
+    for (const item of classification) {
+      if (!validCategories.has(item.category)) {
+        errors.push(`material_classification 中 category 非法: ${item.category}`);
+      }
+      if (!validAdoptions.has(item.adoption)) {
+        errors.push(`material_classification 中 adoption 非法: ${item.adoption}`);
+      }
+      if (!allSourceRefs.has(item.source_ref)) {
+        errors.push(`material_classification 引用了未在 materials_read/source_refs 中的 ref: ${item.source_ref}`);
+      }
+      // 反自洽：default_adopt 不得落在 user_material/historical_prd
+      if (item.adoption === "default_adopt" && (item.category === "user_material" || item.category === "historical_prd")) {
+        errors.push(`material_classification 反自洽: ${item.source_ref} 为 ${item.category} 但标记为 default_adopt（草稿不能当已上线事实）`);
+      }
+    }
+  }
   for (const ref of [...output.background_card.materials_read, ...output.background_card.source_refs]) {
     validateRepoRef(ref, errors, root);
   }

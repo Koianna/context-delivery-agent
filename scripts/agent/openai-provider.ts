@@ -223,8 +223,12 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
   }
 
   private async generatePrdThinking(assets: PrdProviderAssets): Promise<PrdThinkingModelOutput> {
-    const sourceRefs = readJson<PrdThinkingOutput>(assets.thinkingPath).background_card.source_refs;
-    const sources = readArtifactContents(sourceRefs);
+    const sources = assets.thinkingSourceMeta.map((m) => ({
+      ref: m.ref,
+      category: m.category,
+      maturity: m.maturity ?? null,
+      content: readArtifactContentSafe(m.ref),
+    }));
     return await this.client.generateJson<PrdThinkingModelOutput>({
       name: "prd_thinking",
       schema: PRD_THINKING_SCHEMA,
@@ -452,6 +456,16 @@ function readArtifactContents(refs: string[]): Array<{ ref: string; content: str
       return [];
     }
   });
+}
+
+/** 读取单个资料文件（复用 repoRefToPath 解析，缺失返回 null） */
+function readArtifactContentSafe(ref: string): string | null {
+  try {
+    const file = repoRefToPath(ref, PROJECT_ROOT);
+    return fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : null;
+  } catch {
+    return null;
+  }
 }
 
 function returnStateFor(type: ChangeType): ChangeAnalysisOutput["recommended_return_state"] {

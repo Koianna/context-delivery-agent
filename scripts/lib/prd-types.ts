@@ -1,3 +1,28 @@
+/** 资料状态分层：来源资料的分类（对应 PRD skills.md 的"资料状态分层表"） */
+export type PrdSourceCategory =
+  | "stable_context" // 稳定 Context（已确认知识）
+  | "historical_prd" // 历史 PRD（workspace/prd/，草稿级）
+  | "material_analysis" // 本次材料分析报告（含 maturity 分层）
+  | "user_material" // 用户显式上传的原始材料（PRD/规划/讨论稿）
+  | "decision_ledger" // 已确认决策账本
+  | "external_standard"; // 外部标准或法规资料
+
+/** 资料采用方式 */
+export type PrdSourceAdoption =
+  | "default_adopt" // 默认采用（稳定 Context / 已确认事实）
+  | "reference_only" // 仅作参考
+  | "needs_confirmation" // 需用户确认
+  | "verify_version"; // 需核验版本
+
+/** 资料状态分层表条目（四列：资料 / 类型状态 / 本次用途 / 采用方式与风险） */
+export interface PrdMaterialClassification {
+  source_ref: string;
+  category: PrdSourceCategory;
+  usage: string; // 本次用途
+  adoption: PrdSourceAdoption; // 采用方式
+  risk?: string; // 采用方式与风险
+}
+
 export interface DecisionEntry {
   decision_id: string;
   question: string;
@@ -12,6 +37,7 @@ export interface PrdThinkingOutput {
   background_card: {
     materials_read: string[];
     source_refs: string[];
+    material_classification?: PrdMaterialClassification[];
     [key: string]: unknown;
   };
   decision_ledger: DecisionEntry[];

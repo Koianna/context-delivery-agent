@@ -7,7 +7,27 @@
   "properties": {
     "background_card": {
       "type": "object",
-      "required": ["materials_read", "current_state", "problem", "target_users", "user_scenarios", "upstream_dependencies", "downstream_impacts", "confirmed_scope", "confirmed_out_of_scope", "conflicts", "missing_information", "source_refs"]
+      "required": ["materials_read", "current_state", "problem", "target_users", "user_scenarios", "upstream_dependencies", "downstream_impacts", "confirmed_scope", "confirmed_out_of_scope", "conflicts", "missing_information", "source_refs", "material_classification"],
+      "properties": {
+        "material_classification": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source_ref", "category", "usage", "adoption"],
+            "properties": {
+              "source_ref": {"type": "string"},
+              "category": {
+                "enum": ["stable_context", "historical_prd", "material_analysis", "user_material", "decision_ledger", "external_standard"]
+              },
+              "usage": {"type": "string"},
+              "adoption": {
+                "enum": ["default_adopt", "reference_only", "needs_confirmation", "verify_version"]
+              },
+              "risk": {"type": "string"}
+            }
+          }
+        }
+      }
     },
     "decision_ledger": {
       "type": "array",

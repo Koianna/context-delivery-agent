@@ -44,6 +44,18 @@ seedTempRepository(tempRoot);
 const thinkingErrors = validatePrdThinking(thinking, tempRoot);
 check("PRD-01", thinkingErrors.length === 0 && !(thinking as unknown as Record<string, unknown>).prd_artifact, thinkingErrors.join("; ") || "写前分析有来源且未输出 PRD 正文");
 
+// PRD-01B: 资料状态分层表完整性与反自洽检查
+const classification = thinking.background_card.material_classification;
+const allSourceRefs = new Set([...thinking.background_card.materials_read, ...thinking.background_card.source_refs]);
+const classifiedRefs = new Set(classification?.map((item) => item.source_ref) ?? []);
+const hasDefaultAdoptDraft = classification?.some((item) =>
+  item.adoption === "default_adopt" && (item.category === "user_material" || item.category === "historical_prd")
+) ?? false;
+check("PRD-01B",
+  !!(classification && classification.length > 0 && allSourceRefs.size === classifiedRefs.size && !hasDefaultAdoptDraft),
+  "material_classification 覆盖所有 source_refs 且无 default_adopt 落在 user_material/historical_prd"
+);
+
 const pendingBlocking = thinking.decision_ledger.filter((item) => item.is_blocking && item.status === "PENDING");
 check("PRD-02", pendingBlocking.length === 2 && thinking.writable_assessment.status === "NEEDS_CONFIRMATION", "两个阻塞决策未确认时保持 NEEDS_CONFIRMATION");
 

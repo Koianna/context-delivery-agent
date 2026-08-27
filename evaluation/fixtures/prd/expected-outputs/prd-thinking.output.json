@@ -22,6 +22,40 @@
       "repo://context-workspace/context/product-work/product/solution.md",
       "repo://context-workspace/context/product-work/business-rules/boundary.md",
       "repo://context-workspace/drafts/product-work/用户反馈.md"
+    ],
+    "material_classification": [
+      {
+        "source_ref": "repo://context-workspace/context/product-work/product/current-state.md",
+        "category": "stable_context",
+        "usage": "产品现状基础事实",
+        "adoption": "default_adopt"
+      },
+      {
+        "source_ref": "repo://context-workspace/context/product-work/product/solution.md",
+        "category": "stable_context",
+        "usage": "已确认技术方案",
+        "adoption": "default_adopt"
+      },
+      {
+        "source_ref": "repo://context-workspace/context/product-work/business-rules/boundary.md",
+        "category": "stable_context",
+        "usage": "本期明确边界",
+        "adoption": "default_adopt"
+      },
+      {
+        "source_ref": "repo://context-workspace/drafts/product-work/用户反馈.md",
+        "category": "user_material",
+        "usage": "参考用户反馈趋势",
+        "adoption": "reference_only",
+        "risk": "草稿级用户反馈，需在决策账本中标注采用方式"
+      },
+      {
+        "source_ref": "repo://context-workspace/workspace/decisions/open-questions.md",
+        "category": "decision_ledger",
+        "usage": "待确认决策问题",
+        "adoption": "needs_confirmation",
+        "risk": "包含 PENDING 决策，需用户确认后才能采用"
+      }
     ]
   },
   "decision_ledger": [

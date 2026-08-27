@@ -1,3 +1,4 @@
+import type { PrdSourceCategory } from "../lib/prd-types.js";
 import type { ConfirmationRecord, StateId, TaskState } from "../lib/types.js";
 
 export type AgentIntent = "CONTEXT" | "CONTEXT_REVOKE" | "PRD" | "CHANGE" | "CONTINUE" | "UNKNOWN";
@@ -53,12 +54,21 @@ export interface PrdProviderContext {
   revisionDecisions?: string;
 }
 
+/** 喂给 prd-thinking 的资料来源元数据：ref + 分类 + 已知成熟度 */
+export interface PrdSourceMeta {
+  ref: string;
+  category: PrdSourceCategory;
+  maturity?: string;
+  note?: string;
+}
+
 export interface PrdProviderAssets {
   thinkingPath: string;
   confirmedLedgerPath: string;
   corePath: string;
   detailsPath: string;
   reviewTemplatePath: string;
+  thinkingSourceMeta: PrdSourceMeta[];
   p01: Record<string, unknown>;
   p02: Record<string, unknown>;
   p03: Record<string, unknown>;
