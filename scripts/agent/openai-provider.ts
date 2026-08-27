@@ -145,9 +145,29 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const revisionReviewPath = revisionVersion ? path.join(outputDir, `openai-prd-review-${revisionVersion}.json`) : null;
 
     if (phase === "THINKING" && !fs.existsSync(thinkingPath)) {
-      writeJsonAtomic(thinkingPath, await this.generatePrdThinking(assets));
+      const logPath = '/tmp/prd-thinking-debug.log';
+      fs.appendFileSync(logPath, `\n[${new Date().toISOString()}] 进入 THINKING 分支\n`);
+      fs.appendFileSync(logPath, `thinkingPath = ${thinkingPath}\n`);
+      fs.appendFileSync(logPath, `assets.thinkingPath = ${assets.thinkingPath}\n`);
+      const baselineThinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
+      fs.appendFileSync(logPath, `baseline decision_ledger 长度: ${baselineThinking.decision_ledger.length}\n`);
+      fs.appendFileSync(logPath, `baseline 第一个决策字段: ${Object.keys(baselineThinking.decision_ledger[0] || {}).join(', ')}\n`);
+      const generated = await this.generatePrdThinking(assets);
+      fs.appendFileSync(logPath, `model 生成 decision_questions 长度: ${generated.decision_questions.length}\n`);
+      writeJsonAtomic(thinkingPath, generated);
+      try {
+        applyPrdThinking(generated, baselineThinking, assets, this.projectId);
+        fs.appendFileSync(logPath, `applyPrdThinking 完成\n`);
+        const finalOutput = readJson<PrdThinkingOutput>(assets.thinkingPath);
+        fs.appendFileSync(logPath, `最终文件 decision_ledger[0] 字段: ${Object.keys(finalOutput.decision_ledger[0] || {}).join(', ')}\n`);
+      } catch (error) {
+        fs.appendFileSync(logPath, `ERROR: ${error}\n`);
+        throw error;
+      }
+    } else if (fs.existsSync(thinkingPath)) {
+      const baselineThinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
+      applyPrdThinking(readJson<PrdThinkingModelOutput>(thinkingPath), baselineThinking, assets, this.projectId);
     }
-    if (fs.existsSync(thinkingPath)) applyPrdThinking(readJson<PrdThinkingModelOutput>(thinkingPath), assets, this.projectId);
 
     if (phase === "CORE" && !fs.existsSync(corePath)) {
       if (!fs.existsSync(thinkingPath)) throw new Error("缺少已校验的 PRD 写前分析，不能生成 CORE");
@@ -351,12 +371,16 @@ function normalizeMaterialOutput(input: MaterialIngestInput, items: MaterialInge
   };
 }
 
-function applyPrdThinking(generated: PrdThinkingModelOutput, assets: PrdProviderAssets, projectId: string): void {
-  const baselineThinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
+function applyPrdThinking(generated: PrdThinkingModelOutput, baselineThinking: PrdThinkingOutput, assets: PrdProviderAssets, projectId: string): void {
+  console.log('[DEBUG] applyPrdThinking 被调用');
   const sourceRefs = baselineThinking.background_card.source_refs;
   const decisions = generated.decision_questions.slice(0, 3).map((item, index) => ({
     decision_id: safeId(item.decision_id, `decision-${index + 1}`),
     question: item.question,
+    evidence: [],
+    recommended_option: "待产品经理在 CP-P01 确认",
+    alternative_options: [],
+    impact_scope: ["PRD 写作"],
     status: "PENDING" as const,
     is_blocking: true,
     human_decision: null,
@@ -365,7 +389,12 @@ function applyPrdThinking(generated: PrdThinkingModelOutput, assets: PrdProvider
   if (!decisions.length) throw new Error("模型没有生成 PRD 写前阻塞决策，Runtime 已停止");
   const decisionIds = decisions.map((item) => item.decision_id);
   const thinking: PrdThinkingOutput = {
-    background_card: { ...generated.background_card, materials_read: sourceRefs, source_refs: sourceRefs },
+    background_card: {
+      ...generated.background_card,
+      materials_read: sourceRefs,
+      source_refs: sourceRefs,
+      material_classification: baselineThinking.background_card.material_classification,
+    },
     decision_ledger: decisions,
     writable_assessment: {
       status: "NEEDS_CONFIRMATION",

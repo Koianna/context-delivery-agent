@@ -198,8 +198,8 @@ export class WorkspaceProvider implements AgentProvider {
         missing_information: ["需求目标、范围和关键业务判断"],
       },
       decision_ledger: [
-        { decision_id: "decision_goal", question: "本次要解决的核心问题和目标是什么？", status: "PENDING", is_blocking: true, human_decision: null, source_refs: sourceRefs },
-        { decision_id: "decision_scope", question: "本期范围和明确不做什么是什么？", status: "PENDING", is_blocking: true, human_decision: null, source_refs: sourceRefs },
+        { decision_id: "decision_goal", question: "本次要解决的核心问题和目标是什么？", evidence: [], recommended_option: "待确认", alternative_options: [], impact_scope: ["PRD 范围和目标"], status: "PENDING", is_blocking: true, human_decision: null, source_refs: sourceRefs },
+        { decision_id: "decision_scope", question: "本期范围和明确不做什么是什么？", evidence: [], recommended_option: "待确认", alternative_options: [], impact_scope: ["PRD 范围边界"], status: "PENDING", is_blocking: true, human_decision: null, source_refs: sourceRefs },
       ],
       writable_assessment: {
         status: "NEEDS_CONFIRMATION",
