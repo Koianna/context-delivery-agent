@@ -1,3 +1,4 @@
+import Ajv2020 from "ajv/dist/2020.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROJECT_ROOT } from "./config.js";
@@ -47,3 +48,29 @@ export function readSkillSchema(skillName: string): Record<string, unknown> {
     throw new Error(`解析 Skill schema 失败: ${schemaPath}, ${error}`);
   }
 }
+
+/**
+ * 使用 Ajv 校验 JSON 输出是否符合 schema
+ *
+ * @param skillName - skill 名称
+ * @param output - 待校验的输出对象
+ * @returns 错误列表（空数组表示通过）
+ */
+export function validateWithSchema(skillName: string, output: unknown): string[] {
+  const schema = readSkillSchema(skillName);
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validate = ajv.compile(schema);
+
+  if (validate(output)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  for (const error of validate.errors || []) {
+    const path = error.instancePath || "(root)";
+    const message = error.message || "未知错误";
+    errors.push(`${path}: ${message}（见 skills/${skillName}/schema.json）`);
+  }
+  return errors;
+}
+

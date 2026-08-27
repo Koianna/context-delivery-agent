@@ -5,16 +5,18 @@ import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "./lib/prd-types.js";
 import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath } from "./lib/repository.js";
-import { readSkillConfig, readSkillSchema } from "./lib/skill-config.js";
+import { readSkillConfig, readSkillSchema, validateWithSchema } from "./lib/skill-config.js";
 
 export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_ROOT): string[] {
   const errors: string[] = [];
 
+  // Schema 驱动：使用 Ajv 自动校验类型、枚举、必填字段
+  errors.push(...validateWithSchema("prd-thinking", output));
+
   // 读取 skill 配置（单一事实来源）
   const config = readSkillConfig("prd-thinking");
-  const schema = readSkillSchema("prd-thinking");
 
-  // schema 约束：不得输出 PRD artifact
+  // schema 约束：不得输出 PRD artifact（schema 已禁止此字段，这里额外检查）
   if ((output as unknown as Record<string, unknown>).prd_artifact) {
     errors.push("prd-thinking 不得输出 PRD artifact（违反 schema 定义）");
   }
@@ -47,15 +49,10 @@ export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_RO
     }
   }
 
-  // Schema 驱动：material_classification 枚举和必填检查
-  const classificationSchema = (schema.properties as any).background_card.properties.material_classification;
-  const validCategories = new Set(classificationSchema.items.properties.category.enum as string[]);
-  const validAdoptions = new Set(classificationSchema.items.properties.adoption.enum as string[]);
-
+  // 配置约束：material_classification 反自洽和覆盖检查
+  // 注意：类型、枚举、必填字段已由 Ajv 从 schema 自动校验
   const classification = output.background_card.material_classification;
-  if (!classification || !Array.isArray(classification)) {
-    errors.push("background_card.material_classification 缺失或非数组（违反 schema 必填约束）");
-  } else {
+  if (classification && Array.isArray(classification)) {
     const allSourceRefs = new Set([...output.background_card.materials_read, ...output.background_card.source_refs]);
 
     // 配置约束：material_classification 必须覆盖所有 sources
@@ -68,20 +65,12 @@ export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_RO
     }
 
     for (const item of classification) {
-      // Schema 约束：枚举合法性
-      if (!validCategories.has(item.category)) {
-        errors.push(`material_classification 中 category 非法: ${item.category}（见 schema.json enum）`);
-      }
-      if (!validAdoptions.has(item.adoption)) {
-        errors.push(`material_classification 中 adoption 非法: ${item.adoption}（见 schema.json enum）`);
-      }
-
-      // 引用完整性检查
+      // 引用完整性检查（业务规则，非 schema 约束）
       if (!allSourceRefs.has(item.source_ref)) {
         errors.push(`material_classification 引用了未在 materials_read/source_refs 中的 ref: ${item.source_ref}`);
       }
 
-      // 配置约束：反自洽规则
+      // 配置约束：反自洽规则（业务规则，非 schema 约束）
       for (const rule of matConfig.antiConsistencyRules) {
         if (rule.categories.includes(item.category) && item.adoption === rule.forbiddenAdoption) {
           errors.push(`material_classification 反自洽: ${item.source_ref} 为 ${item.category} 但标记为 ${item.adoption}（${rule.reason}，见 constraints.json）`);
