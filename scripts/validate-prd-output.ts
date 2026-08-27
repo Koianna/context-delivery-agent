@@ -5,44 +5,87 @@ import * as path from "node:path";
 import { PROJECT_ROOT } from "./lib/config.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "./lib/prd-types.js";
 import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath } from "./lib/repository.js";
+import { readSkillConfig, readSkillSchema } from "./lib/skill-config.js";
 
 export function validatePrdThinking(output: PrdThinkingOutput, root = PROJECT_ROOT): string[] {
   const errors: string[] = [];
-  if ((output as unknown as Record<string, unknown>).prd_artifact) errors.push("prd-thinking 不得输出 PRD artifact");
-  if (output.writable_assessment.priority_questions.length > 3) errors.push("优先问题超过 3 个");
-  const pendingBlocking = output.decision_ledger.filter((item) => item.is_blocking && item.status !== "CONFIRMED");
-  if (pendingBlocking.length && output.writable_assessment.status === "READY") {
-    errors.push("存在未确认阻塞决策时不能标记 READY");
+
+  // 读取 skill 配置（单一事实来源）
+  const config = readSkillConfig("prd-thinking");
+  const schema = readSkillSchema("prd-thinking");
+
+  // schema 约束：不得输出 PRD artifact
+  if ((output as unknown as Record<string, unknown>).prd_artifact) {
+    errors.push("prd-thinking 不得输出 PRD artifact（违反 schema 定义）");
   }
+
+  // 配置约束：优先问题上限
+  const maxQuestions = config.maxPriorityQuestions as number;
+  if (output.writable_assessment.priority_questions.length > maxQuestions) {
+    errors.push(`优先问题超过 ${maxQuestions} 个（见 skills/prd-thinking/references/constraints.json）`);
+  }
+
+  // 配置约束：READY 条件
+  const readyConditions = config.readyConditions as { allowBlockingPending: boolean };
+  const pendingBlocking = output.decision_ledger.filter((item) => item.is_blocking && item.status !== "CONFIRMED");
+  if (!readyConditions.allowBlockingPending && pendingBlocking.length && output.writable_assessment.status === "READY") {
+    errors.push("存在未确认阻塞决策时不能标记 READY（见 skills/prd-thinking/references/constraints.json）");
+  }
+
+  // 配置约束：decision_id 去重
+  const decisionConfig = config.decisionLedger as { allowDuplicateIds: boolean; confirmedRequiresHumanDecision: boolean };
   const ids = new Set<string>();
   for (const decision of output.decision_ledger) {
-    if (ids.has(decision.decision_id)) errors.push(`重复 decision_id: ${decision.decision_id}`);
+    if (!decisionConfig.allowDuplicateIds && ids.has(decision.decision_id)) {
+      errors.push(`重复 decision_id: ${decision.decision_id}`);
+    }
     ids.add(decision.decision_id);
-    if (decision.status === "CONFIRMED" && !decision.human_decision) {
+
+    // 配置约束：CONFIRMED 必须有 human_decision
+    if (decisionConfig.confirmedRequiresHumanDecision && decision.status === "CONFIRMED" && !decision.human_decision) {
       errors.push(`${decision.decision_id} 标记 CONFIRMED 但没有 human_decision`);
     }
   }
-  // 校验资料状态分层表（material_classification）
+
+  // Schema 驱动：material_classification 枚举和必填检查
+  const classificationSchema = (schema.properties as any).background_card.properties.material_classification;
+  const validCategories = new Set(classificationSchema.items.properties.category.enum as string[]);
+  const validAdoptions = new Set(classificationSchema.items.properties.adoption.enum as string[]);
+
   const classification = output.background_card.material_classification;
   if (!classification || !Array.isArray(classification)) {
-    errors.push("background_card.material_classification 缺失或非数组");
+    errors.push("background_card.material_classification 缺失或非数组（违反 schema 必填约束）");
   } else {
-    const validCategories = new Set(["stable_context", "historical_prd", "material_analysis", "user_material", "decision_ledger", "external_standard"]);
-    const validAdoptions = new Set(["default_adopt", "reference_only", "needs_confirmation", "verify_version"]);
     const allSourceRefs = new Set([...output.background_card.materials_read, ...output.background_card.source_refs]);
+
+    // 配置约束：material_classification 必须覆盖所有 sources
+    const matConfig = config.materialClassification as { mustCoverAllSources: boolean; antiConsistencyRules: any[] };
+    if (matConfig.mustCoverAllSources) {
+      const classifiedRefs = new Set(classification.map((item) => item.source_ref));
+      if (classifiedRefs.size !== allSourceRefs.size) {
+        errors.push("material_classification 未覆盖所有 source_refs（见 skills/prd-thinking/references/constraints.json）");
+      }
+    }
+
     for (const item of classification) {
+      // Schema 约束：枚举合法性
       if (!validCategories.has(item.category)) {
-        errors.push(`material_classification 中 category 非法: ${item.category}`);
+        errors.push(`material_classification 中 category 非法: ${item.category}（见 schema.json enum）`);
       }
       if (!validAdoptions.has(item.adoption)) {
-        errors.push(`material_classification 中 adoption 非法: ${item.adoption}`);
+        errors.push(`material_classification 中 adoption 非法: ${item.adoption}（见 schema.json enum）`);
       }
+
+      // 引用完整性检查
       if (!allSourceRefs.has(item.source_ref)) {
         errors.push(`material_classification 引用了未在 materials_read/source_refs 中的 ref: ${item.source_ref}`);
       }
-      // 反自洽：default_adopt 不得落在 user_material/historical_prd
-      if (item.adoption === "default_adopt" && (item.category === "user_material" || item.category === "historical_prd")) {
-        errors.push(`material_classification 反自洽: ${item.source_ref} 为 ${item.category} 但标记为 default_adopt（草稿不能当已上线事实）`);
+
+      // 配置约束：反自洽规则
+      for (const rule of matConfig.antiConsistencyRules) {
+        if (rule.categories.includes(item.category) && item.adoption === rule.forbiddenAdoption) {
+          errors.push(`material_classification 反自洽: ${item.source_ref} 为 ${item.category} 但标记为 ${item.adoption}（${rule.reason}，见 constraints.json）`);
+        }
       }
     }
   }
@@ -59,6 +102,11 @@ export function validatePrdWrite(
 ): string[] {
   const errors: string[] = [];
   const artifact = output.prd_artifact;
+
+  // 读取 skill 配置（单一事实来源）
+  const config = readSkillConfig("prd-write", "stage-rules.json");
+  const stages = config.stages as any;
+
   if (!/^\d+\.\d+\.\d+$/.test(artifact.version)) errors.push("PRD version 必须是语义版本");
   if (output.coverage.missing_sections.length) errors.push("PRD 存在缺失必需章节");
   const covered = new Set(output.coverage.covered_sections);
@@ -74,12 +122,23 @@ export function validatePrdWrite(
 
   try {
     const body = parseFrontmatter(fs.readFileSync(repoRefToPath(artifact.content_ref, root), "utf-8")).body;
-    if (artifact.phase === "CORE" && /## (8|9|10)\.|验收标准|角色与权限/.test(body)) {
-      errors.push("CORE 候选提前展开 DETAILS 内容");
+
+    // 配置驱动：CORE 阶段禁止内容检查
+    if (artifact.phase === "CORE") {
+      const coreRules = stages.CORE;
+      const forbiddenPattern = new RegExp(coreRules.forbiddenPattern);
+      if (forbiddenPattern.test(body)) {
+        errors.push(`CORE 候选提前展开 DETAILS 内容（见 skills/prd-write/references/stage-rules.json）`);
+      }
     }
+
+    // 配置驱动：DETAILS/REVISION 必需章节检查
     if (artifact.phase === "DETAILS" || artifact.phase === "REVISION") {
-      for (const heading of ["功能规则", "角色与权限", "边界与异常", "验收标准"]) {
-        if (!body.includes(heading)) errors.push(`${artifact.phase} 缺少章节: ${heading}`);
+      const detailsRules = stages.DETAILS;
+      for (const heading of detailsRules.requiredSections) {
+        if (!body.includes(heading)) {
+          errors.push(`${artifact.phase} 缺少章节: ${heading}（见 skills/prd-write/references/stage-rules.json）`);
+        }
       }
     }
   } catch (error) {
@@ -94,26 +153,49 @@ export function validatePrdReview(
   root = PROJECT_ROOT
 ): string[] {
   const errors: string[] = [];
+
+  // 读取 skill 配置（单一事实来源）
+  const config = readSkillConfig("prd-review", "delivery-rules.json");
+  const deliveryRules = config.deliveryRules as any;
+  const issueReqs = config.issueRequirements as any;
+
   const prd = parseFrontmatter(fs.readFileSync(repoRefToPath(prdRef, root), "utf-8"));
   const hash = crypto.createHash("sha256").update(prd.body).digest("hex");
   if (output.prd_sha256 !== hash) errors.push("审核记录的 PRD hash 与正文不一致");
   if (output.reviewed_prd_version !== prd.metadata.version) errors.push("审核版本与 PRD frontmatter 不一致");
+
   const counts = {
     P0: output.issues.filter((item) => item.severity === "P0").length,
     P1: output.issues.filter((item) => item.severity === "P1").length,
     P2: output.issues.filter((item) => item.severity === "P2").length,
   };
+
   if (counts.P0 !== output.summary.p0_count || counts.P1 !== output.summary.p1_count || counts.P2 !== output.summary.p2_count) {
     errors.push("审核问题计数与 summary 不一致");
   }
+
+  // 配置驱动：问题必需字段检查
   for (const issue of output.issues) {
-    if (!issue.location || !issue.description || !issue.impact || !issue.recommended_fix) {
-      errors.push(`${issue.issue_id} 缺少定位、描述、影响或建议`);
+    const missing = [];
+    if (issueReqs.mustHaveLocation && !issue.location) missing.push("location");
+    if (issueReqs.mustHaveDescription && !issue.description) missing.push("description");
+    if (issueReqs.mustHaveImpact && !issue.impact) missing.push("impact");
+    if (issueReqs.mustHaveRecommendedFix && !issue.recommended_fix) missing.push("recommended_fix");
+
+    if (missing.length > 0) {
+      errors.push(`${issue.issue_id} 缺少字段: ${missing.join(", ")}（见 skills/prd-review/references/delivery-rules.json）`);
     }
   }
-  if ((counts.P0 > 0 || counts.P1 > 0) && ["PASS", "PASS_WITH_NOTES"].includes(output.summary.recommendation)) {
-    errors.push("存在 P0/P1 时不能建议交付");
+
+  // 配置驱动：P0/P1 交付规则检查
+  const hasP0OrP1 = counts.P0 > 0 || counts.P1 > 0;
+  const recommendation = output.summary.recommendation;
+  const allowedWhenP0OrP1 = deliveryRules.allowedRecommendations.whenP0OrP1Exists as string[];
+
+  if (hasP0OrP1 && !allowedWhenP0OrP1.includes(recommendation)) {
+    errors.push(`存在 P0/P1 时不能建议 ${recommendation}（见 skills/prd-review/references/delivery-rules.json）`);
   }
+
   return errors;
 }
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "prd-thinking skill 的业务规则配置（唯一事实来源）",
+  "maxPriorityQuestions": 3,
+  "readyConditions": {
+    "description": "READY 状态的必要条件",
+    "allowBlockingPending": false,
+    "allowNonBlockingPending": true,
+    "comment": "阻塞决策必须全部 CONFIRMED；非阻塞决策可以 PENDING"
+  },
+  "materialClassification": {
+    "description": "资料状态分层的约束规则",
+    "required": true,
+    "mustCoverAllSources": true,
+    "antiConsistencyRules": [
+      {
+        "rule": "default_adopt_not_for_drafts",
+        "description": "草稿（user_material/historical_prd）不能标记为 default_adopt",
+        "categories": ["user_material", "historical_prd"],
+        "forbiddenAdoption": "default_adopt",
+        "reason": "草稿不能当已上线事实"
+      }
+    ]
+  },
+  "decisionLedger": {
+    "allowDuplicateIds": false,
+    "confirmedRequiresHumanDecision": true
+  }
+}

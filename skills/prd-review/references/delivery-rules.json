@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "prd-review skill 的业务规则配置（唯一事实来源）",
+  "deliveryRules": {
+    "blockingConditions": [
+      {
+        "condition": "p0_count > 0",
+        "action": "BLOCK",
+        "reason": "存在 P0 问题时必须修复后才能交付"
+      },
+      {
+        "condition": "p1_count > 0",
+        "action": "BLOCK",
+        "reason": "存在 P1 问题时必须修复后才能交付"
+      }
+    ],
+    "allowedRecommendations": {
+      "whenP0OrP1Exists": ["FIX_BEFORE_DELIVERY", "REPLAN_REQUIRED"],
+      "whenOnlyP2Exists": ["PASS_WITH_NOTES", "FIX_BEFORE_DELIVERY"],
+      "whenNoIssues": ["PASS", "PASS_WITH_NOTES"]
+    }
+  },
+  "reviewDimensions": [
+    {
+      "id": "FACT_STATUS",
+      "name": "事实状态",
+      "description": "事实是否有来源，待确认内容是否被包装成事实"
+    },
+    {
+      "id": "SCOPE",
+      "name": "范围一致性",
+      "description": "本期范围、非目标和正文规则是否一致"
+    },
+    {
+      "id": "COMPLETENESS",
+      "name": "完整性",
+      "description": "关键角色、流程、状态和异常是否足以执行"
+    },
+    {
+      "id": "ACCEPTANCE",
+      "name": "验收可行性",
+      "description": "验收是否可观察、可重复且不依赖主观判断"
+    },
+    {
+      "id": "DEPENDENCY",
+      "name": "依赖关系",
+      "description": "上下游能力、责任人和约束是否明确"
+    },
+    {
+      "id": "CONSISTENCY",
+      "name": "一致性",
+      "description": "章节之间、PRD 与决策之间是否冲突",
+      "subDimensions": [
+        "术语一致性",
+        "交互模式一致性",
+        "信息架构一致性",
+        "设计语言一致性",
+        "组件复用性",
+        "业务规则一致性"
+      ]
+    },
+    {
+      "id": "OVER_DESIGN",
+      "name": "过度设计",
+      "description": "是否加入未经确认的能力或实现细节"
+    }
+  ],
+  "severityLevels": {
+    "P0": {
+      "description": "会导致方向错误、合规风险或完全无法交付",
+      "mustFixBeforeDelivery": true
+    },
+    "P1": {
+      "description": "会造成核心流程错误、范围冲突或无法验收",
+      "mustFixBeforeDelivery": true
+    },
+    "P2": {
+      "description": "局部完整性或表达问题，可由用户决定修复时机",
+      "mustFixBeforeDelivery": false
+    }
+  },
+  "issueRequirements": {
+    "mustHaveLocation": true,
+    "mustHaveDescription": true,
+    "mustHaveImpact": true,
+    "mustHaveRecommendedFix": true
+  },
+  "reductionChecklist": {
+    "description": "减法审查清单（功能必要性评估）",
+    "dimensions": [
+      {
+        "id": "necessity",
+        "question": "如果不做，用户会怎样？",
+        "failSignal": "也能用，就是不太方便"
+      },
+      {
+        "id": "frequency",
+        "question": "用户多久用一次？",
+        "failSignal": "一年用不到几次"
+      },
+      {
+        "id": "user_coverage",
+        "question": "多少比例的用户需要？",
+        "failSignal": "只有个别客户提过"
+      },
+      {
+        "id": "problem_definition",
+        "question": "真的理解用户要解决的问题吗？",
+        "failSignal": "只知道用户说想要 X"
+      },
+      {
+        "id": "alternatives",
+        "question": "有没有更简单的方式？",
+        "failSignal": "没认真想过"
+      },
+      {
+        "id": "timing",
+        "question": "现在是最佳时机吗？",
+        "failSignal": "先做了再说"
+      },
+      {
+        "id": "maintenance_cost",
+        "question": "后续维护成本多少？",
+        "failSignal": "只算了开发成本"
+      }
+    ]
+  }
+}

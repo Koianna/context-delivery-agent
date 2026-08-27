@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "prd-write skill 的业务规则配置（唯一事实来源）",
+  "stages": {
+    "CORE": {
+      "description": "CORE 阶段的章节规则",
+      "requiredSections": [
+        "背景与问题",
+        "产品目标与非目标",
+        "目标用户与场景",
+        "本期范围与明确不做",
+        "核心用户流程",
+        "已确认决策",
+        "待确认信息"
+      ],
+      "forbiddenSections": [
+        "验收标准",
+        "角色与权限",
+        "功能规则",
+        "边界与异常"
+      ],
+      "forbiddenPattern": "## (8|9|10)\\.|验收标准|角色与权限|边界与异常",
+      "checkpoints": [
+        "功能范围是否明确",
+        "核心流程是否完整",
+        "功能逻辑是否清晰"
+      ]
+    },
+    "DETAILS": {
+      "description": "DETAILS 阶段的章节规则",
+      "requiredSections": [
+        "功能规则",
+        "角色与权限",
+        "边界与异常",
+        "验收标准"
+      ],
+      "additionalSections": [
+        "上下游依赖",
+        "数据与效果验证",
+        "发布前待办"
+      ]
+    },
+    "REVISION": {
+      "description": "REVISION 阶段沿用 DETAILS 规则",
+      "inheritsFrom": "DETAILS"
+    }
+  },
+  "writingPrinciples": {
+    "fiveNots": {
+      "description": "五不清单（核心边界约束）",
+      "rules": [
+        {
+          "id": "no_technical_implementation",
+          "title": "不写技术实现",
+          "forbidden": [
+            "具体技术栈（Python, React, SQL）",
+            "架构模式（MCP 工具, 微服务）",
+            "实现细节（API 接口, 数据库表结构、代码片段）",
+            "后端架构模式（ReAct 循环、Tool Calling、两层 LLM）",
+            "系统配置参数（Temperature、MaxTokens、消息保留条数）"
+          ],
+          "principle": "PRD 描述产品行为，不描述实现方案"
+        },
+        {
+          "id": "no_design_parameters",
+          "title": "不写设计参数",
+          "forbidden": [
+            "色号（#FF0000）",
+            "像素间距（20px）",
+            "字体大小（14pt）",
+            "颜色样式",
+            "具体色值"
+          ],
+          "principle": "使用功能性描述（主要操作按钮、警告状态、破坏性操作需醒目提示）"
+        },
+        {
+          "id": "no_skill_code",
+          "title": "不写 Skill / 代码层内容",
+          "forbidden": [
+            "具体 Skill 名称",
+            "Skill 如何修改",
+            "Skill 的实现方式"
+          ],
+          "principle": "PRD 只描述产品要什么能力，不描述代码怎么实现"
+        },
+        {
+          "id": "no_nonsense",
+          "title": "不写废话",
+          "forbidden": [
+            "营销话术",
+            "冗长段落"
+          ],
+          "principle": "多用要点（Bullet points）、表格和清晰的逻辑流"
+        },
+        {
+          "id": "no_artificial_limits",
+          "title": "不设限",
+          "principle": "除非必要，不要人为限制 AI 生成 PRD 结构的创造力"
+        }
+      ]
+    }
+  },
+  "factDiscipline": {
+    "stableContextAsFactWithValidation": true,
+    "humanDecisionAsRequirement": true,
+    "unconfirmedMustBeLabeled": true,
+    "noIndustryAssumptions": true
+  }
+}
