@@ -69,6 +69,8 @@ context/     → 高可信度，已确认的知识
 - 有明确所有者+时间线的任务 → `workspace/`
 - 已确认标记的知识 → `context/`（需人工确认）
 
+**智能路由和索引自动更新可以通过配置关闭**，默认按上述规则执行。
+
 ---
 
 ## 二、目录结构
@@ -135,9 +137,7 @@ default-project 项目的 drafts 层 材料
 - 原始材料保留在 source-materials/ 中
 ```
 
-**自动更新时机**：
-- 每次材料整理后自动更新项目索引和根索引
-- 可通过配置关闭：`indexing: { auto_update: false }`
+**自动更新时机**：每次材料整理后自动更新项目索引和根索引；如需关闭可在配置中关掉「索引自动维护」。
 
 ### 2.3 子目录创建规则
 
@@ -186,9 +186,7 @@ context/
 | TECHNICAL_SPEC | 包含"技术规格"、"架构设计" | medium |
 | GENERAL | 无明确特征 | low |
 
-**AI 辅助分类**（可选）：
-- 规则匹配置信度低时，可调用 AI 辅助判断
-- 配置：`classification: { use_ai_assist: true }`
+**AI 辅助分类**（可选）：当关键词匹配的把握不够时，让 AI 补一次判断。默认关闭；在配置中打开「AI 辅助分类」即可启用。
 
 ### 3.2 智能层级路由
 
@@ -204,30 +202,17 @@ context/
 7. 默认 → drafts（When in doubt, drafts）
 ```
 
-**启用方式**：
-```typescript
-config: {
-  routing: { enable_smart_routing: true }
-}
-```
+**启用方式**：在配置中打开「智能路由」开关（默认关闭，保持保守行为）。
 
 ### 3.3 语义匹配（已实现）
 
-**识别相关主题**：
-- 使用 Jaccard 相似度算法（词集交集/并集）
-- 停用词过滤（"的"、"了"、"整理"等）
-- 相似度阈值：默认 70%
+**识别相关主题**：把文件名当作词集比较，交集越多越可能是同一主题；过滤"的、了、整理"等无意义词；默认相似度达到 70% 才认为同一主题。
 
 **示例**：
 - "需求整理" 和 "产品需求" → 相似度 85% → 识别为同一主题
 - "企业知识库" 和 "知识库问答" → 相似度 75% → 识别为同一主题
 
-**启用方式**：
-```typescript
-config: {
-  file_decision: { enable_semantic_match: true }
-}
-```
+**启用方式**：在配置中打开「语义匹配」开关（默认关闭）。
 
 ---
 
@@ -292,14 +277,9 @@ config: {
    └─ 否 → 创建新文件
 ```
 
-**配置选项**：
-```typescript
-file_decision: {
-  append_threshold_days: 7,          // 追加阈值
-  enable_semantic_match: true,       // 语义匹配
-  semantic_threshold: 0.7            // 相似度阈值
-}
-```
+**配置说明**：
+- 追加阈值：同一文件默认 7 天内追加，超过则新建
+- 语义匹配：默认关闭；启用后按 70% 相似度识别同一主题
 
 ---
 
@@ -322,12 +302,7 @@ file_decision: {
 - 根据内容分类结果自动选择对应模板
 - 默认使用 seven-sections（向后兼容）
 
-**启用方式**：
-```typescript
-config: {
-  template: { enable_flexible_template: true }
-}
-```
+**启用方式**：在配置中打开「灵活模板」开关（默认使用通用 7 章节模板）。
 
 ### 5.2 模板示例
 
@@ -375,18 +350,7 @@ _AI理解所需的背景信息_
    - 重新生成缺失的索引文件
    - 更新不同步的索引内容
 
-**使用方式**：
-```typescript
-import { performMaintenance, autoFixIndexSync } from './scripts/lib/maintain.js';
-
-// 执行检查
-const report = await performMaintenance(workspaceRoot);
-console.log(report.summary);
-
-// 自动修复
-const fixed = await autoFixIndexSync(workspaceRoot);
-console.log(`修复了 ${fixed} 个问题`);
-```
+**使用方式**：Runtime 会在关键时机（例如材料写入完成后）自动执行检查；也可以让 Agent 主动触发"整理一下 workspace 索引"这类维护任务。检查完成后会给出报告，如有可自动修复的问题（缺失索引、不同步索引）会自动补齐。
 
 ### 6.2 维护报告
 
@@ -465,78 +429,26 @@ source_refs:
 
 ## 八、配置系统（已实现）
 
-### 8.1 配置选项
+### 8.1 可调整的行为
 
-```typescript
-interface IngestConfig {
-  // 内容分类
-  classification: {
-    use_ai_assist: boolean;           // 启用AI辅助分类
-    confidence_threshold: number;     // 置信度阈值（0-1）
-  };
+系统提供 6 组开关和参数，让用户按需调整默认行为。全部都有安全的默认值，不动配置也能正常工作。
 
-  // 目录路由
-  routing: {
-    enable_smart_routing: boolean;    // 启用智能路由
-    default_layer: 'drafts' | 'workspace';
-    require_context_confirmation: boolean;
-  };
+| 组别 | 控制什么 | 默认 | 什么时候需要打开 |
+|------|---------|------|----------------|
+| 内容分类 | 规则识别不出类型时是否让 AI 补判 | 关闭 | 材料类型多样、关键词命中率低 |
+| 目录路由 | 是否让系统按内容特征自动决定 drafts/workspace | 关闭（一律进 drafts） | 团队协作场景，有明确所有者的任务多 |
+| 文件决策 | 是否用语义相似度识别"同一主题"的旧文件 | 关闭 | 主题命名不统一，同一话题被切成多个文件 |
+| 索引维护 | 材料变动后是否自动更新 CLAUDE.md 索引 | **开启** | 保持默认即可 |
+| 模板系统 | 是否按内容类型切换专业模板（会议 / 反馈 / PRD 等） | 关闭（用通用 7 章节） | 需要更贴合场景的输出结构 |
+| 用户交互 | 关键动作（路由 / 命名 / 追加）是否要用户确认 | 关闭 | 想让 Runtime 每步都停下等确认 |
 
-  // 文件决策
-  file_decision: {
-    append_threshold_days: number;    // 追加阈值（默认7天）
-    enable_semantic_match: boolean;   // 启用语义匹配
-    semantic_threshold: number;       // 语义相似度阈值（0-1）
-  };
+### 8.2 两种典型模式
 
-  // 索引维护
-  indexing: {
-    auto_update: boolean;             // 自动更新索引
-    include_summary: boolean;         // 包含文件摘要
-  };
+**保守模式（默认）**：全部智能开关关闭，材料统一放 drafts，用通用模板，索引自动维护。适合首次接入、对结果可预测性要求高的场景。
 
-  // 模板系统
-  template: {
-    enable_flexible_template: boolean;    // 启用灵活模板
-    use_seven_sections_default: boolean;  // 默认使用7章节
-  };
+**智能模式（推荐）**：打开内容分类、智能路由、语义匹配、灵活模板四项开关。系统会按内容特征自动决定放哪、追加到哪、用什么模板。适合材料量大、类型多的长期项目。
 
-  // 用户交互
-  confirmation: {
-    require_layer: boolean;           // 层级路由确认
-    require_filename: boolean;        // 文件名确认
-    require_append: boolean;          // 追加操作确认
-  };
-}
-```
-
-### 8.2 默认配置
-
-**完全向后兼容**：
-```typescript
-const DEFAULT_CONFIG = {
-  classification: { use_ai_assist: false },
-  routing: { enable_smart_routing: false },      // 固定 drafts
-  file_decision: { enable_semantic_match: false }, // 不启用
-  indexing: { auto_update: true },               // ✅ 自动更新索引
-  template: { enable_flexible_template: false }, // 使用7章节
-  confirmation: { require_layer: false }
-};
-```
-
-### 8.3 推荐配置
-
-**启用所有智能功能**：
-```typescript
-const RECOMMENDED_CONFIG = {
-  classification: { use_ai_assist: true },
-  routing: { enable_smart_routing: true },       // 智能路由
-  file_decision: { enable_semantic_match: true }, // 语义匹配
-  indexing: { auto_update: true },
-  template: { enable_flexible_template: true },  // 灵活模板
-  confirmation: { require_layer: false }
-};
-```
+配置文件位置：`skills/material-ingest/references/`（详见第十节）。
 
 ---
 
@@ -583,7 +495,7 @@ drafts/knowledge-qa-assistant/
 - project_id: `knowledge-qa-assistant`
 - materials: 会议记录
 - task_goal: "2026-08-20 产品讨论会"
-- config: `{ template: { enable_flexible_template: true } }`
+- 前置：已在配置中打开「灵活模板」
 
 **输出**：
 ```
@@ -601,7 +513,7 @@ drafts/knowledge-qa-assistant/
 - project_id: `new-feature`
 - materials: PRD 文档
 - task_goal: "新功能 PRD，张三负责，本月底完成"
-- config: `{ routing: { enable_smart_routing: true } }`
+- 前置：已在配置中打开「智能路由」
 
 **输出**：
 ```
@@ -617,7 +529,7 @@ workspace/projects/new-feature/     ← 智能路由到 workspace ✅
 - project_id: `knowledge-qa-assistant`
 - materials: 新需求
 - task_goal: "产品需求补充"
-- config: `{ file_decision: { enable_semantic_match: true } }`
+- 前置：已在配置中打开「语义匹配」
 - 现有文件：`需求整理.md`（3天前更新）
 
 **输出**：
@@ -631,26 +543,9 @@ drafts/knowledge-qa-assistant/
 
 ---
 
-## 十、与 context-engineer 对齐情况
+## 十、规则驱动架构
 
-| 能力 | context-engineer | 当前实现 | 完成度 |
-|------|------------------|---------|--------|
-| **索引系统** | ✅ CLAUDE.md | ✅ 已实现 | 100% |
-| **内容分类** | ✅ AI理解 | ✅ 规则+AI预留 | 95% |
-| **智能路由** | ✅ AI判断 | ✅ 智能规则路由 | 90% |
-| **语义匹配** | ✅ AI语义 | ✅ Jaccard+编辑距离 | 90% |
-| **模板系统** | ✅ 20+模板 | ✅ 5种专业模板 | 90% |
-| **维护能力** | ✅ Maintain | ✅ 索引同步+陈旧检测 | 85% |
-| **元数据追踪** | ❌ 无 | ✅ 完整frontmatter | **超越CE** |
-| **原文保留** | ❌ 无 | ✅ source-materials | **超越CE** |
-
-**总体对齐度：90%+**
-
----
-
-## 十一、规则驱动架构（v2.1 新增）
-
-### 11.1 什么是规则驱动
+### 10.1 什么是规则驱动
 
 系统的行为规则（比如"什么算会议记录"、"材料该放哪个文件夹"）现在都写在**容易编辑的文本文件**里，而不是深埋在代码中。
 
@@ -661,7 +556,7 @@ drafts/knowledge-qa-assistant/
 
 ---
 
-### 11.2 规则文件在哪里
+### 10.2 规则文件在哪里
 
 所有规则文件都在这个目录：
 ```
@@ -674,7 +569,7 @@ skills/material-ingest/references/
 
 ---
 
-### 11.3 常见修改场景
+### 10.3 常见修改场景
 
 #### **场景 1：让"周报"也识别为会议记录**
 
@@ -707,7 +602,7 @@ skills/material-ingest/references/
 
 ---
 
-### 11.4 修改规则的通用步骤
+### 10.4 修改规则的通用步骤
 
 1. **找到对应的规则文件**
    - 内容识别 → `classification-rules.md`
@@ -728,7 +623,7 @@ skills/material-ingest/references/
 
 ---
 
-### 11.5 注意事项
+### 10.5 注意事项
 
 **✅ 可以做的**：
 - 添加新的关键词
@@ -748,7 +643,7 @@ skills/material-ingest/references/
 
 ---
 
-### 11.6 常见问题
+### 10.6 常见问题
 
 **Q：改完规则为什么没生效？**  
 A：需要重启应用。规则在启动时加载，运行中修改不会自动生效。
@@ -764,7 +659,7 @@ A：可以！在 `templates/` 目录里创建新的 `.md` 文件，然后在 `cl
 
 ---
 
-### 11.7 规则文件格式速查
+### 10.7 规则文件格式速查
 
 #### **分类规则**（classification-rules.md）
 ```markdown
@@ -810,235 +705,4 @@ A：可以！在 `templates/` 目录里创建新的 `.md` 文件，然后在 `cl
 ## 章节2
 说明文字
 ```
-
----
-
-## 十二、最佳实践
-  ↓
-routeToLayer() → 规则引擎.executeRouting()
-  ↓
-selectTemplate() → 规则引擎.getTemplate()
-  ↓
-输出结果
-```
-
----
-
-### 11.8 规则文件格式
-
-#### **分类规则格式**
-
-```markdown
-### N. TYPE_NAME（描述）
-
-**触发条件**：
-- source_type 精确匹配: `VALUE1`, `VALUE2`
-- 文件名包含关键词
-
-**关键词**：
-- 中文: 关键词1, 关键词2
-- 英文: keyword1, keyword2
-
-**置信度**: high | medium | low
-**优先级**: N
-```
-
-#### **路由规则格式**
-
-```markdown
-### 规则 N：描述 → 目标层级
-
-**优先级**: N
-**目标层级**: drafts | workspace | context
-**需要确认**: true | false
-
-**触发条件**：
-- 条件1
-- 条件2
-
-**理由**: 说明文字
-```
-
-#### **模板格式**
-
-```markdown
-# 模板标题
-
-> 模板类型: template-type
-> 适用场景: 场景说明
-> 章节数: N
-
----
-
-## 章节1标题
-
-章节1说明
-
----
-
-## 章节2标题
-
-章节2说明
-```
-
----
-
-### 11.9 常见问题
-
-#### **Q: 修改规则后为什么没生效？**
-A: 需要重启应用。规则引擎在启动时加载规则文件。
-
-#### **Q: 可以动态重新加载规则吗？**
-A: 暂不支持。需要重启应用。
-
-#### **Q: 规则文件语法错误会怎样？**
-A: 规则引擎会跳过该规则并继续加载其他规则。检查控制台警告信息。
-
-#### **Q: 可以添加自定义模板吗？**
-A: 可以！在 `templates/` 目录创建新的 MD 文件，并在 `classification-rules.md` 中添加对应的内容类型。
-
-#### **Q: 如何测试新规则？**
-A: 修改规则文件后，运行测试脚本验证行为是否符合预期。
-
----
-
-### 11.10 最佳实践
-
-1. **规则版本控制**
-   - 规则文件使用 Git 管理
-   - 重要修改提交时注释说明
-
-2. **规则命名清晰**
-   - 使用描述性的规则名称
-   - 添加详细的说明文字
-
-3. **优先级合理**
-   - 更具体的规则优先级更高（数字更小）
-   - 通用规则优先级更低
-
-4. **测试验证**
-   - 修改规则后进行测试
-   - 确保不影响现有功能
-
-5. **文档同步**
-   - 规则文件中的说明保持更新
-   - 与实际行为保持一致
-
----
-
-## 十二、最佳实践
-
-### 11.1 日常使用
-
-**默认模式（推荐）**：
-- 保持默认配置，所有材料到 drafts
-- 索引自动更新
-- 使用 7 章节模板
-- 人工确认后提升到 workspace
-
-**高级模式**（适合熟练用户）：
-- 启用智能路由：自动分流到 drafts/workspace
-- 启用语义匹配：自动合并相关主题
-- 启用灵活模板：根据内容类型选择模板
-
-### 11.2 定期维护
-
-**每周维护**：
-```bash
-# 执行维护检查
-npx tsx scripts/lib/maintain-check.ts
-
-# 自动修复索引问题
-npx tsx scripts/lib/maintain-fix.ts
-```
-
-**每月审查**：
-- 检查 drafts 中超过 30 天的内容
-- 检查 workspace 中超过 90 天的内容
-- 提升成熟内容到 context
-
-### 11.3 性能优化
-
-**大量文件时**：
-- 启用语义匹配可能较慢
-- 可以调高相似度阈值（0.7 → 0.8）
-- 考虑定期归档旧文件
-
----
-
-## 十二、故障排查
-
-### 问题 1：索引未更新
-
-**症状**：新文件未出现在 CLAUDE.md 中
-
-**解决**：
-```bash
-# 手动触发索引更新
-npx tsx scripts/lib/maintain-fix.ts
-```
-
-### 问题 2：文件命名不符合预期
-
-**症状**：生成的文件名包含"整理一下"等口语词
-
-**解决**：
-- 检查 `cleanTopicFromGoal()` 规则
-- 提交 issue 或 PR 增加清洗规则
-
-### 问题 3：错误的层级路由
-
-**症状**：材料被路由到错误的层级
-
-**解决**：
-- 检查是否启用了智能路由
-- 如果不需要智能路由，保持默认配置
-- 人工移动文件并更新索引
-
----
-
-## 附录：快速参考
-
-### A. 文件命名模式
-
-```
-会议记录：      {date}-{topic}.md
-需求文档：      需求整理.md
-用户反馈：      用户反馈汇总.md
-决策记录：      {date}-决策-{topic}.md
-技术规格：      技术规格.md
-```
-
-### B. 配置快速切换
-
-```typescript
-// 默认（保守）
-const config = DEFAULT_CONFIG;
-
-// 推荐（智能）
-const config = RECOMMENDED_CONFIG;
-
-// 自定义
-const config = {
-  routing: { enable_smart_routing: true },
-  template: { enable_flexible_template: true },
-  file_decision: { enable_semantic_match: false }
-};
-```
-
-### C. 维护命令
-
-```bash
-# 检查
-performMaintenance(workspaceRoot)
-
-# 修复
-autoFixIndexSync(workspaceRoot)
-
-# 报告
-formatMaintenanceReport(report)
-```
-
-
-
 
