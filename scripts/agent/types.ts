@@ -1,7 +1,7 @@
 import type { PrdSourceCategory } from "../lib/prd-types.js";
 import type { ConfirmationRecord, StateId, TaskState } from "../lib/types.js";
 
-export type AgentIntent = "CONTEXT" | "CONTEXT_REVOKE" | "PRD" | "CHANGE" | "CONTINUE" | "UNKNOWN";
+export type AgentIntent = "CONTEXT" | "CONTEXT_REVOKE" | "PRD" | "CHANGE" | "CONTENT_REVISE" | "CONTINUE" | "UNKNOWN";
 export type AgentStatus = "CONTINUE" | "WAITING_CONFIRMATION" | "COMPLETED" | "BLOCKED";
 export type RuntimeExecutionStatus = "IN_PROGRESS" | "WAITING_USER_CONFIRMATION" | "COMPLETED" | "BLOCKED" | "CANCELLED" | "ERROR";
 

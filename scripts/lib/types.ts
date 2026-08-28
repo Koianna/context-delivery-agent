@@ -29,7 +29,7 @@ export type StateId =
   | "EXECUTION_BLOCKED"
   | "TASK_CANCELLED";
 
-export type TaskMode = "CONTEXT" | "PRD" | "CHANGE" | null;
+export type TaskMode = "CONTEXT" | "PRD" | "CHANGE" | "CONTENT_REVISE" | null;
 
 export type Operator = "USER" | "AGENT" | "SYSTEM";
 

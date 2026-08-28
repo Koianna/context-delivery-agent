@@ -147,6 +147,7 @@ export class AgentOrchestrator {
     if (intent === "CONTEXT_REVOKE") return await this.startContextRevoke(state, message, options);
     if (intent === "PRD") return await this.startPrd(state, message, options);
     if (intent === "CHANGE") return await this.startChange(state, message, options);
+    if (intent === "CONTENT_REVISE") return await this.startContentRevise(state, message, options);
     return this.requestIntentClarification(state, message, options);
   }
 
@@ -179,12 +180,19 @@ export class AgentOrchestrator {
     options: HandleMessageOptions,
     allowDuplicate = false,
     structuredMaterialRefOverride?: string,
+    revisionReason?: string,
   ): Promise<AgentResponse> {
 
     const materialPath = options.materialPath ?? extractExistingPath(message);
     const assets = await this.provider.getContextAssets(materialPath, state.task_id, message);
     const reportRefs = this.provider.getContextReportRefs(state.task_id, assets.structuredMaterialPath);
-    const registered = registerMaterials(assets.inputPath, PROJECT_ROOT, state.project_id, state.task_id);
+    const registered = registerMaterials(
+      assets.inputPath,
+      PROJECT_ROOT,
+      state.project_id,
+      state.task_id,
+      { allowRevision: Boolean(revisionReason), revisionReason },
+    );
     if (!allowDuplicate && registered.duplicate_records.length) {
       const confirmation = createConfirmationAndTransition({
         taskId: state.task_id,
@@ -422,6 +430,22 @@ export class AgentOrchestrator {
     });
   }
 
+  private async startContentRevise(
+    state: TaskState,
+    message: string,
+    options: HandleMessageOptions
+  ): Promise<AgentResponse> {
+    if (state.current_state !== "INTENT_ROUTING") {
+      throw new Error(`当前状态 ${state.current_state} 不能启动材料修订`);
+    }
+    updateTask({ taskId: state.task_id, mode: "CONTENT_REVISE", goal: message });
+    assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "用户要求修订已登记材料的内容" });
+
+    // 复用整理流程：register 阶段 allowRevision=true，遇到内容变化会保留旧版快照并更新记录。
+    // allowDuplicate 保持 false：同名修订不依赖 duplicate 放行，普通重复材料仍走确认。
+    return await this.runContextAnalysis(requireState(state.task_id), message, options, false, undefined, message);
+  }
+
   private async startChange(
     state: TaskState,
     message: string,
@@ -434,17 +458,12 @@ export class AgentOrchestrator {
     // 查找当前项目已交付的 PRD
     const deliveredPrdTaskId = findDeliveredPrdTaskId(state.project_id);
     if (!deliveredPrdTaskId) {
-      assertTransition({ taskId: state.task_id, toState: "EXECUTION_BLOCKED", reason: "当前项目没有已交付的 PRD", operator: "SYSTEM" });
-      const blocked = requireState(state.task_id);
-      blocked.error_info = "当前项目没有已交付的 PRD，无法启动变更分析。请先完成 PRD 交付。";
-      writeTaskState(blocked);
-      return this.response({
-        message: "当前项目没有已交付的 PRD，无法启动变更分析。请先完成 PRD 交付。",
-        status: "BLOCKED",
-        artifacts: [],
-        nextSteps: ["取消任务"],
-        debug: options.debug,
-      });
+      // PRD 尚未交付：变更没有可分析的基线，降级为"材料内容修订"。
+      // 此时用户要改的是已登记材料本身（删除某句、改写某句等），
+      // 复用 CONTEXT_ANALYZING 骨架，register 阶段 allowRevision=true。
+      updateTask({ taskId: state.task_id, mode: "CONTENT_REVISE", goal: message });
+      assertTransition({ taskId: state.task_id, toState: "CONTEXT_ANALYZING", reason: "无已交付 PRD，变更降级为材料内容修订" });
+      return await this.runContextAnalysis(requireState(state.task_id), message, options, false, undefined, message);
     }
 
     updateTask({ taskId: state.task_id, mode: "CHANGE", goal: message });
@@ -1254,7 +1273,17 @@ export function routeIntent(message: string, hasMaterialPath = false): AgentInte
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
   if (/(撤销|回滚|取消提升|移(?:出|除).*(?:稳定\s*)?(?:context|contact)|从.*(?:context|contact).*移(?:出|除)|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
   if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|更新\s*context|修改.*(drafts?|草稿)|更新.*(drafts?|草稿)|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+)|(?:帮.{0,4})?记录一下|初步方案|方案.{0,8}(?:记录|沉淀|存档|归档)|(?:我的|一个|这个)?想法|设想)/i.test(message)) return "CONTEXT";
-  if (/(修改|修订|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
+  // 材料内容修订：修改已登记材料本身的具体内容（删除某句、改写某句等）。
+  // 放在 CHANGE 之前——否则"删除这句话"会被当成需求变更。
+  // 但若消息明显指向需求/PRD/规则层（含这些词），仍归 CHANGE，避免误判"修改 PRD 内容"。
+  if (!/(?:需求|prd|规则|范围|决策|已交付|功能|流程|验收)/i.test(message)) {
+    const reviseAction = "(?:删除|删掉|去掉|移除|删去|修改|改动|改写|调整|更新|改成|改为|新增|补充|增加)";
+    const reviseTarget = "(?:这句话|那句|这句话|这句|此句|这一段|这段|内容|材料|原文|描述|条目|这几点|这几句|整句|这句内容|这一条)";
+    const reviseForward = new RegExp(`${reviseAction}.{0,12}${reviseTarget}`, "i");
+    const reviseReverse = new RegExp(`${reviseTarget}.{0,12}${reviseAction}`, "i");
+    if (reviseForward.test(message) || reviseReverse.test(message)) return "CONTENT_REVISE";
+  }
+  if (/(修改|修订|变更|改成|调整已有|不要做|增加规则|下线|删除后|删除|删掉|去掉|移除)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
   if (hasMaterialPath) return "CONTEXT";
   return "UNKNOWN";

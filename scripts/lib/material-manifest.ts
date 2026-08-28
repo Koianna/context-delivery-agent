@@ -49,6 +49,23 @@ export interface MaterialManifest {
   topic: string;
   ingestions: MaterialIngestionRecord[];
   records: MaterialManifestRecord[];
+  revisions?: MaterialRevisionRecord[];
+}
+
+/**
+ * 材料内容修订记录。用于"PRD 未撰写阶段"对已登记源材料的内容修改：
+ * 每次修订把旧版快照保存到 source-materials/versions/，并在此登记一条历史。
+ * 这是可审计、可回溯的，不会破坏"原文保留"原则。
+ */
+export interface MaterialRevisionRecord {
+  source_id: string;          // 修订后的 source_id（内容哈希会变）
+  previous_source_id: string; // 修订前的 source_id（即被替换记录的身份）
+  task_id: string;            // 执行本次修订的任务
+  previous_sha256: string;    // 修订前的哈希
+  sha256: string;             // 修订后的哈希
+  snapshot_ref: string;       // 旧版快照位置
+  reason: string;             // 变更原因（来自用户 message）
+  created_at: string;
 }
 
 /**
@@ -91,6 +108,7 @@ export function readMaterialManifest(projectId: string, root = PROJECT_ROOT): {
       topic: typeof raw.topic === "string" ? raw.topic : safeProjectSlug(projectId),
       ingestions: isUnified ? raw.ingestions as MaterialIngestionRecord[] : [],
       records: Array.isArray(raw.records) ? raw.records as MaterialManifestRecord[] : [],
+      revisions: Array.isArray(raw.revisions) ? raw.revisions as MaterialRevisionRecord[] : [],
     },
     wasLegacy: !isUnified,
   };
@@ -185,6 +203,31 @@ export function upsertMaterialIngestion(
   if (current.manifest && (existing >= 0 || current.wasLegacy)) {
     manifest.version = incrementPatch(manifest.version);
   }
+  writeJsonAtomic(materialManifestPath(projectId, root), manifest);
+  return pathToRepoRef(materialManifestPath(projectId, root), root);
+}
+
+/**
+ * 追加一条材料内容修订记录，并 bump manifest 版本。
+ * 修订记录保存在 manifest.revisions 中，旧版快照由调用方写入后传入 snapshot_ref。
+ */
+export function appendMaterialRevision(
+  projectId: string,
+  revision: MaterialRevisionRecord,
+  root = PROJECT_ROOT,
+): string {
+  const current = readMaterialManifest(projectId, root);
+  const manifest = current.manifest ?? {
+    artifact_id: `material-manifest-${safeProjectSlug(projectId)}`,
+    version: "0.2.0",
+    project_id: safeProjectSlug(projectId),
+    topic: safeProjectSlug(projectId),
+    ingestions: [],
+    records: [],
+    revisions: [],
+  };
+  manifest.revisions = [...(manifest.revisions ?? []), revision];
+  manifest.version = incrementPatch(manifest.version);
   writeJsonAtomic(materialManifestPath(projectId, root), manifest);
   return pathToRepoRef(materialManifestPath(projectId, root), root);
 }
