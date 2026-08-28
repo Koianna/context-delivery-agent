@@ -20,9 +20,7 @@ workspace/   → 正在进行的任务、PRD
 context/     → 已验证的稳定知识
 ```
 
-## Current Projects
 
-- **default-project** — [drafts](drafts/default-project/CLAUDE.md)
 
 ## Rules
 
