@@ -204,8 +204,8 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     return assets;
   }
 
-  async prepareChangeAnalysis(state: TaskState, message: string): Promise<ChangeAnalysisAssets> {
-    const assets = await super.prepareChangeAnalysis(state, message);
+  async prepareChangeAnalysis(state: TaskState, message: string, deliveredPrdTaskId?: string): Promise<ChangeAnalysisAssets> {
+    const assets = await super.prepareChangeAnalysis(state, message, deliveredPrdTaskId);
     const input = readJson<Record<string, unknown>>(assets.inputPath);
     const artifactContents = readArtifactContents((input.artifact_refs as string[] | undefined) ?? []);
     const generated = await this.client.generateJson<ChangeModelOutput>({

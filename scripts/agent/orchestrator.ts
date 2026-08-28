@@ -25,6 +25,7 @@ import {
 import type { ContextAnalysisOutput, ContextProposal } from "../lib/context-types.js";
 import type { PrdReviewOutput, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
 import type { ChangeAnalysisOutput } from "../lib/change-types.js";
+import { findDeliveredPrdTaskId } from "../lib/prd-guards.js";
 import { agentRunsPath, parseFrontmatter, pathToRepoRef, readJson, renderFrontmatter, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import { loadLocalEnv } from "../lib/env.js";
 import { inspectModelProviderConfig } from "../lib/model-provider-config.js";
@@ -103,11 +104,11 @@ export class AgentOrchestrator {
       this.provider.setProjectId?.(options.projectId ?? state.project_id);
 
       if (isPause(normalized)) return this.pause(state, options);
-      if (state.current_state === "EXECUTION_BLOCKED") return await this.retryBlocked(state, normalized, options);
-      if (state.current_state === "TASK_PAUSED") return await this.resume(state, normalized, options);
       if (isCancelTask(normalized) && state.current_state !== "WAITING_REPLAN_CONFIRM") {
         return this.cancelTask(state, options);
       }
+      if (state.current_state === "EXECUTION_BLOCKED") return await this.retryBlocked(state, normalized, options);
+      if (state.current_state === "TASK_PAUSED") return await this.resume(state, normalized, options);
 
       if (WAITING_STATES.has(state.current_state)) {
         return await this.handleWaitingState(state, normalized, options);
@@ -429,10 +430,27 @@ export class AgentOrchestrator {
     if (state.current_state !== "INTENT_ROUTING") {
       throw new Error(`当前状态 ${state.current_state} 不能启动变更分析`);
     }
+
+    // 查找当前项目已交付的 PRD
+    const deliveredPrdTaskId = findDeliveredPrdTaskId(state.project_id);
+    if (!deliveredPrdTaskId) {
+      assertTransition({ taskId: state.task_id, toState: "EXECUTION_BLOCKED", reason: "当前项目没有已交付的 PRD", operator: "SYSTEM" });
+      const blocked = requireState(state.task_id);
+      blocked.error_info = "当前项目没有已交付的 PRD，无法启动变更分析。请先完成 PRD 交付。";
+      writeTaskState(blocked);
+      return this.response({
+        message: "当前项目没有已交付的 PRD，无法启动变更分析。请先完成 PRD 交付。",
+        status: "BLOCKED",
+        artifacts: [],
+        nextSteps: ["取消任务"],
+        debug: options.debug,
+      });
+    }
+
     updateTask({ taskId: state.task_id, mode: "CHANGE", goal: message });
     assertTransition({ taskId: state.task_id, toState: "CHANGE_ANALYZING", reason: "用户提出已交付需求的实质变更" });
     let current = requireState(state.task_id);
-    const analysisAssets = await this.provider.prepareChangeAnalysis(current, message);
+    const analysisAssets = await this.provider.prepareChangeAnalysis(current, message, deliveredPrdTaskId);
     const snapshot = createTaskChangeSnapshot(state.task_id, analysisAssets.inputPath);
     const analysisResult = recordChangeAnalysis(
       state.task_id,
@@ -1235,7 +1253,7 @@ function instructionFor(status: AgentResponse["status"], state: StateId): string
 export function routeIntent(message: string, hasMaterialPath = false): AgentIntent {
   if (/^(继续|恢复|下一步)$/.test(message.trim())) return "CONTINUE";
   if (/(撤销|回滚|取消提升|移(?:出|除).*(?:稳定\s*)?(?:context|contact)|从.*(?:context|contact).*移(?:出|除)|归档.*context)/i.test(message)) return "CONTEXT_REVOKE";
-  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+)|(?:帮.{0,4})?记录一下|初步方案|方案.{0,8}(?:记录|沉淀|存档|归档)|(?:我的|一个|这个)?想法|设想)/i.test(message)) return "CONTEXT";
+  if (/(只整理|整理材料|整理资料|整理.*(会议|会议记录|会议纪要|用户反馈|历史\s*prd|产品现状|业务约束)|收集整理|整理并沉淀|沉淀|维护\s*context|更新\s*context|修改.*(drafts?|草稿)|更新.*(drafts?|草稿)|先不(?:要)?写\s*prd|不要写\s*prd|不生成\s*prd|资料归档|材料分析|用户反馈|确认.*(?:proposal|item-\d+)|批准.*(?:proposal|item-\d+)|(?:帮.{0,4})?记录一下|初步方案|方案.{0,8}(?:记录|沉淀|存档|归档)|(?:我的|一个|这个)?想法|设想)/i.test(message)) return "CONTEXT";
   if (/(修改|修订|变更|改成|调整已有|不要做|增加规则|下线|删除后)/.test(message)) return "CHANGE";
   if (/(准备\s*prd|写\s*prd|生成\s*prd|需求文档|继续准备\s*prd)/i.test(message)) return "PRD";
   if (hasMaterialPath) return "CONTEXT";

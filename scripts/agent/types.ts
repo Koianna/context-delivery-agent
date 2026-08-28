@@ -115,6 +115,6 @@ export interface AgentProvider {
     ledgerRef: string;
     reviewRef: string;
   };
-  prepareChangeAnalysis(state: TaskState, message: string): ProviderResult<ChangeAnalysisAssets>;
+  prepareChangeAnalysis(state: TaskState, message: string, deliveredPrdTaskId?: string): ProviderResult<ChangeAnalysisAssets>;
   prepareChangeReplan(state: TaskState, assets: ChangeAnalysisAssets): ProviderResult<ChangeReplanAssets>;
 }

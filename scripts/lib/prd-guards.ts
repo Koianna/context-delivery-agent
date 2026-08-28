@@ -1,4 +1,12 @@
 import type { ConfirmationRecord } from "./types.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { PROJECT_ROOT } from "./config.js";
+
+function safeSlug(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9一-鿿-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "default-project";
+}
 
 export function validatePrdEntryConfirmation(
   confirmation: ConfirmationRecord | undefined,
@@ -76,4 +84,34 @@ export function validateDeliveryConfirmation(
   }
   if (typeof payload?.accepted_review_id !== "string") errors.push("CP-P03 缺少接受的 review_id");
   return errors;
+}
+
+export function findDeliveredPrdTaskId(projectId: string): string | null {
+  const prdDir = path.join(PROJECT_ROOT, "context-workspace/workspace/prd");
+  if (!fs.existsSync(prdDir)) return null;
+
+  const prefix = `${safeSlug(projectId)}-agent-`;
+  const files = fs.readdirSync(prdDir)
+    .filter(f => f.startsWith(prefix) && f.endsWith('.md'))
+    .sort()
+    .reverse(); // 最新的文件优先（按文件名字母序倒序，agent- 后是时间戳）
+
+  for (const file of files) {
+    const filePath = path.join(prdDir, file);
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    // 解析 YAML frontmatter
+    const frontmatterMatch = content.match(/^---\n([\s\S]+?)\n---/);
+    if (!frontmatterMatch) continue;
+
+    // 简单解析：查找 status: delivered 行
+    const frontmatter = frontmatterMatch[1];
+    if (/^\s*status:\s*delivered\s*$/m.test(frontmatter)) {
+      // 从文件名提取 task_id：default-project-agent-1787743429871.md → agent-1787743429871
+      const taskId = file.replace(`${safeSlug(projectId)}-`, '').replace('.md', '');
+      return taskId;
+    }
+  }
+
+  return null;
 }

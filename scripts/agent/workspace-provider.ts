@@ -298,10 +298,11 @@ export class WorkspaceProvider implements AgentProvider {
     return { thinkingRef: `${base}/reports/prd-thinking.json`, ledgerRef: `${base}/decisions/decision-ledger.json`, reviewRef: `${base}/reports/prd-review.json` };
   }
 
-  async prepareChangeAnalysis(state: TaskState, message: string): Promise<ChangeAnalysisAssets> {
+  async prepareChangeAnalysis(state: TaskState, message: string, deliveredPrdTaskId?: string): Promise<ChangeAnalysisAssets> {
     const slug = safeSlug(state.task_id);
-    const prd = await this.getPrdAssets(state.task_id);
-    const reports = this.getPrdReportRefs(state.task_id);
+    const prdTaskId = deliveredPrdTaskId ?? state.task_id;
+    const prd = await this.getPrdAssets(prdTaskId);
+    const reports = this.getPrdReportRefs(prdTaskId);
     const indexRef = contextIndexRef(this.projectId);
     const hasContextIndex = fs.existsSync(contextIndexPath(this.projectId, PROJECT_ROOT));
     const changeId = `change-${safeSlug(this.projectId)}-${slug}`.slice(0, 80);
