@@ -15,6 +15,12 @@ interface UserFeedbackEntry {
   content: string;
 }
 
+interface HeadingInfo {
+  isHeading: boolean;
+  level: number;  // 1=一级, 2=二级, 3=三级
+  text: string;   // 清理后的标题文本
+}
+
 export function writeStructuredMaterial(
   input: MaterialIngestInput,
   _output: MaterialIngestOutput,
@@ -73,12 +79,29 @@ export function writeStructuredMaterial(
     `- 本次材料按${isMeeting ? "会议内容" : "材料内容"}切分为独立信息单元，再按事实、反馈、方案、决策、行动项和风险进行归类。`,
     "- 用户反馈、方案建议和待确认事项不会自动升级为稳定业务事实或产品需求。",
     "",
-    ...[...sections.entries()].flatMap(([heading, lines]) => [
-      `## ${heading}`,
-      "",
-      ...(lines.length ? unique(lines).map((line) => `- ${line}`) : ["- 未从原文识别到明确内容，需人工补充。"]),
-      "",
-    ]),
+    ...[...sections.entries()].flatMap(([heading, lines]) => {
+      const result = [`## ${heading}`, ""];
+
+      if (!lines.length) {
+        result.push("- 未从原文识别到明确内容，需人工补充。", "");
+        return result;
+      }
+
+      for (const line of unique(lines)) {
+        const headingInfo = detectHeading(line);
+        if (headingInfo.isHeading) {
+          // 渲染为标题（## 已占用，从 ### 开始）
+          const prefix = '#'.repeat(headingInfo.level + 2);
+          result.push("", `${prefix} ${headingInfo.text}`, "");
+        } else {
+          // 渲染为列表项
+          result.push(`- ${line}`);
+        }
+      }
+
+      result.push("");
+      return result;
+    }),
     "## 原文保留说明",
     "",
     "原始材料已由 Runtime 登记到 `context-workspace/drafts/`，本整理稿不替换原文。",
@@ -319,15 +342,94 @@ function sourceTypeLabel(sourceType: string): string {
   return labels[sourceType.toUpperCase()] ?? sourceType;
 }
 
+/**
+ * 检测一行文本是否为标题
+ * 支持四种格式：
+ * 1. Markdown 标题：## 标题
+ * 2. 数字编号标题：1 做什么、1. 做什么、1） 做什么
+ * 3. 中文编号标题：一、做什么
+ * 4. 纯文本标题：产品边界（需匹配关键词）
+ */
+function detectHeading(line: string): HeadingInfo {
+  const trimmed = line.trim();
+  if (!trimmed) return { isHeading: false, level: 0, text: '' };
+
+  // 1. Markdown 标题：## 标题
+  const markdownMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+  if (markdownMatch) {
+    return {
+      isHeading: true,
+      level: markdownMatch[1].length,
+      text: markdownMatch[2].trim(),
+    };
+  }
+
+  // 2. 数字编号标题：1 做什么、1. 做什么、1） 做什么、1) 做什么
+  const numberMatch = trimmed.match(/^(\d+)[.)、）\s]\s*(.+)$/);
+  if (numberMatch) {
+    const text = numberMatch[2].trim();
+    // 条件：后续文本 ≤ 20 字，不含句中标点
+    if (text.length <= 20 && !/[，。；,;]/.test(text)) {
+      return {
+        isHeading: true,
+        level: 2,
+        text: `${numberMatch[1]} ${text}`,
+      };
+    }
+  }
+
+  // 3. 中文编号标题：一、做什么
+  const chineseNumberMatch = trimmed.match(/^([一二三四五六七八九十百千万]+)[、\s]\s*(.+)$/);
+  if (chineseNumberMatch) {
+    const text = chineseNumberMatch[2].trim();
+    // 条件：后续文本 ≤ 20 字，不含句中标点
+    if (text.length <= 20 && !/[，。；,;]/.test(text)) {
+      return {
+        isHeading: true,
+        level: 2,
+        text: `${chineseNumberMatch[1]}、${text}`,
+      };
+    }
+  }
+
+  // 4. 纯文本标题：产品边界（需匹配关键词）
+  // 条件：长度 ≤ 15 字，不含句中标点，匹配关键词
+  if (trimmed.length <= 15 && !/[，。；,;]/.test(trimmed)) {
+    const headingKeywords = /背景|边界|目标|范围|定位|说明|概述|介绍|总结|结论|问题|方案|计划|流程|架构|设计|实现|测试|部署|上线|发布|迭代|版本|功能|需求|用户|产品|技术|业务|数据|接口|系统|模块|组件|服务|平台|工具|规则|策略|原则|标准|规范|约定|注意|风险|依赖|限制|假设|前提/;
+    if (headingKeywords.test(trimmed)) {
+      return {
+        isHeading: true,
+        level: 1,
+        text: trimmed,
+      };
+    }
+  }
+
+  return { isHeading: false, level: 0, text: '' };
+}
+
 function parseMaterialSegments(content: string, isMeeting: boolean): MaterialSegment[] {
   const cleanLines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !/source_id:|^---$/.test(line) && !/^#{1,6}\s/.test(line));
+    .filter((line) => {
+      if (!line || /source_id:|^---$/.test(line)) return false;
+      // 移除过于激进的 Markdown 标题过滤，让标题进入处理流程
+      return true;
+    });
   if (!cleanLines.length) return [];
 
   const blocks: MaterialSegment[] = [];
   for (const line of cleanLines) {
+    // 检测标题
+    const headingInfo = detectHeading(line);
+    if (headingInfo.isHeading) {
+      // 标题保持完整，不进行句子分割
+      blocks.push({ speaker: null, content: line });
+      continue;
+    }
+
+    // 原有逻辑处理非标题行
     const speakerMatch = isMeeting ? line.match(/^([^：:]{1,20})[：:]\s*(.*)$/u) : null;
     const speaker = speakerMatch && looksLikeSpeakerLine(line) ? speakerMatch[1].trim() : null;
     const contentPart = speakerMatch && speaker ? speakerMatch[2].trim() : line;
@@ -426,6 +528,14 @@ function summarizeSegment(segment: MaterialSegment, category: string): string {
 }
 
 function compact(value: string): string {
+  // 检测是否为标题
+  const headingInfo = detectHeading(value);
+  if (headingInfo.isHeading) {
+    // 标题原样返回，不做截断和清理
+    return value;
+  }
+
+  // 非标题才执行清理逻辑
   return value
     .replace(/^[-*]\s*/, "")
     .replace(/^\d+[.)、]\s*/, "")
