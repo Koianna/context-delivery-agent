@@ -20,7 +20,8 @@ import type {
 export const PROJECT_ROOT = (() => {
   let dir = process.cwd();
   for (let i = 0; i < 5; i++) {
-    if (fs.existsSync(path.join(dir, "AGENTS.md"))) return dir;
+    if (fs.existsSync(path.join(dir, "README.md")) &&
+        fs.existsSync(path.join(dir, "state-machine"))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;

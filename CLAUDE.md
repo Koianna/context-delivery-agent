@@ -195,9 +195,10 @@ mcp__context-delivery__context_delivery({
 
 ## 📖 更多细节
 
-完整规则见 [AGENTS.md](AGENTS.md)，包括：
-- Skill 路由逻辑
-- Context 三层含义
+完整规则见 [README.md](README.md)，包括：
+- 核心概念（人机边界、Context 三层、Skill 路由）
+- Runtime 业务编排中心（架构边界、执行协议、Provider 边界）
+- 技术规范（三个分支的确定性校验）
 - 确认点机制
 - 禁止行为清单
 

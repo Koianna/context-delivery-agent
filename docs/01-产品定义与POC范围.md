@@ -52,7 +52,7 @@ Context 工程与需求交付协作 Agent 是面向单人产品经理的 AI 工�
 
 - 面向用户的业务 Agent；
 - 由 `drafts/`、`workspace/`、`context/` 构成的文件型 Context 工作空间；
-- 通过 `AGENTS.md` 注册和路由的 6 个原生 Skill；
+- 通过 Runtime 编排和路由的 6 个原生 Skill；
 - 由状态机、权限、人工确认、日志和确定性脚本组成的本地 Agent Harness；
 - 保存当前任务快照、待确认项和追加事件日志的本地 Runtime；
 - 用于版本追溯、评测绑定和作品展示的 Git/GitHub 仓库。
@@ -397,7 +397,7 @@ context/
 
 ### 9.2 轻量 Harness 组成
 
-- `AGENTS.md` 中的全局规则、Skill 注册和路由约束；
+- `README.md` 中的核心概念、Skill 路由和技术规范；
 - Context 加载顺序和可信度规则；
 - Skill 注册、触发条件和输入输出协议；
 - 状态机和合法状态转移校验；
@@ -461,7 +461,7 @@ POC 阶段收敛为 6 个核心能力模块：
 - 1 个主 Agent；
 - 6 个原生 Skill；
 - 本地 Agent Runtime/Harness；
-- `AGENTS.md` 全局规则与路由入口；
+- `README.md` 核心概念与技术规范；
 - 人工确认和权限控制；
 - PRD 两阶段生成；
 - 独立 PRD 审核；
@@ -694,7 +694,7 @@ POC 实施阶段需要进一步定义每个状态的：
 3. Agent 架构图与 Harness 设计；
 4. 6 个核心 Skill 定义；
 5. Context 工作空间和完整业务材料；
-6. `AGENTS.md`、主 Agent Prompt 与路由规则；
+6. `README.md` 核心概念、主 Agent Prompt 与路由规则；
 7. 本地 Runtime 状态文件、状态机配置和确定性 Harness 脚本；
 8. 可运行的端到端 POC；
 9. Agent 执行日志；
