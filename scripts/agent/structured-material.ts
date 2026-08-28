@@ -21,6 +21,28 @@ interface HeadingInfo {
   text: string;   // 清理后的标题文本
 }
 
+interface CatalogEntry {
+  title: string;       // "### 核心指标" 里的标题文本，如 "核心指标"
+  materialName: string;
+  lines: string[];     // 结构化 markdown 行（#### 子标题 / - 列表项）
+}
+
+// 材料被识别为"结构化清单类"时，尾部关键词优先作为三级标题名
+const CATALOG_TITLE_SUFFIXES = [
+  "核心指标", "关键指标", "指标",
+  "产品边界", "业务边界", "边界",
+  "验收标准", "标准", "规范",
+  "业务规则", "规则",
+  "清单", "列表", "范围", "目标",
+  "原则",
+];
+
+// source_type 判定为清单类的关键词（大小写不敏感）
+const CATALOG_SOURCE_TYPE_KEYWORDS = /product_requirement|product_doc|business_rule|indicator|catalog|boundary/i;
+
+// name 判定为清单类的关键词
+const CATALOG_NAME_KEYWORDS = /指标|边界|清单|列表|规则|规范|范围|目标|原则|标准/;
+
 export function writeStructuredMaterial(
   input: MaterialIngestInput,
   _output: MaterialIngestOutput,
@@ -46,6 +68,8 @@ export function writeStructuredMaterial(
     sections.set(key, []);
   }
 
+  const catalogEntries: CatalogEntry[] = [];
+
   for (const [index, material] of input.materials.entries()) {
     const content = readMaterialContent(material, root);
     if (isUserFeedbackMaterial(material)) {
@@ -54,6 +78,18 @@ export function writeStructuredMaterial(
       sections.get("来源材料")?.push(formatSourceMaterial(material, index, content, artifactRef));
       continue;
     }
+
+    // 清单类材料：整份透传到"补充材料"section，不做强制归类
+    if (isCatalogMaterial(material, content)) {
+      catalogEntries.push({
+        title: extractCatalogTitle(material.name),
+        materialName: material.name,
+        lines: renderCatalogMaterialLines(content),
+      });
+      sections.get("来源材料")?.push(formatSourceMaterial(material, index, content, artifactRef));
+      continue;
+    }
+
     const segments = parseMaterialSegments(content, isMeeting);
 
     for (const segment of segments) {
@@ -80,6 +116,9 @@ export function writeStructuredMaterial(
     "- 用户反馈、方案建议和待确认事项不会自动升级为稳定业务事实或产品需求。",
     "",
     ...[...sections.entries()].flatMap(([heading, lines]) => {
+      // "来源材料"延后到"补充材料"之后再输出
+      if (heading === "来源材料") return [];
+
       const result = [`## ${heading}`, ""];
 
       if (!lines.length) {
@@ -102,6 +141,8 @@ export function writeStructuredMaterial(
       result.push("");
       return result;
     }),
+    ...renderCatalogSection(catalogEntries),
+    ...renderSourceMaterialSection(sections.get("来源材料") ?? []),
     "## 原文保留说明",
     "",
     "原始材料已由 Runtime 登记到 `context-workspace/drafts/`，本整理稿不替换原文。",
@@ -183,20 +224,68 @@ function appendToStructuredMaterial(
 
   // 3. 生成增量章节
   const date = new Date().toISOString().split('T')[0];
-  const incrementalSection = [
+
+  // 3a. 识别清单类材料，追加结构化内容而不仅仅列名称
+  const catalogEntries: CatalogEntry[] = [];
+  const otherMaterials: MaterialInput[] = [];
+  for (const material of input.materials) {
+    const content = readMaterialContent(material, root);
+    if (isCatalogMaterial(material, content)) {
+      catalogEntries.push({
+        title: extractCatalogTitle(material.name),
+        materialName: material.name,
+        lines: renderCatalogMaterialLines(content),
+      });
+    } else {
+      otherMaterials.push(material);
+    }
+  }
+
+  const incrementalLines: (string | null)[] = [
     `---`,
     ``,
     `## 更新记录 - ${date}`,
-    taskId ? `> 任务 ID: ${taskId}` : '',
+    taskId ? `> 任务 ID: ${taskId}` : null,
     ``,
     `### 新增材料`,
     ...input.materials.map((m, i) => `${i + 1}. ${m.name}（${m.source_type || '未分类'}）`),
     ``,
-    `### 新增内容摘要`,
-    ``,
-    `本次补充了 ${input.materials.length} 份材料，主要内容：${input.task_goal}`,
-    ``,
-  ].filter(Boolean).join('\n');
+  ];
+
+  // 清单类材料：保留结构追加到"补充材料"下（用四级标题作为条目标题）
+  if (catalogEntries.length) {
+    incrementalLines.push(`### 补充材料（本次新增）`, ``);
+    for (const entry of catalogEntries) {
+      incrementalLines.push(`#### ${entry.title}`, ``);
+      if (entry.lines.length) {
+        // 追加模式下把四级降为五级、列表项保持不变，避免与本节的四级标题冲突
+        const dedupedLines = stripLeadingTitleEcho(entry.lines, entry.title);
+        for (const line of dedupedLines) {
+          if (line.startsWith('#### ')) {
+            incrementalLines.push(`##### ${line.slice(5)}`);
+          } else {
+            incrementalLines.push(line);
+          }
+        }
+      } else {
+        incrementalLines.push(`- 未识别到可结构化的条目。`);
+      }
+      incrementalLines.push('');
+    }
+  }
+
+  if (otherMaterials.length) {
+    incrementalLines.push(
+      `### 新增内容摘要`,
+      ``,
+      `本次补充了 ${otherMaterials.length} 份非清单类材料，主要内容：${input.task_goal}`,
+      ``,
+    );
+  }
+
+  const incrementalSection = incrementalLines
+    .filter((line): line is string => line !== null)
+    .join('\n');
 
   // 4. 合并内容
   const updatedBody = `${body.trim()}\n\n${incrementalSection}`;
@@ -554,4 +643,169 @@ function compactFeedback(value: string): string {
 
 function unique(lines: string[]): string[] {
   return [...new Set(lines)];
+}
+
+/**
+ * 渲染"## 补充材料"二级容器，每份清单类材料落在一个 "### 标题" 三级 section 下，
+ * 原文层级由 renderCatalogMaterialLines 保留。无清单类材料则不输出该 section。
+ */
+function renderCatalogSection(entries: CatalogEntry[]): string[] {
+  if (!entries.length) return [];
+  const out: string[] = ["## 补充材料", ""];
+  for (const entry of entries) {
+    out.push(`### ${entry.title}`, "");
+    const dedupedLines = stripLeadingTitleEcho(entry.lines, entry.title);
+    if (dedupedLines.length) {
+      out.push(...dedupedLines);
+    } else {
+      out.push("- 未识别到可结构化的条目。");
+    }
+    out.push("");
+  }
+  return out;
+}
+
+/**
+ * 去掉材料首行与 section 标题重复的"回响"。
+ *   例：section 是 "### 产品边界"，材料首行也叫 "产品边界"
+ *       → 会被渲染成 "- 产品边界"，与标题重复；此处剥掉。
+ * 只处理开头几行（含可能存在的前置空行），避免误删正文里同名的普通条目。
+ */
+function stripLeadingTitleEcho(lines: string[], title: string): string[] {
+  const echo = `- ${title}`;
+  const result = [...lines];
+  while (result.length && (result[0] === "" || result[0] === echo)) {
+    const wasEcho = result[0] === echo;
+    result.shift();
+    if (wasEcho) {
+      // 顺带吃掉紧跟其后的空行，避免"### 产品边界"下出现连续空行
+      if (result.length && result[0] === "") result.shift();
+      break;
+    }
+  }
+  return result;
+}
+
+/**
+ * 渲染"## 来源材料" section。抽出来单独处理是为了保证它固定排在最后。
+ */
+function renderSourceMaterialSection(lines: string[]): string[] {
+  const out = ["## 来源材料", ""];
+  if (!lines.length) {
+    out.push("- 未从原文识别到明确内容，需人工补充。", "");
+    return out;
+  }
+  for (const line of unique(lines)) {
+    out.push(`- ${line}`);
+  }
+  out.push("");
+  return out;
+}
+
+/**
+ * 判断材料是否为"结构化清单类"（指标清单、边界说明、规则列表等）。
+ * 命中后走透传渲染，避免被六大分类硬拆。
+ *
+ * 触发条件（需同时满足）：
+ *   1. 不是会议记录、也不是用户反馈类（这两类走既有专用路径）
+ *   2. source_type / name 命中清单关键词，或内容整体呈"多短行、少句号"的清单形态
+ */
+function isCatalogMaterial(material: MaterialInput, content: string): boolean {
+  if (isUserFeedbackMaterial(material)) return false;
+  const label = `${material.source_type} ${material.name}`;
+  if (/MEETING|会议|纪要|记录/i.test(label)) return false;
+
+  const explicit =
+    CATALOG_SOURCE_TYPE_KEYWORDS.test(material.source_type || "") ||
+    CATALOG_NAME_KEYWORDS.test(material.name || "");
+
+  if (explicit) return true;
+
+  // 内容形态兜底判断：≥3 行、平均行长 ≤ 40、句末标点占比低
+  const body = parseFrontmatter(content).body;
+  const lines = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 3) return false;
+
+  const avgLength = lines.reduce((sum, line) => sum + line.length, 0) / lines.length;
+  const sentenceLike = lines.filter((line) => /[。！？]/.test(line)).length;
+  return avgLength <= 40 && sentenceLike / lines.length < 0.3;
+}
+
+/**
+ * 从材料 name 提取三级标题。
+ *   例：'PRD评审智能体核心指标' → '核心指标'
+ *   例：'XX产品边界'             → '产品边界'
+ * 找不到匹配的关键词后缀则使用整个 name。
+ */
+function extractCatalogTitle(name: string): string {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return "补充材料";
+  for (const suffix of CATALOG_TITLE_SUFFIXES) {
+    if (trimmed.endsWith(suffix)) return suffix;
+  }
+  return trimmed;
+}
+
+/**
+ * 把清单类材料原文渲染为结构化 markdown 行：
+ *   - "xxx：" / "xxx:" 结尾的短行 → "#### xxx"（四级子标题）
+ *   - 数字或中文编号的短行         → "#### <text>"
+ *   - Markdown 标题行 (# ~ ###)   → "#### <text>"（统一降到四级）
+ *   - 其他行                       → "- <text>" 列表项
+ * 目的：保留原始层级，同时避免出现悬空的一级/二级标题干扰整体大纲。
+ */
+function renderCatalogMaterialLines(content: string): string[] {
+  const body = parseFrontmatter(content).body;
+  const lines = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const output: string[] = [];
+  let lastWasHeading = false;
+
+  for (const raw of lines) {
+    // 1. 已有 markdown 标题 → 统一降到四级
+    const mdHeading = raw.match(/^#{1,6}\s+(.+)$/);
+    if (mdHeading) {
+      if (!lastWasHeading && output.length) output.push("");
+      output.push(`#### ${mdHeading[1].trim()}`, "");
+      lastWasHeading = true;
+      continue;
+    }
+
+    // 2. "xxx：" / "xxx:" 结尾的短标签行 → 四级子标题
+    const labelMatch = raw.match(/^(.{1,20}?)[：:]\s*$/u);
+    if (labelMatch) {
+      if (!lastWasHeading && output.length) output.push("");
+      output.push(`#### ${labelMatch[1].trim()}`, "");
+      lastWasHeading = true;
+      continue;
+    }
+
+    // 3. 数字/中文编号 + 短文本 → 四级子标题（如 "1 做什么"、"一、做什么"）
+    const numberedShort = raw.match(/^(\d+)[.)、）\s]\s*(.+)$/) || raw.match(/^([一二三四五六七八九十]+)[、\s]\s*(.+)$/);
+    if (numberedShort) {
+      const [, marker, text] = numberedShort;
+      const clean = text.trim();
+      if (clean.length <= 20 && !/[，。；,;]/.test(clean)) {
+        if (!lastWasHeading && output.length) output.push("");
+        output.push(`#### ${marker} ${clean}`, "");
+        lastWasHeading = true;
+        continue;
+      }
+    }
+
+    // 4. 其他行 → 列表项，剥掉现有的列表前缀
+    const cleaned = raw.replace(/^[-*]\s*/, "").replace(/^\d+[.)、]\s*/, "").trim();
+    if (cleaned) {
+      output.push(`- ${cleaned}`);
+      lastWasHeading = false;
+    }
+  }
+
+  return output;
 }
