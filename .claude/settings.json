@@ -1,0 +1,36 @@
+{
+  "language": "zh-CN",
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(mv *)",
+      "Bash(mv *)",
+      "Bash(rename *)",
+      "Bash(cp *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(pnpm *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pip *)",
+      "Bash(pip3 *)"
+    ],
+    "ask": [
+      "Bash(rm -rf *)"
+    ],    
+    "deny": []
+  },
+  "statusLine": {
+    "command": "node ~/.claude/statusline.js",
+    "padding": 1,
+    "type": "command"
+  }
+}
