@@ -44,7 +44,9 @@
           },
           "target_layer": {"enum": ["DRAFTS", "WORKSPACE", "CONTEXT"]},
           "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-          "requires_confirmation": {"type": "boolean"}
+          "requires_confirmation": {"type": "boolean"},
+          "sentiment": {"enum": ["positive", "neutral", "negative"]},
+          "priority": {"enum": ["P0", "P1", "P2", "P3"]}
         }
       }
     },
