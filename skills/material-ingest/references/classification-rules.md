@@ -17,6 +17,11 @@
 | `OPINION` | 某个角色的主观看法 | `UNCONFIRMED` |
 | `PROPOSAL` | 尚未批准的方案或动作建议 | `UNCONFIRMED` |
 | `CONFIRMED_DECISION` | 有明确决策主体和确认动作的结论 | `CONFIRMED` |
+
+**会议场景判断标准**：
+- ✅ 决策："团队决定 X"、"最终确定 X"、"大家一致同意 X"
+- ❌ 提议："有人建议 X"、"可以考虑 X"、"我觉得 X"
+- 未达成共识的讨论仍为 `PROPOSAL` 或 `OPEN_QUESTION`
 | `OPEN_QUESTION` | 仍需回答且会影响后续工作的事项 | `UNCONFIRMED` |
 | `DEPRECATED_CONTENT` | 已被明确替代或不再适用的内容 | `SUPERSEDED` |
 
@@ -251,6 +256,4 @@ organize, record, analyze, discuss, summary
 
 ---
 
-**文档版本**: 2.0.0  
-**最后更新**: 2026-08-25  
-**维护者**: AI Runtime Team
+
