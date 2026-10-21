@@ -66,6 +66,18 @@ export function agentRunsPath(...segments: string[]): string {
   return path.join(PROJECT_ROOT, AGENT_RUNS_DIR, ...segments);
 }
 
+/**
+ * 任务/产物目录统一 slug。与 provider 的 outputDir 命名保持一致，
+ * 供中间文件回收（GC）精确匹配到同一目录，避免因命名不一致漏删或误删。
+ */
+export function taskSlug(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9一-鿿-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "default-project";
+}
+
 export function readJson<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, "utf-8")) as T;
 }

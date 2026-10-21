@@ -22,7 +22,7 @@ context/     → 已验证的稳定知识
 
 ## Current Projects
 
-- **default-project** — [drafts](drafts/default-project/CLAUDE.md)
+- **workspace-feedback-format-eval** — [drafts](drafts/workspace-feedback-format-eval/CLAUDE.md)
 
 ## Rules
 

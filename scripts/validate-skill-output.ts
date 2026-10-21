@@ -138,7 +138,9 @@ export function validateContextAnalysis(
 
     // Support comma-separated item_ids for proposals that merge multiple items
     const itemIds = proposal.item_id.split(',').map(id => id.trim()).filter(id => id);
-    const referencedItems = itemIds.map(id => items.get(id)).filter(Boolean);
+    const referencedItems = itemIds
+      .map(id => items.get(id))
+      .filter((item): item is InformationItem => item !== undefined);
 
     if (itemIds.length === 0) {
       errors.push(`${proposal.proposal_id} item_id 为空`);

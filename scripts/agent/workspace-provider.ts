@@ -10,7 +10,7 @@ import { refreshDraftsReadme } from "../lib/material-index.js";
 import type { ContextAnalysisOutput, MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import type { PrdMaterialClassification, PrdSourceAdoption, PrdSourceCategory, PrdThinkingOutput, PrdWriteOutput, PrdReviewTemplate } from "../lib/prd-types.js";
 import { contextDocumentRef, contextIndexRef, contextIndexPath, contextRootPath, materialAnalysisReportRef, prdDirectoryPath, prdFileRef, safeProjectSlug } from "../lib/project-paths.js";
-import { agentRunsPath, incrementPatch, parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { agentRunsPath, incrementPatch, parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, renderFrontmatter, taskSlug, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, ChangeReplanAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase, PrdSourceMeta } from "./types.js";
 import { writeStructuredMaterial } from "./structured-material.js";
@@ -56,7 +56,7 @@ export class WorkspaceProvider implements AgentProvider {
     const sourceDir = this.prepareSources(materialPath, taskGoal, taskId);
     const input = this.buildMaterialInput(sourceDir, taskGoal, taskId);
     const materialOutput = this.buildMaterialOutput(input);
-    const contextOutput = this.buildContextOutput(input, materialOutput);
+    const contextOutput = this.buildContextOutput(input, materialOutput, slug);
     writeJsonAtomic(inputPath, input);
     writeJsonAtomic(materialOutputPath, materialOutput);
     writeJsonAtomic(contextOutputPath, contextOutput);
@@ -451,7 +451,7 @@ export class WorkspaceProvider implements AgentProvider {
     return { material_records: input.materials.map((material) => ({ source_id: material.source_id, topic: input.analysis_scope.topic, processing_status: "PROCESSED", missing_metadata: [] })), information_items, processing_summary: { material_count: input.materials.length, processed_count: input.materials.length, failed_count: 0, information_item_count: information_items.length }, failed_materials: [] };
   }
 
-  private buildContextOutput(input: MaterialIngestInput, output: MaterialIngestOutput): ContextAnalysisOutput {
+  private buildContextOutput(input: MaterialIngestInput, output: MaterialIngestOutput, slug: string): ContextAnalysisOutput {
     const feedbackCount = output.information_items.filter((item) => item.information_type === "USER_FEEDBACK").length;
     const confirmedItems = output.information_items.filter((item) => item.maturity === "CONFIRMED" && item.information_type !== "USER_FEEDBACK");
 
@@ -466,7 +466,7 @@ export class WorkspaceProvider implements AgentProvider {
     }
 
     // 为每组生成一个合并的 proposal
-    const proposals = Array.from(itemsBySource.values()).map((items) => this.buildContextProposal(items));
+    const proposals = Array.from(itemsBySource.values()).map((items) => this.buildContextProposal(items, slug));
 
     return {
       action: "ANALYZE",
@@ -482,7 +482,7 @@ export class WorkspaceProvider implements AgentProvider {
     };
   }
 
-  protected buildContextProposal(items: MaterialIngestOutput["information_items"][number][]) {
+  protected buildContextProposal(items: MaterialIngestOutput["information_items"][number][], slug: string) {
     // 如果是单个 item，保持兼容性（向后兼容旧代码调用）
     if (!Array.isArray(items)) {
       items = [items as any];
@@ -504,7 +504,7 @@ export class WorkspaceProvider implements AgentProvider {
     const targetRef = contextDocumentRef(this.projectId, relativePath);
     const targetPath = repoRefToPath(targetRef, PROJECT_ROOT);
     const existing = fs.existsSync(targetPath) ? parseFrontmatter(fs.readFileSync(targetPath, "utf-8")) : null;
-    const candidatePath = path.join(this.outputDir(fileBaseName), "context-candidate.md");
+    const candidatePath = path.join(this.outputDir(slug), `context-candidate-${fileBaseName}.md`);
 
     // 合并多条结论到一个文件，按类型分组
     const title = hasFactType ? "产品现状" : "业务规则";
@@ -697,7 +697,7 @@ function isSupportedFile(filePath: string): boolean {
     && name !== "material-manifest.json";
 }
 function extensionType(name: string): string { return path.extname(name).toLowerCase() === ".json" ? "JSON" : "TEXT"; }
-function safeSlug(value: string): string { const normalized = value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff-]+/g, "-").replace(/^-+|-+$/g, ""); return normalized || "default-project"; }
+function safeSlug(value: string): string { return taskSlug(value); }
 function stringArrayMetadata(value: string | string[] | null | undefined, fallback: string[]): string[] {
   if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
   if (typeof value === "string" && value.trim()) return [value.trim()];

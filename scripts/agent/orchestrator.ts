@@ -31,6 +31,7 @@ import { loadLocalEnv } from "../lib/env.js";
 import { inspectModelProviderConfig } from "../lib/model-provider-config.js";
 import { contextIndexRef, contextRootPath } from "../lib/project-paths.js";
 import { assertTransition } from "../lib/state-runtime.js";
+import { cleanupProviderOutput } from "../lib/intermediate-cleanup.js";
 import { createTask, updateTask } from "../lib/task-runtime.js";
 import type { ConfirmationRecord, StateId, TaskState } from "../lib/types.js";
 import { recordChangeAnalysis } from "../record-change-analysis.js";
@@ -89,7 +90,9 @@ export class AgentOrchestrator {
       let state = readTaskState();
       if (options.taskId && state && state.task_id !== options.taskId) {
         if (["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(state.current_state)) {
+          const previousTaskId = state.task_id;
           state = this.initializeTask(normalized, options.taskId, options.sessionId, options.projectId ?? state.project_id, true);
+          this.cleanupPreviousTaskScratch(previousTaskId);
         } else {
           throw new Error(`当前运行任务是 ${state.task_id}，不是 ${options.taskId}`);
         }
@@ -136,6 +139,15 @@ export class AgentOrchestrator {
     });
   }
 
+  /** 回收上一个已终态任务的 provider 中间产物（best-effort，失败不阻塞主流程）。 */
+  private cleanupPreviousTaskScratch(previousTaskId: string): void {
+    try {
+      cleanupProviderOutput(previousTaskId);
+    } catch {
+      // GC 失败不影响业务，忽略。
+    }
+  }
+
   private async startIntent(
     state: TaskState,
     intent: Exclude<AgentIntent, "CONTINUE" | "UNKNOWN">,
@@ -155,6 +167,7 @@ export class AgentOrchestrator {
     if (state.current_state === "INITIALIZING") {
       assertTransition({ taskId: state.task_id, toState: "INTENT_ROUTING", reason: "开始处理用户自然语言请求" });
     } else if (["CONTEXT_TASK_COMPLETED", "DELIVERED", "TASK_CANCELLED"].includes(state.current_state)) {
+      this.cleanupPreviousTaskScratch(state.task_id);
       assertTransition({ taskId: state.task_id, toState: "INTENT_ROUTING", reason: "用户发起新任务" });
     }
     return requireState(state.task_id);

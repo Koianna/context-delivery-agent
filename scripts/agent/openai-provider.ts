@@ -6,7 +6,7 @@ import { readMaterialContent } from "../lib/material-bundle.js";
 import type { MaterialIngestInput, MaterialIngestOutput } from "../lib/context-types.js";
 import { loadLocalEnv } from "../lib/env.js";
 import type { ConfirmedDecisionLedger, PrdReviewTemplate, PrdThinkingOutput, PrdWriteOutput } from "../lib/prd-types.js";
-import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
+import { parseFrontmatter, pathToRepoRef, readJson, repoRefToPath, taskSlug, writeJsonAtomic, writeTextAtomic } from "../lib/repository.js";
 import type { TaskState } from "../lib/types.js";
 import type { AgentProvider, ChangeAnalysisAssets, PrdProviderAssets, PrdProviderContext, PrdProviderPhase } from "./types.js";
 import { OpenAIResponsesClient } from "./openai-client.js";
@@ -111,7 +111,7 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     }
 
     // 为每组生成一个合并的 proposal
-    const proposals = Array.from(itemsBySource.values()).map((items) => this.buildContextProposal(items));
+    const proposals = Array.from(itemsBySource.values()).map((items) => this.buildContextProposal(items, taskSlug(taskId)));
     writeJsonAtomic(assets.materialOutputPath, materialOutput);
     writeJsonAtomic(assets.contextOutputPath, {
       action: "ANALYZE",
@@ -145,25 +145,10 @@ export class OpenAIProvider extends WorkspaceProvider implements AgentProvider {
     const revisionReviewPath = revisionVersion ? path.join(outputDir, `openai-prd-review-${revisionVersion}.json`) : null;
 
     if (phase === "THINKING" && !fs.existsSync(thinkingPath)) {
-      const logPath = '/tmp/prd-thinking-debug.log';
-      fs.appendFileSync(logPath, `\n[${new Date().toISOString()}] 进入 THINKING 分支\n`);
-      fs.appendFileSync(logPath, `thinkingPath = ${thinkingPath}\n`);
-      fs.appendFileSync(logPath, `assets.thinkingPath = ${assets.thinkingPath}\n`);
       const baselineThinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
-      fs.appendFileSync(logPath, `baseline decision_ledger 长度: ${baselineThinking.decision_ledger.length}\n`);
-      fs.appendFileSync(logPath, `baseline 第一个决策字段: ${Object.keys(baselineThinking.decision_ledger[0] || {}).join(', ')}\n`);
       const generated = await this.generatePrdThinking(assets);
-      fs.appendFileSync(logPath, `model 生成 decision_questions 长度: ${generated.decision_questions.length}\n`);
       writeJsonAtomic(thinkingPath, generated);
-      try {
-        applyPrdThinking(generated, baselineThinking, assets, this.projectId);
-        fs.appendFileSync(logPath, `applyPrdThinking 完成\n`);
-        const finalOutput = readJson<PrdThinkingOutput>(assets.thinkingPath);
-        fs.appendFileSync(logPath, `最终文件 decision_ledger[0] 字段: ${Object.keys(finalOutput.decision_ledger[0] || {}).join(', ')}\n`);
-      } catch (error) {
-        fs.appendFileSync(logPath, `ERROR: ${error}\n`);
-        throw error;
-      }
+      applyPrdThinking(generated, baselineThinking, assets, this.projectId);
     } else if (fs.existsSync(thinkingPath)) {
       const baselineThinking = readJson<PrdThinkingOutput>(assets.thinkingPath);
       applyPrdThinking(readJson<PrdThinkingModelOutput>(thinkingPath), baselineThinking, assets, this.projectId);

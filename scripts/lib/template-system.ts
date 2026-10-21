@@ -60,15 +60,7 @@ function contentTypeToTemplateType(contentType: ContentType): TemplateType {
     'PRODUCT_REQUIREMENT': 'prd',
     'TECHNICAL_SPEC': 'technical-spec',
     'GENERAL': 'seven-sections',
-    'PRODUCT_DOC': 'seven-sections',
-    'DATA': 'seven-sections',
-    'FACT': 'seven-sections',
-    'OBSERVATION': 'seven-sections',
-    'OPINION': 'seven-sections',
-    'PROPOSAL': 'seven-sections',
-    'CONFIRMED_DECISION': 'seven-sections',
-    'OPEN_QUESTION': 'seven-sections',
-    'DEPRECATED_CONTENT': 'seven-sections'
+    'PRODUCT_DOC': 'seven-sections'
   };
 
   return mapping[contentType] || 'seven-sections';
